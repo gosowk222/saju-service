@@ -12,6 +12,12 @@ interface Props {
   readonly amount: number;
 }
 
+/** 토스 SDK가 준 오류 코드를 안내 문구 끝에 붙인다. 코드가 없으면 문구만 돌려준다. */
+function withErrorCode(message: string, failure: unknown): string {
+  const code = typeof failure === "object" && failure !== null && "code" in failure ? failure.code : null;
+  return typeof code === "string" ? `${message} (오류 코드: ${code})` : message;
+}
+
 /**
  * 토스페이먼츠 결제 위젯. 금액은 서버의 주문 기록이 내려준 값이고,
  * 완료 처리는 결제사가 돌려보낸 뒤 서버에서 다시 확인한다.
@@ -37,8 +43,8 @@ export function TossCheckout({ clientKey, orderId, orderName, amount }: Props) {
         if (cancelled) return;
         widgetsRef.current = widgets;
         setReady(true);
-      } catch {
-        if (!cancelled) setError("결제 화면을 불러오지 못했어요. 새로고침해 주세요.");
+      } catch (failure) {
+        if (!cancelled) setError(withErrorCode("결제 화면을 불러오지 못했어요. 새로고침해 주세요.", failure));
       }
     }
     void mount();
@@ -58,8 +64,8 @@ export function TossCheckout({ clientKey, orderId, orderName, amount }: Props) {
         successUrl: `${window.location.origin}/checkout/${orderId}/complete`,
         failUrl: `${window.location.origin}/checkout/${orderId}/failed`,
       });
-    } catch {
-      setError("결제를 시작하지 못했어요. 다시 시도해 주세요.");
+    } catch (failure) {
+      setError(withErrorCode("결제를 시작하지 못했어요. 다시 시도해 주세요.", failure));
       setRequesting(false);
     }
   }
