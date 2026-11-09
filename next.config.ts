@@ -12,11 +12,13 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  serverExternalPackages: ['sajuengine', '@js-temporal/polyfill', 'manseryeok'],
+  serverExternalPackages: ['sajuengine', '@js-temporal/polyfill', 'manseryeok', 'pdfkit'],
   outputFileTracingIncludes: {
-    '/': [
+    '/*': [
       './node_modules/@js-temporal/polyfill/package.json',
-      './node_modules/@js-temporal/polyfill/dist/**/',
+      './node_modules/@js-temporal/polyfill/dist/**/*',
+      './assets/fonts/**/*',
+      './node_modules/pdfkit/js/data/**/*',
     ],
   },
 };
