@@ -322,7 +322,7 @@ async function main() {
 
   const records: PlaceRecord[] = unique
     .sort((a, b) => a.geonameId - b.geonameId)
-    .map(({ rank: _rank, ...record }) => record);
+    .map(({ rank, ...record }) => { void rank; return record; });
 
   validate(records);
 
