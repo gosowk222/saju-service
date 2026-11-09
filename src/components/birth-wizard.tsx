@@ -254,7 +254,7 @@ function DateStep({
           placeholder="예: 980919"
           aria-label="생년월일 여섯 자리"
           aria-describedby="date-result"
-          className={`${INPUT} type-price tracking-widest`}
+          className={`${INPUT} type-price`}
         />
         <p id="date-result" aria-live="polite" className="min-h-5 type-label font-normal">
           {resolved?.ok ? <span className="font-semibold text-primary-600">{resolved.display}</span> : null}

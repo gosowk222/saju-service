@@ -70,9 +70,9 @@ export function LoadingScreen({ label = "불러오는 중이에요" }: { label?:
 export function TypingDots() {
   return (
     <span className="inline-flex items-center gap-2" aria-hidden>
-      <span className="h-2 w-2 rounded-full bg-gray-400" />
-      <span className="h-2 w-2 rounded-full bg-gray-400" />
-      <span className="h-2 w-2 rounded-full bg-gray-400" />
+      <span className="h-3 w-3 rounded-full bg-gray-400" />
+      <span className="h-3 w-3 rounded-full bg-gray-400" />
+      <span className="h-3 w-3 rounded-full bg-gray-400" />
     </span>
   );
 }

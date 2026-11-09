@@ -58,6 +58,13 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "PDF 내려받기" }).click()]);
   const path = await download.path();
   expect(readFileSync(path).subarray(0, 4).toString()).toBe("%PDF");
+  await page.getByLabel("후속 질문과 답변도 포함하기").check();
+  const withFollowups = await page.getByRole("link", { name: "PDF 내려받기" }).getAttribute("href");
+  expect(withFollowups).toContain("followups=1");
+  const pdfWithFollowups = await page.request.get(withFollowups!);
+  expect(pdfWithFollowups.headers()["content-type"]).toBe("application/pdf");
+  expect((await pdfWithFollowups.body()).length).toBeGreaterThan(readFileSync(path).length);
+
   const statsAfter = await gatewayStats(request);
   expect(statsAfter.openaiCalls).toBe(statsBefore.openaiCalls);
 });
