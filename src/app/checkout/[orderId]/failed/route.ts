@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CANCEL_CODES = new Set(["PAY_PROCESS_CANCELED", "USER_CANCEL"]);
@@ -6,7 +7,8 @@ const CANCEL_CODES = new Set(["PAY_PROCESS_CANCELED", "USER_CANCEL"]);
 /** 결제사가 실패나 취소 후 돌려보내는 주소. 대기 중인 본인 주문만 닫는다. */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;
-  const { origin, searchParams, pathname, search } = request.nextUrl;
+  const { searchParams, pathname, search } = request.nextUrl;
+  const origin = requestOrigin(request);
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();

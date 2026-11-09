@@ -37,7 +37,9 @@ async function Reading({ params }: { params: Promise<{ readingId: string }> }) {
           </span>
         }
       />
+      {/* 다시 들어오면 서버의 최신 저장 상태로 시작한다. */}
       <Messenger
+        key={crypto.randomUUID()}
         readingId={readingId}
         personaName={persona.name}
         personaGlyph={persona.avatarGlyph}

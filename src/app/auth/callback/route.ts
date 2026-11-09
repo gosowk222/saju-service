@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { safeNextPath } from "@/domain/auth/safe-next";
+import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const NEXT_COOKIE = "auth_next";
@@ -9,7 +10,8 @@ const NEXT_COOKIE = "auth_next";
  * Supabase의 제공자 콜백(/auth/v1/callback)과는 다른 주소다.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
+  const origin = requestOrigin(request);
   const next = safeNextPath(request.cookies.get(NEXT_COOKIE)?.value ?? searchParams.get("next"));
 
   const toLogin = (reason: string) => {

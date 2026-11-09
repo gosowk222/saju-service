@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { DEFAULT_AFTER_LOGIN } from "@/domain/auth/safe-next";
+import { requestOrigin } from "@/lib/request-origin";
 import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/env";
 
 /** 로그인이 필요한 화면. API는 각 라우트에서 직접 확인해 401을 돌려준다. */
@@ -37,17 +38,11 @@ export async function proxy(request: NextRequest) {
   };
 
   if (!signedIn && isProtected(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.search = `?next=${encodeURIComponent(`${pathname}${search}`)}`;
-    return redirectWithCookies(url);
+    return redirectWithCookies(new URL(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`, requestOrigin(request)));
   }
 
   if (signedIn && (pathname === "/" || pathname === "/login")) {
-    const url = request.nextUrl.clone();
-    url.pathname = DEFAULT_AFTER_LOGIN;
-    url.search = "";
-    return redirectWithCookies(url);
+    return redirectWithCookies(new URL(DEFAULT_AFTER_LOGIN, requestOrigin(request)));
   }
 
   return response;

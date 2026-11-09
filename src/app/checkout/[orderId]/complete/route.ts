@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { findProduct } from "@/domain/products";
+import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
 import { confirmTossPayment, PaymentError } from "@/server/payments/toss";
 import { getOrder } from "@/server/readings/store";
@@ -10,7 +11,8 @@ import { getOrder } from "@/server/readings/store";
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;
-  const { origin, searchParams, pathname, search } = request.nextUrl;
+  const { searchParams, pathname, search } = request.nextUrl;
+  const origin = requestOrigin(request);
   const toCheckout = (reason: string) => NextResponse.redirect(new URL(`/checkout/${orderId}?result=${reason}`, origin));
 
   const supabase = await createSupabaseServerClient();

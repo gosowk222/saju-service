@@ -6,6 +6,20 @@
 
 문서의 기준 패키지는 `0.1.0`, 소스 커밋은 `abc77f71531591969151fd5b6e4b51c32e0ac3d9`, inquiry policyVersion은 `1.1.0`이다. 설치된 버전이 다르면 실제 공개 타입을 먼저 확인한다. 존재하지 않는 API를 만들어 문서 예제처럼 사용하지 않는다.
 
+## 확정된 결정
+
+- 인증과 저장: Supabase. 로그인은 카카오·구글만 지원한다. 이메일 가입, 비밀번호, 매직 링크, 애플 로그인은 만들지 않는다.
+- 사용자 기준은 Supabase `user.id`다. 이메일이나 `user_metadata`로 소유권과 구매 권한을 판단하지 않는다.
+- LLM: OpenAI Responses API. 호출은 `src/server/llm/client.ts`에서만 한다. 개발 기본은 `gpt-5.6-luna`, 출시 전 검증 후 `gpt-6-luna`로 전환하며 모델은 `OPENAI_MODEL`로만 바꾼다. 절차는 `docs/LLM_OPERATIONS.md`에 있다.
+- 결제: 토스페이먼츠 테스트 키만 허용한다. 금액은 서버의 상품 설정(`src/domain/products/`)이 기준이다.
+- 출생지역: GeoNames 가공 자료 (`docs/GEONAMES_DATA.md`). 실행 중에 GeoNames에 접속하지 않는다.
+- 모의 로그인, 모의 결제, 고정 응답은 앱 코드에 넣지 않는다. `tests/support/fake-gateway.ts`만 사용한다.
+- 쓰기는 `supabase/migrations/`의 서버 전용 함수로 한다. 스키마 변경은 새 migration으로 남기고 기존 데이터를 지우지 않는다.
+
+## 브랜치와 커밋
+
+`main`, `develop`에서 직접 작업하지 않는다. 작은 작업 단위로 커밋하고, 메시지는 `타입: 제목` 형식의 한국어로 쓴다.
+
 ## 엔진과 앱의 책임
 
 - 사주 기둥, 절기, 대운, 세운, 월운, 일운 계산은 패키지를 사용한다. 앱에 두 번째 계산기를 만들지 않는다.
@@ -13,6 +27,8 @@
 - 추가 규칙은 앱에 `InquiryRule`로 두고 `createInquiryReader`에 등록한다. 엔진 소스와 `node_modules`를 직접 수정하지 않는다. 공통 계산의 실제 누락이나 오류가 발견되면 재현 사례를 정리한다.
 - 이전 앱의 `src/reading`은 참고 구현이다. 그 앱의 수많은 문장 검사, 페르소나, 금칙어, 모델 설정을 새 앱의 필수 조건으로 복사하지 않는다.
 - 공개 import만 사용한다: `sajuengine`, `sajuengine/node`, `sajuengine/materials`, `sajuengine/catalog`, `sajuengine/testing`.
+- 달력 변환은 공개 어댑터 `manseryeokCalendarConversionAdapter`를 쓴다. 앱에 양력·음력 계산을 만들지 않는다.
+- Cache Components를 쓰므로 `export const runtime`을 선언하지 않는다. 기본이 Node.js이고, 엔진 호출 파일에는 `import "server-only"`를 둔다.
 
 ## 계산과 근거
 
@@ -41,7 +57,9 @@
 - 결과 생성은 주제 단위 등 상품에 맞게 묶는다. 말풍선마다 별도 LLM 호출을 전제하지 않는다. 생성 완료 결과를 저장하고 다시 보기에서 재생성하지 않는다.
 - 최소 검사는 응답 형식, 알려진 근거 참조, 대상·기간·계산값 일치, 창작 구분, 필수 주제 누락이다. 말투는 필요할 때 부드럽게 조정하며 무한 재시도하지 않는다.
 - 규칙에는 적용·비적용·반대 근거·부족한 입력 사례를 테스트한다. 화면에는 loading/error/partial 상태와 저장 결과 다시 보기를 확인한다.
-- 비용이 드는 실 LLM 호출은 사용자가 설정한 개발 환경과 예산 안에서 실행한다. 실행하지 않았다면 `LIVE_NOT_RUN`으로 보고하며 Mock 통과를 문장 품질 검증이라고 쓰지 않는다.
+- 비용이 드는 실 LLM 호출은 사용자가 설정한 개발 환경과 예산 안에서 실행한다. 실행하지 않았다면 모델별로 `LIVE_NOT_RUN`으로 보고하며 고정 응답 통과를 문장 품질 검증이라고 쓰지 않는다.
+- 실제 OAuth와 실제 결제를 끝까지 확인하지 못했으면 `NOT_RUN`으로 보고한다. 가짜 서버 통과를 실제 연결 성공으로 쓰지 않는다.
+- 검사 명령: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
 - API 키, 출생정보, 사용자 대화와 결과 원문을 공개 로그나 커밋에 남기지 않는다.
 
 ## 완료 보고
@@ -67,6 +85,8 @@ UI를 만들거나 수정하기 전에 다음 파일을 읽는다.
 tokens.css를 실제 전역 스타일에 연결한다.
 Tailwind를 사용하면 설치된 버전에 맞게 토큰을 연결하고,
 기본 Tailwind 값과 이 디자인 시스템의 값이 같다고 가정하지 않는다.
+
+`src/app/globals.css`는 Tailwind 기본값을 지우고 토큰만 연결한다. 글자는 `type-*` 유틸리티를 쓴다. 토큰 밖의 값과 문서 간 차이는 `docs/DESIGN_NOTES.md`에 기록한다.
 
 보드의 인라인 스타일을 그대로 복사하지 않고,
 같은 값을 토큰 참조로 바꾸어 공통 컴포넌트로 구현한다.

@@ -53,7 +53,8 @@ async function NewReading({ searchParams }: { searchParams: Promise<Record<strin
   return (
     <>
       <PageHeader title={product.name} backHref={editing ? `/readings/${editing.id}/preview` : `/products/${product.id}`} />
-      <BirthWizard initialDraft={draft} product={product} />
+      {/* 화면을 오가도 이전 상태가 남지 않도록 서버에서 받을 때마다 새로 시작한다. */}
+      <BirthWizard key={crypto.randomUUID()} initialDraft={draft} product={product} />
     </>
   );
 }

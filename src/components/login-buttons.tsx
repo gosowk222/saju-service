@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Provider = "kakao" | "google";
@@ -30,6 +30,13 @@ function GoogleSymbol() {
 export function LoginButtons({ next }: { next: string }) {
   const [pending, setPending] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 로그인 창에서 뒤로 돌아오면 브라우저가 이전 화면을 복원하므로 버튼을 다시 활성화한다.
+  useEffect(() => {
+    const reset = () => setPending(null);
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
 
   async function signIn(provider: Provider) {
     setError(null);

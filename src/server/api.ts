@@ -1,6 +1,8 @@
 import "server-only";
 import type { User } from "@supabase/supabase-js";
+import { unstable_rethrow } from "next/navigation";
 import { NextResponse, type NextRequest } from "next/server";
+import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export class ApiError extends Error {
@@ -15,12 +17,9 @@ export class ApiError extends Error {
 
 export function assertSameOrigin(request: NextRequest): void {
   const origin = request.headers.get("origin");
-  const expected = request.nextUrl.origin;
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (!origin) return;
   try {
-    const parsed = new URL(origin);
-    if (parsed.origin === expected || parsed.host === host) return;
+    if (new URL(origin).origin === new URL(requestOrigin(request)).origin) return;
   } catch {
     // 아래에서 거부한다.
   }
@@ -60,6 +59,8 @@ export function route<P = unknown>(handler: (request: NextRequest, params: P) =>
       if (request.method !== "GET") assertSameOrigin(request);
       return await handler(request, await params);
     } catch (error) {
+      // Next.js 내부 제어 신호(동적 렌더링 전환 등)는 오류로 처리하지 않는다.
+      unstable_rethrow(error);
       if (error instanceof ApiError) return failure(error.status, error.code, error.message);
       // 출생정보와 본문이 로그에 남지 않도록 오류의 종류만 기록한다.
       console.error("[api] unexpected", request.nextUrl.pathname, error instanceof Error ? error.name : typeof error);
