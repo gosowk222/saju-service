@@ -1,0 +1,37 @@
+{
+  "version": "geonames-kr-7968e82f35f2",
+  "downloadedOn": "2026-11-09",
+  "license": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+  "attribution": "GeoNames (https://www.geonames.org/)",
+  "sources": [
+    "https://download.geonames.org/export/dump/KR.zip",
+    "https://download.geonames.org/export/dump/alternatenames/KR.zip",
+    "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
+  ],
+  "sha256": {
+    "KR.zip": "535fab14f3a6248c667d38b5d4de515c7ff3b216f3b3cd12766f0d18bf8f67b4",
+    "alternatenames/KR.zip": "26f0261689ab390c8f922033bd26f88a269c0e26147e6b6ed90a99b4454c2e66",
+    "admin1CodesASCII.txt": "2e4867f5397acb056ea26377601b57af37cb4c81399770225018e9e439e91ad3"
+  },
+  "counts": {
+    "rawRows": 144847,
+    "alternateNameRows": 346415,
+    "finalRecords": 2762,
+    "excludedByFeature": 81675,
+    "excludedUnpopulatedPpl": 59221,
+    "excludedNoKoreanName": 931,
+    "excludedNoAdmin": 0,
+    "mergedDuplicates": 258,
+    "byFeature": {
+      "ADM2": 228,
+      "ADM3": 2503,
+      "PPL": 13,
+      "PPLA": 7,
+      "PPLA3": 8,
+      "PPLA4": 2,
+      "PPLC": 1
+    }
+  },
+  "nameOverrides": {},
+  "rerun": "npm run places:import"
+}

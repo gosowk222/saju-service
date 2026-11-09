@@ -6,23 +6,45 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "places:import": "tsx scripts/import-geonames.ts",
+    "llm:check": "node --conditions=react-server --import tsx scripts/llm-check.ts",
+    "llm:compare": "node --conditions=react-server --import tsx scripts/llm-compare.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.0",
+    "@tosspayments/tosspayments-sdk": "^2.10.0",
+    "lucide-react": "^1.70.0",
     "next": "16.4.5",
+    "openai": "^7.53.0",
+    "pdfkit": "^0.20.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sajuengine": "file:vendor/sajuengine-0.1.0.tgz",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
+    "@types/pdfkit": "^0.17.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
+    "fflate": "^0.8.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
