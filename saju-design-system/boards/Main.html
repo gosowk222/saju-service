@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>사주풀이 디자인 시스템 개요</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+</style>
+<div style="width: 1280px; height: 840px; box-sizing: border-box; padding: 56px 64px 48px; display: flex; flex-direction: column; gap: 36px; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 48px">
+    <div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px">
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: #625e80">
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: #6e5ce6"></span>
+        <span>DESIGN SYSTEM · v1.3 · 2026-11</span>
+      </div>
+      <h1 style="margin: 0; font-family: 'Noto Serif KR', serif; font-weight: 700; font-size: 44px; line-height: 1.2; color: #262345; letter-spacing: -0.01em">사주풀이 디자인 시스템</h1>
+      <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #4a4668">세 단계로 만들었습니다. <strong style="font-weight: 600; color: #262345">구조</strong>(간격·라운드·타이포 체계)는 인스타그램 추출 토큰에서, <strong style="font-weight: 600; color: #262345">화면 문법</strong>(포스터 카드·카테고리 탭·중앙 컬럼)은 유료 사주 서비스 3곳 벤치마크에서, <strong style="font-weight: 600; color: #262345">색</strong>은 참고 레이아웃(12화면 흐름)에서 추출한 보라·라벤더 팔레트로 전면 교체했습니다.</p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px">
+        <span style="font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 22px; background: #eceaf5; color: #4a4668">구조 · instagram.com</span>
+        <span style="font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 22px; background: #eceaf5; color: #4a4668">화면 문법 · 사주 서비스 3곳 → 보드 00</span>
+        <span style="font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 22px; background: #e6e2fb; color: #6e5ce6">색 · 참고 레이아웃 → 보드 02</span>
+        <span style="font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 22px; background: #eceaf5; color: #4a4668">20~30대 · 무료+유료</span>
+      </div>
+    </div>
+
+    <div style="width: 352px; flex-shrink: 0; border: 1px solid #dcd9ea; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px; background: #ffffff">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <span style="font-size: 14px; font-weight: 600; color: #262345">명식(命式) 미리보기</span>
+        <span style="font-size: 12px; color: #716d8e">예시 데이터</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="font-size: 12px; color: #716d8e">시주</span>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #ffebd9; color: #b55a12; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">丙</div>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">寅</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="font-size: 12px; color: #716d8e">일주</span>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">甲</div>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">寅</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="font-size: 12px; color: #716d8e">월주</span>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #fff4d6; color: #9a6700; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">戊</div>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #e3eefc; color: #2b63c6; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">子</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="font-size: 12px; color: #716d8e">년주</span>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #eceaf5; color: #716d8e; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">庚</div>
+          <div style="width: 100%; aspect-ratio: 1; border-radius: 12px; background: #ffebd9; color: #b55a12; display: flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">午</div>
+        </div>
+      </div>
+      <button type="button" style="height: 44px; border: 0; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">풀이 보기</button>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+    <div style="border-radius: 12px; background: #f7f6fc; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 22px; height: 22px; border-radius: 999px; background: #262345; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">구</span>
+        <span style="font-size: 15px; font-weight: 600">구조 — 인스타그램에서</span>
+      </div>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: #4a4668; display: flex; flex-direction: column; gap: 2px">
+        <li>본문 15 / 17px, UI 14px, 캡션 12px 크기 체계와 500·600 굵기</li>
+        <li>4px 격자 간격(2·8·12·16·24·40) + 시장 공통 20·32</li>
+        <li>22px 필 버튼, 플로팅 라벨 입력</li>
+        <li>흰 바탕 + 고대비 텍스트, 1px 테두리로 면 나누기</li>
+      </ul>
+    </div>
+    <div style="border-radius: 12px; background: #f7f6fc; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 22px; height: 22px; border-radius: 999px; background: #4a4668; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">문</span>
+        <span style="font-size: 15px; font-weight: 600">화면 문법 — 사주 서비스 3곳에서</span>
+      </div>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: #4a4668; display: flex; flex-direction: column; gap: 2px">
+        <li>3:4 포스터 카드 + 스크림 + 흰 Serif 제목, 2열 그리드</li>
+        <li>카테고리 탭 · 이어보기 배너 · 실시간 리뷰 · 하단 탭 4개</li>
+        <li>라운드 16(카드·입력) / 24(시트), 모션 (0.4, 0, 0.2, 1) · 150ms</li>
+        <li>데스크톱에서도 중앙 단일 컬럼 max-w 600, Lucide 아이콘</li>
+      </ul>
+    </div>
+    <div style="border-radius: 12px; background: #f7f6fc; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 22px; height: 22px; border-radius: 999px; background: #6e5ce6; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">색</span>
+        <span style="font-size: 15px; font-weight: 600">색 — 참고 레이아웃에서 (v1.3)</span>
+      </div>
+      <ul style="margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; color: #4a4668; display: flex; flex-direction: column; gap: 2px">
+        <li>보라 주조색 9단계 — 버튼·링크·포커스·결제 CTA 모두 primary</li>
+        <li>인디고 기운 뉴트럴 11단계, 라벤더 면(gray-50/100)</li>
+        <li>분야색 6종 = 오행 틴트 (연애 rose · 재물 gold · 직업 blue · 궁합 green · 인생 orange · 성격 metal)</li>
+        <li>밤 인디고 #2B2457 히어로, 보라 그라데이션 한 종</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: baseline; gap: 12px">
+      <span style="font-size: 15px; font-weight: 600">참고 레이아웃 추출색 → 시스템 토큰 매핑</span>
+      <span style="font-size: 13px; color: #716d8e">대표 8건 · 전체는 02 보드</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 220px 200px 1fr 1fr; border: 1px solid #dcd9ea; border-radius: 12px; overflow: hidden; font-size: 13px">
+      <div style="padding: 10px 14px; background: #eceaf5; font-weight: 600; color: #4a4668">추출값</div>
+      <div style="padding: 10px 14px; background: #eceaf5; font-weight: 600; color: #4a4668">참고안에서의 쓰임</div>
+      <div style="padding: 10px 14px; background: #eceaf5; font-weight: 600; color: #4a4668">시스템 토큰</div>
+      <div style="padding: 10px 14px; background: #eceaf5; font-weight: 600; color: #4a4668">판단</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #8b7cf6; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#8B7CF6</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">시작·구매·결제 버튼, 탭 선택</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">primary-500 · 버튼은 600 #6E5CE6</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">흰 글자와 3.3:1이라 버튼은 한 단계 어둡게(4.8:1)</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #efedfb; display: inline-block; border: 1px solid #dcd9ea"></span><span style="font-family: ui-monospace, Menlo, monospace">#EFEDFB</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">카드·말풍선·메뉴 면</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">gray-100 #ECEAF5 · primary-50 #F3F1FD</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">중립 면과 선택 면으로 둘로 나눔</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #2b2457; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#2B2457</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">밤하늘 인트로 배경</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">primary-900</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">랜딩 히어로 · 포스터 플레이스홀더 톤</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #2d2a4a; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#2D2A4A · #8E8AA8</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">제목 글자 · 보조 글자</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">gray-900 #262345 · gray-500 #716D8E</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">보조 글자는 4.3:1 미달 → #716D8E(4.9:1)로 보정</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #f28bb3; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#F28BB3</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">연애 아이콘 · 인기/할인 배지</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">rose-400 · 글자 rose-600 #C2366B</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">위험(danger) 겸용 — 별도 빨강 없음</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #f2b544; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#F2B544</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">재물 아이콘 · 이용권 코인</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">gold-400 · 글자 gold-700 #9A6700 · 土</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">결제 CTA에서는 빠지고 코인·유료 배지에만</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #6fa8f0; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#6FA8F0 · #F39A4A</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">직업 · 오늘 아이콘</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">blue-600 #2B63C6 · 水 / orange-600 #B55A12 · 火</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">분야색을 오행 명식 칸과 한 쌍으로</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; display: flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: #fee500; display: inline-block"></span><span style="font-family: ui-monospace, Menlo, monospace">#FEE500</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #625e80">카카오 로그인</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; font-family: ui-monospace, Menlo, monospace">토큰 아님 · 고정값</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #eceaf5; color: #4a4668">브랜드 가이드 색, 로그인 버튼 외 사용 금지</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

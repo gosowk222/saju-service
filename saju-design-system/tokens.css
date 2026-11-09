@@ -1,0 +1,122 @@
+/* 사주풀이 디자인 시스템 v1.3 — CSS 변수
+   값의 출처·규칙은 DESIGN_SYSTEM.md, 구조화 데이터는 tokens.json */
+
+:root {
+  /* ── Primary · 보라 ───────────────────────────── */
+  --color-primary-50:  #F3F1FD;
+  --color-primary-100: #E6E2FB;
+  --color-primary-200: #CFC7F7;
+  --color-primary-300: #B3A6F3;
+  --color-primary-400: #9D8DF8;
+  --color-primary-500: #8B7CF6; /* 원색: 아이콘·면 전용, 버튼 금지 (3.3:1) */
+  --color-primary-600: #6E5CE6; /* ★ 버튼·링크·포커스 (4.8:1) */
+  --color-primary-700: #5748C4;
+  --color-primary-900: #2B2457;
+
+  /* ── Gray · 인디고 기운 뉴트럴 ─────────────────── */
+  --color-white:    #FFFFFF;
+  --color-gray-50:  #F7F6FC;
+  --color-gray-100: #ECEAF5;
+  --color-gray-200: #DCD9EA;
+  --color-gray-300: #C9C6DC;
+  --color-gray-400: #A9A6C0; /* 글자 금지 */
+  --color-gray-500: #716D8E; /* 보조 글자 4.9:1 */
+  --color-gray-600: #625E80;
+  --color-gray-700: #4A4668;
+  --color-gray-800: #322E52;
+  --color-gray-900: #262345;
+
+  /* ── 분야색 = 오행 틴트 ────────────────────────── */
+  --color-rose-50:   #FDE8EF;  --color-rose-400:  #F28BB3;  --color-rose-600:  #C2366B; /* 연애 · danger */
+  --color-gold-50:   #FFF4D6;  --color-gold-300:  #F7D98A;  --color-gold-400:  #F2B544;  --color-gold-700: #9A6700;  --color-gold-800: #5C3D00; /* 재물 · 土 · warning */
+  --color-blue-50:   #E3EEFC;  --color-blue-400:  #6FA8F0;  --color-blue-600:  #2B63C6;  --color-blue-900: #1E4A9A; /* 직업 · 水 */
+  --color-green-50:  #E1F5EE;  --color-green-400: #5CC0A0;  --color-green-600: #257F60; /* 궁합 · 木 · success */
+  --color-orange-50: #FFEBD9;  --color-orange-400: #F39A4A; --color-orange-600: #B55A12; /* 인생 · 火 */
+
+  /* ── 고정값 ────────────────────────────────────── */
+  --color-kakao: #FEE500;
+  --color-kakao-text: #191600;
+  --color-on-gold: #4A3200;
+  --color-on-image: #FFFFFF;
+  --color-on-image-muted: rgba(255, 255, 255, 0.72);
+  --scrim: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%);
+  --gradient-primary: linear-gradient(135deg, #9D8DF8, #6E5CE6);
+  --shadow-float: 0 4px 16px rgba(38, 35, 69, 0.08);
+
+  /* ── Semantic ──────────────────────────────────── */
+  --action:         var(--color-primary-600);
+  --action-hover:   var(--color-primary-700);
+  --action-tonal:   var(--color-primary-100);
+  --focus-ring:     0 0 0 2px var(--color-primary-600), 0 0 0 5px var(--color-primary-100);
+  --text:           var(--color-gray-900);
+  --text-secondary: var(--color-gray-700);
+  --text-muted:     var(--color-gray-500);
+  --surface:        var(--color-white);
+  --surface-page:   var(--color-gray-50);
+  --surface-muted:  var(--color-gray-100);
+  --border:         var(--color-gray-200);
+  --border-input:   var(--color-gray-300);
+  --success: var(--color-green-600);  --success-tint: var(--color-green-50);
+  --warning: var(--color-gold-700);   --warning-tint: var(--color-gold-50);
+  --danger:  var(--color-rose-600);   --danger-tint:  var(--color-rose-50);
+  --info:    var(--color-primary-600);--info-tint:    var(--color-primary-50);
+  --chat-assistant-bg: var(--color-gray-100);
+  --chat-user-bg:      var(--color-primary-600);
+
+  /* 오행 */
+  --ohaeng-wood-text:  var(--color-green-600);  --ohaeng-wood-tint:  var(--color-green-50);
+  --ohaeng-fire-text:  var(--color-orange-600); --ohaeng-fire-tint:  var(--color-orange-50);
+  --ohaeng-earth-text: var(--color-gold-700);   --ohaeng-earth-tint: var(--color-gold-50);
+  --ohaeng-metal-text: var(--color-gray-500);   --ohaeng-metal-tint: var(--color-gray-100);
+  --ohaeng-water-text: var(--color-blue-600);   --ohaeng-water-tint: var(--color-blue-50);
+
+  /* ── Typography ────────────────────────────────── */
+  --font-sans:  'Noto Sans KR', 'Pretendard', -apple-system, system-ui, sans-serif;
+  --font-serif: 'Noto Serif KR', 'Nanum Myeongjo', serif;
+  --font-mono:  ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-display:   700 44px/52px var(--font-serif);  /* letter-spacing -0.01em */
+  --text-heading-1: 700 32px/40px var(--font-serif);
+  --text-heading-2: 600 24px/32px var(--font-sans);
+  --text-heading-3: 600 20px/28px var(--font-sans);
+  --text-title:     600 18px/26px var(--font-sans);
+  --text-body-lg:   400 17px/26px var(--font-sans);
+  --text-body:      400 15px/22px var(--font-sans);
+  --text-label:     500 14px/20px var(--font-sans);
+  --text-caption:   400 12px/16px var(--font-sans);
+  --text-caption-sm:500 11px/14px var(--font-sans);
+  --text-hanja:     500 28px/1 var(--font-serif);    /* letter-spacing 0.02em */
+  --text-poster:    700 22px/1.15 var(--font-serif); /* 흰색, 히어로 40px */
+
+  /* ── Spacing (4px grid) ─────────────────────────── */
+  --space-1: 2px;  --space-2: 4px;  --space-3: 8px;  --space-4: 12px; --space-5: 16px; --space-6: 20px;
+  --space-7: 24px; --space-8: 32px; --space-9: 40px; --space-10: 52px; --space-11: 120px;
+
+  /* ── Radius ─────────────────────────────────────── */
+  --radius-sm: 8px;   /* 배지 */
+  --radius-md: 12px;  /* 포스터 이미지 · 한자 칸 · 소셜 버튼 */
+  --radius-lg: 16px;  /* 카드 · 입력 */
+  --radius-pill: 22px;/* 44px 버튼 · 칩 */
+  --radius-xl: 24px;  /* 바텀시트 · 히어로 포스터 */
+  --radius-full: 9999px;
+
+  /* ── Size ───────────────────────────────────────── */
+  --size-button: 44px; --size-button-lg: 52px; --size-button-sm: 36px;
+  --size-input: 52px;  --size-tab-bar: 56px;   --size-header: 56px; --size-tile: 56px;
+  --content-max-width: 600px;
+
+  /* ── Motion ─────────────────────────────────────── */
+  --duration-fast: 150ms; --duration-base: 200ms; --duration-slow: 300ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration-fast: 0ms; --duration-base: 0ms; --duration-slow: 0ms; }
+}
+
+/* 기본 적용 예 */
+body { margin: 0; background: var(--surface-page); color: var(--text); font: var(--text-body); -webkit-font-smoothing: antialiased; }
+a { color: var(--action); }
+a:hover { color: var(--action-hover); text-decoration: underline; }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }

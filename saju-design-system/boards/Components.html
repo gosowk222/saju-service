@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>컴포넌트</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+button{font-family:inherit}
+input{font-family:inherit}
+</style>
+<div style="width: 1280px; height: 1720px; box-sizing: border-box; padding: 56px 64px; display: flex; flex-direction: column; gap: 32px; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: #625e80">05 · COMPONENTS</span>
+    <h2 style="margin: 0; font-family: 'Noto Serif KR', serif; font-size: 32px; font-weight: 700; line-height: 1.25">컴포넌트</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #4a4668; max-width: 820px">인스타그램의 44px 필 버튼·플로팅 라벨 입력·1px 테두리 카드 문법 위에, 사주 서비스 고유 컴포넌트(명식 표·오행 분포·운세 카드)를 같은 토큰으로 조립했습니다. 시장 벤치마크로 라운드 16, 카카오 로그인, 콘텐츠 포스터 카드·카테고리 탭·이어보기 배너·가격 배지·리뷰를 더했습니다.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px 48px">
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">버튼</span><span style="font-size: 13px; color: #716d8e">높이 44 / 36 · radius-pill · 굵기 600</span></div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <button type="button" style="height: 44px; padding: 0 22px; border: 0; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 15px; font-weight: 600; cursor: pointer">풀이 시작하기</button>
+        <button type="button" style="height: 44px; padding: 0 22px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #262345; font-size: 15px; font-weight: 600; cursor: pointer">다시 입력</button>
+        <button type="button" style="height: 44px; padding: 0 22px; border: 0; border-radius: 22px; background: #eceaf5; color: #262345; font-size: 15px; font-weight: 600; cursor: pointer">공유</button>
+        <button type="button" style="height: 44px; padding: 0 16px; border: 0; border-radius: 22px; background: transparent; color: #4a4668; font-size: 15px; font-weight: 600; cursor: pointer">건너뛰기</button>
+        <button type="button" style="height: 44px; padding: 0 22px; border: 0; border-radius: 22px; background: #c2366b; color: #ffffff; font-size: 15px; font-weight: 600; cursor: pointer">기록 삭제</button>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <button type="button" style="height: 36px; padding: 0 16px; border: 0; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer">작은 버튼</button>
+        <button type="button" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #262345; font-size: 14px; font-weight: 600; cursor: pointer">보조</button>
+        <button type="button" disabled style="height: 36px; padding: 0 16px; border: 0; border-radius: 22px; background: #eceaf5; color: #716d8e; font-size: 14px; font-weight: 600; cursor: not-allowed">비활성</button>
+        <button type="button" aria-label="저장" style="width: 44px; height: 44px; border: 1px solid #dcd9ea; border-radius: 999px; background: #ffffff; color: #262345; display: inline-flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
+        <button type="button" style="height: 44px; padding: 0 20px 0 16px; border: 0; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4z"></path></svg>오늘의 운세 뽑기</button>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">primary는 <strong style="font-weight: 600; color: #262345">보라 primary-600</strong>(참고안 버튼색, 4.8:1 보정). secondary(테두리) · tonal(gray-100) · ghost · danger(rose) · tonal-primary(primary-100 바탕 + 600 글자, 보조 동작). hover primary-700, pressed scale(0.98) 150ms.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">칩 · 배지</span><span style="font-size: 13px; color: #716d8e">오행 칩은 글자 + 색 + 한자를 함께</span></div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <span style="height: 32px; padding: 0 12px 0 8px; border-radius: 22px; background: #e1f5ee; color: #257f60; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">木</span>목 3</span>
+        <span style="height: 32px; padding: 0 12px 0 8px; border-radius: 22px; background: #ffebd9; color: #b55a12; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">火</span>화 2</span>
+        <span style="height: 32px; padding: 0 12px 0 8px; border-radius: 22px; background: #fff4d6; color: #9a6700; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">土</span>토 1</span>
+        <span style="height: 32px; padding: 0 12px 0 8px; border-radius: 22px; background: #eceaf5; color: #716d8e; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">金</span>금 1</span>
+        <span style="height: 32px; padding: 0 12px 0 8px; border-radius: 22px; background: #e3eefc; color: #2b63c6; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">水</span>수 1</span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #6e5ce6; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer">오늘</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer">이번 달</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer">2026년</button>
+        <button type="button" style="height: 36px; padding: 0 14px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer">대운</button>
+        <span style="width: 1px; height: 24px; background: #dcd9ea; margin: 0 4px"></span>
+        <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #257f60; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">길 吉</span>
+        <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #c2366b; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">흉 凶</span>
+        <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #9a6700; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">대길 大吉</span>
+        <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #eceaf5; color: #4a4668; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">NEW</span>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">필터 칩은 36px, 선택 시 primary 필(primary-600 + 흰 글자 600) — 참고안 카테고리 탭과 같은 문법. 배지는 radius-sm, 24px 높이. 길·흉 배지는 반드시 한자와 한글을 병기합니다.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">입력</span><span style="font-size: 13px; color: #716d8e">인스타그램의 플로팅 라벨(패딩 18 / 2 / 1) 계승 · 높이 52 · 라운드 16(시장)</span></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <div style="position: relative; height: 52px; border: 1px solid #c9c6dc; border-radius: 16px; background: #f7f6fc; box-sizing: border-box">
+          <label for="in-name" style="position: absolute; left: 14px; top: 8px; font-size: 11px; color: #625e80">이름</label>
+          <input id="in-name" type="text" value="김하늘" style="position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 20px 14px 4px; border: 0; background: transparent; font-size: 15px; color: #262345; outline: none">
+        </div>
+        <div style="position: relative; height: 52px; border: 2px solid #6e5ce6; border-radius: 16px; background: #ffffff; box-sizing: border-box; box-shadow: 0 0 0 3px #e6e2fb">
+          <label for="in-birth" style="position: absolute; left: 13px; top: 7px; font-size: 11px; color: #2b63c6; font-weight: 500">생년월일</label>
+          <input id="in-birth" type="text" value="1992.03.14" style="position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 19px 13px 3px; border: 0; background: transparent; font-size: 15px; color: #262345; outline: none; font-variant-numeric: tabular-nums">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="position: relative; height: 52px; border: 1px solid #c2366b; border-radius: 16px; background: #ffffff; box-sizing: border-box">
+            <label for="in-time" style="position: absolute; left: 14px; top: 8px; font-size: 11px; color: #c2366b">태어난 시각</label>
+            <input id="in-time" type="text" value="25:10" aria-invalid="true" style="position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 20px 14px 4px; border: 0; background: transparent; font-size: 15px; color: #262345; outline: none">
+          </div>
+          <span style="font-size: 12px; color: #c2366b; display: inline-flex; align-items: center; gap: 4px; padding-left: 2px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>00:00~23:59 사이로 입력해 주세요</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; height: 52px; border-radius: 16px; background: #eceaf5; padding: 4px; box-sizing: border-box; gap: 4px">
+            <button type="button" aria-pressed="true" style="flex: 1; border: 0; border-radius: 12px; background: #ffffff; color: #262345; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(17, 17, 18, 0.08)">양력</button>
+            <button type="button" aria-pressed="false" style="flex: 1; border: 0; border-radius: 12px; background: transparent; color: #625e80; font-size: 14px; font-weight: 500; cursor: pointer">음력</button>
+            <button type="button" aria-pressed="false" style="flex: 1; border: 0; border-radius: 12px; background: transparent; color: #625e80; font-size: 14px; font-weight: 500; cursor: pointer">윤달</button>
+          </div>
+          <span style="font-size: 12px; color: #625e80; padding-left: 2px">세그먼트 — 2~3개 상호배타 선택</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">기본 gray-50 바탕 + gray-300 테두리, 포커스 시 primary-600 2px + primary-100 링 3px, 오류는 rose 색 테두리와 아이콘 달린 메시지. 라벨은 항상 보이게(플레이스홀더만으로 설명하지 않음).</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">명식 표 · 오행 분포</span><span style="font-size: 13px; color: #716d8e">사주 고유 컴포넌트</span></div>
+      <div style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: grid; grid-template-columns: 48px repeat(4, minmax(0, 1fr)); gap: 8px; align-items: center">
+          <span></span>
+          <span style="font-size: 12px; color: #716d8e; text-align: center">時</span>
+          <span style="font-size: 12px; color: #716d8e; text-align: center">日</span>
+          <span style="font-size: 12px; color: #716d8e; text-align: center">月</span>
+          <span style="font-size: 12px; color: #716d8e; text-align: center">年</span>
+          <span style="font-size: 12px; font-weight: 500; color: #4a4668">천간</span>
+          <div style="height: 56px; border-radius: 12px; background: #ffebd9; color: #b55a12; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>丙</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">편재</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1; outline: 2px solid #257f60; outline-offset: 2px"><span>甲</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">일간</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #fff4d6; color: #9a6700; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>戊</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">편재</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #eceaf5; color: #716d8e; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>庚</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">편관</span></div>
+          <span style="font-size: 12px; font-weight: 500; color: #4a4668">지지</span>
+          <div style="height: 56px; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>寅</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">비견</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #e1f5ee; color: #257f60; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>寅</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">비견</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #e3eefc; color: #2b63c6; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>子</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">정인</span></div>
+          <div style="height: 56px; border-radius: 12px; background: #ffebd9; color: #b55a12; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; line-height: 1"><span>午</span><span style="font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 500; margin-top: 3px">상관</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; color: #625e80"><span style="font-weight: 500; color: #4a4668">오행 분포</span><span>8자 기준</span></div>
+          <div style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px">
+            <span style="flex: 4; background: #257f60"></span>
+            <span style="flex: 2; background: #b55a12"></span>
+            <span style="flex: 1; background: #9a6700"></span>
+            <span style="flex: 1; background: #716d8e"></span>
+            <span style="flex: 1; background: #2b63c6"></span>
+          </div>
+          <div style="display: flex; gap: 14px; font-size: 12px; color: #4a4668">
+            <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #257f60"></span>木 4</span>
+            <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #b55a12"></span>火 2</span>
+            <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #9a6700"></span>土 1</span>
+            <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #716d8e"></span>金 1</span>
+            <span style="display: inline-flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #2b63c6"></span>水 0</span>
+          </div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">일간(日干)은 2px 아웃라인으로 강조. 각 칸은 한자 + 십성 라벨. 분포 바는 2px 간격으로 조각을 끊어 색 없이도 개수가 보입니다.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">운세 카드</span><span style="font-size: 13px; color: #716d8e">1px 테두리 · radius-lg 16 · 16px 패딩</span></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <article style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #ffffff">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <span style="font-size: 12px; font-weight: 500; color: #625e80">오늘 · 11월 9일</span>
+            <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #257f60; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">길 吉</span>
+          </div>
+          <h3 style="margin: 0; font-family: 'Noto Serif KR', serif; font-size: 20px; font-weight: 700; line-height: 1.3">말보다 글이 통하는 날</h3>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #4a4668">水 기운이 甲木을 적십니다. 미뤄 둔 메시지를 보내면 뜻밖의 답이 옵니다.</p>
+          <div style="display: flex; gap: 6px; margin-top: 2px">
+            <span style="height: 28px; padding: 0 10px; border-radius: 22px; background: #e3eefc; color: #2b63c6; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">水 보강</span>
+            <span style="height: 28px; padding: 0 10px; border-radius: 22px; background: #eceaf5; color: #4a4668; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">행운색 남색</span>
+          </div>
+        </article>
+        <article style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #f7f6fc">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <span style="font-size: 12px; font-weight: 500; color: #625e80">2026 대운</span>
+            <span style="height: 24px; padding: 0 10px; border-radius: 6px; background: #9a6700; color: #ffffff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center">대길 大吉</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="width: 48px; height: 48px; border-radius: 12px; background: #e3eefc; color: #2b63c6; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 28px; font-weight: 500">壬</span>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 600">壬子(임자) 대운</span>
+              <span style="font-size: 12px; color: #625e80">34세 ~ 43세</span>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid #eceaf5">
+            <span style="font-size: 13px; color: #4a4668">상세 풀이 12항목</span>
+            <a href="#detail" style="font-size: 13px; font-weight: 600; color: #6e5ce6; text-decoration: none; display: inline-flex; align-items: center; gap: 4px">보기<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a>
+          </div>
+        </article>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">제목은 Serif heading-3, 본문은 Sans body 14. 그림자 없음. 카드끼리 12px, 강조 카드는 gray-50 바탕으로만 구분.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">내비게이션 · 알림</span><span style="font-size: 13px; color: #716d8e">하단 탭바 56 + 안전영역 · 토스트</span></div>
+      <nav aria-label="주 메뉴" style="height: 56px; border: 1px solid #dcd9ea; border-radius: 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; background: #ffffff">
+        <a href="#home" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #262345; font-size: 11px; font-weight: 600"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z"></path></svg>홈</a>
+        <a href="#saju" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M3 12h18M12 3v18"></path></svg>내 사주</a>
+        <a href="#daily" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>오늘</a>
+        <a href="#more" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>마이</a>
+      </nav>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div role="status" style="height: 48px; border-radius: 12px; background: #322e52; color: #ffffff; display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 14px; font-weight: 500"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7fd9b8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>풀이를 저장했습니다<span style="margin-left: auto; color: #b3a6f3; font-weight: 600">보기</span></div>
+        <div role="alert" style="min-height: 48px; border-radius: 12px; background: #ffebd9; color: #b55a12; display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 14px; font-weight: 500; box-sizing: border-box"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>생시를 모르면 삼주(三柱)로 풀이됩니다</div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">탭 아이콘은 Lucide 2px 스트로크 22px(시장 3곳 공통), 활성은 gray-900 + 600 굵기(색만으로 구분하지 않음). 토스트는 gray-800 바탕, 인라인 경고는 오행 틴트 + 아이콘.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">소셜 로그인 · 톤 버튼</span><span style="font-size: 13px; color: #716d8e">참고안 로그인 4종 · primary-100 보조 버튼</span></div>
+      <div style="display: flex; flex-direction: column; gap: 10px; max-width: 420px">
+        <button type="button" style="height: 52px; border: 0; border-radius: 12px; background: #fee500; color: #191600; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="position: absolute; left: 18px"><path d="M12 3C6.5 3 2 6.4 2 10.6c0 2.7 1.8 5 4.5 6.4l-1 3.7c-.1.3.3.6.6.4l4.4-2.9c.5.1 1 .1 1.5.1 5.5 0 10-3.4 10-7.7S17.5 3 12 3z"></path></svg>카카오로 3초 만에 시작</button>
+        <button type="button" style="height: 52px; border: 1px solid #dcd9ea; border-radius: 12px; background: #ffffff; color: #262345; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; position: relative"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 18px"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>이메일로 계속하기</button>
+        <button type="button" style="height: 52px; border: 0; border-radius: 26px; background: #e6e2fb; color: #6e5ce6; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 18.3 5.8 22l1.7-7.9L2 9.3l7.1-.4z"></path></svg>오늘의 운세 뽑기</button>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">카카오 버튼은 가이드 고정값(#FEE500 · #191600 · radius 12)이라 토큰을 쓰지 않고, 아이콘은 카카오 제공 심벌로 교체해 넣습니다. tonal-primary 버튼(primary-100 바탕)은 "운세 뽑기" 같은 가벼운 진입 동작용 — primary 버튼 옆에 둘 때 위계를 한 단계 낮춥니다.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">콘텐츠 포스터 카드</span><span style="font-size: 13px; color: #716d8e">사주타이트·청월당 랜딩의 핵심 단위 · 3:4 · radius-md 12</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+        <a href="#p1" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px">
+          <div style="aspect-ratio: 3 / 4; border-radius: 12px; background: #2b2457; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px">
+            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%)"></div>
+            <span style="position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 8px; border-radius: 6px; background: #f2b544; color: #191600; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center">유료</span>
+            <span style="position: absolute; top: 10px; right: 10px; font-size: 11px; color: rgba(255, 255, 255, 0.72)">[일러스트]</span>
+            <span style="position: relative; font-size: 11px; color: rgba(255, 255, 255, 0.72)">사주천재 해온</span>
+            <span style="position: relative; font-family: 'Noto Serif KR', serif; font-size: 22px; font-weight: 700; color: #ffffff; line-height: 1.15">정통사주</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 2px">
+            <span style="font-size: 14px; font-weight: 600; line-height: 1.4">2026년 신년운세 총정리</span>
+            <span style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums">9,900원 <span style="font-size: 12px; font-weight: 400; color: #716d8e; text-decoration: line-through">14,900원</span></span>
+          </div>
+        </a>
+        <a href="#p2" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px">
+          <div style="aspect-ratio: 3 / 4; border-radius: 12px; background: #4a2a5e; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px">
+            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%)"></div>
+            <span style="position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 8px; border-radius: 6px; background: #257f60; color: #ffffff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center">무료</span>
+            <span style="position: absolute; top: 10px; right: 10px; font-size: 11px; color: rgba(255, 255, 255, 0.72)">[일러스트]</span>
+            <span style="position: relative; font-size: 11px; color: rgba(255, 255, 255, 0.72)">연애편</span>
+            <span style="position: relative; font-family: 'Noto Serif KR', serif; font-size: 22px; font-weight: 700; color: #ffffff; line-height: 1.15">인연사주</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 2px">
+            <span style="font-size: 14px; font-weight: 600; line-height: 1.4">올해 내 인연은 어디에</span>
+            <span style="font-size: 14px; font-weight: 700; color: #257f60">무료 <span style="font-size: 12px; font-weight: 400; color: #716d8e">· 3분</span></span>
+          </div>
+        </a>
+        <a href="#p3" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px">
+          <div style="aspect-ratio: 3 / 4; border-radius: 12px; background: #26386a; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px">
+            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%)"></div>
+            <span style="position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 8px; border-radius: 6px; background: #c2366b; color: #ffffff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center">-30%</span>
+            <span style="position: absolute; top: 10px; right: 10px; font-size: 11px; color: rgba(255, 255, 255, 0.72)">[일러스트]</span>
+            <span style="position: relative; font-size: 11px; color: rgba(255, 255, 255, 0.72)">직장편</span>
+            <span style="position: relative; font-family: 'Noto Serif KR', serif; font-size: 22px; font-weight: 700; color: #ffffff; line-height: 1.15">이직사주</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 2px">
+            <span style="font-size: 14px; font-weight: 600; line-height: 1.4">지금 옮겨도 될까</span>
+            <span style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums">6,900원 <span style="font-size: 12px; font-weight: 400; color: #716d8e; text-decoration: line-through">9,900원</span></span>
+          </div>
+        </a>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">일러스트 3:4 + 하단 스크림 + 흰 Serif 제목(22px, 2줄까지) + 좌상단 상태 배지 하나. 그림 아래 Sans 제목 14 600과 가격 14 700. 카드 전체가 하나의 <span style="font-family: ui-monospace, Menlo, monospace">&lt;a&gt;</span>. 2열 그리드에서 폭 150~190px, 히어로에선 1열 풀폭(radius-xl 24).</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">카테고리 탭 · 이어보기 배너</span><span style="font-size: 13px; color: #716d8e">두 랜딩의 2번·4번 구조</span></div>
+      <div style="display: flex; gap: 8px; overflow: hidden">
+        <button type="button" aria-pressed="true" style="height: 36px; padding: 0 16px; border: 0; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; flex-shrink: 0">전체</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0">신년</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0">연애</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0">궁합</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #4a4668; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0">직장</button>
+        <button type="button" aria-pressed="false" style="height: 36px; padding: 0 16px; border: 1px solid #dcd9ea; border-radius: 22px; background: #ffffff; color: #257f60; font-size: 14px; font-weight: 500; cursor: pointer; flex-shrink: 0">무료</button>
+      </div>
+      <a href="#continue" style="text-decoration: none; color: inherit; border: 1px solid #dcd9ea; border-radius: 16px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; background: #f7f6fc">
+        <div style="display: flex; gap: 4px; flex-shrink: 0">
+          <span style="width: 34px; height: 34px; border-radius: 8px; background: #ffebd9; color: #b55a12; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 18px; font-weight: 500">丙</span>
+          <span style="width: 34px; height: 34px; border-radius: 8px; background: #e1f5ee; color: #257f60; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 18px; font-weight: 500">甲</span>
+          <span style="width: 34px; height: 34px; border-radius: 8px; background: #fff4d6; color: #9a6700; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 18px; font-weight: 500">戊</span>
+          <span style="width: 34px; height: 34px; border-radius: 8px; background: #eceaf5; color: #716d8e; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 18px; font-weight: 500">庚</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0">
+          <span style="font-size: 12px; color: #625e80">하늘 님 · 정통사주 풀이 중</span>
+          <span style="font-size: 15px; font-weight: 600">3 / 7 항목 읽음 — 재물운부터 이어보기</span>
+        </div>
+        <span style="height: 36px; padding: 0 14px; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; flex-shrink: 0">이어보기</span>
+      </a>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">카테고리 탭은 가로 스크롤 36px 필, 선택 = primary 필(참고안 동일). "무료" 탭만 木 색 글자로 무료 진입점을 표시. 이어보기 배너는 내 명식 4글자 미리보기 + 진행도 + primary 버튼 — 로그인 사용자에게 히어로 바로 아래.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">결제 CTA · 리뷰 카드</span><span style="font-size: 13px; color: #716d8e">유료 전환과 신뢰 신호</span></div>
+      <div style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 12px; color: #625e80">정통사주 전체 풀이 · 12항목</span>
+          <span style="font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums">9,900원 <span style="font-size: 13px; font-weight: 400; color: #716d8e; text-decoration: line-through">14,900원</span> <span style="font-size: 12px; font-weight: 600; color: #c2366b; margin-left: 4px">-34%</span></span>
+        </div>
+        <button type="button" style="height: 48px; padding: 0 22px; border: 0; border-radius: 24px; background: #6e5ce6; color: #ffffff; font-size: 15px; font-weight: 600; cursor: pointer; flex-shrink: 0">결제하고 전체 보기</button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <div style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 13px; font-weight: 600">★★★★★ <span style="font-weight: 400; color: #716d8e">5.0</span></span><span style="font-size: 12px; color: #716d8e">방금 전</span></div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #4a4668">이직 고민이 길었는데 시기를 짚어줘서 마음이 정리됐어요. 직장편 추천.</p>
+          <span style="font-size: 12px; color: #625e80">김** · 29세 · 이직사주</span>
+        </div>
+        <div style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 13px; font-weight: 600">★★★★☆ <span style="font-weight: 400; color: #716d8e">4.0</span></span><span style="font-size: 12px; color: #716d8e">12분 전</span></div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #4a4668">무료 버전만 봐도 꽤 자세해서 유료 결제했어요. 명식 화면이 예쁨.</p>
+          <span style="font-size: 12px; color: #625e80">박** · 24세 · 정통사주</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">결제 바는 가격 20 700(tabular) + 정가 취소선 + rose 할인율, 버튼은 primary 보라(참고안 결제 버튼과 동일). 리뷰는 별점·시간·익명 이니셜·연령·구매 상품을 고정 포맷으로, 마키 대신 가로 스크롤 카드. 리뷰 텍스트는 실제 데이터로 채웁니다.</p>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

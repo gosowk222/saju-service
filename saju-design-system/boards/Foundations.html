@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>간격 라운드 모션 반응형 토큰</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+</style>
+<div style="width: 1280px; height: 820px; box-sizing: border-box; padding: 56px 64px; display: flex; flex-direction: column; gap: 32px; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: #625e80">04 · FOUNDATIONS</span>
+    <h2 style="margin: 0; font-family: 'Noto Serif KR', serif; font-size: 32px; font-weight: 700; line-height: 1.25">간격 · 라운드 · 모션 · 반응형</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #4a4668; max-width: 820px">추출된 간격 12단계 중 홀수(1·6·10·18)를 4px 격자로 정리하고, 라운드·모션·레이아웃은 시중 사주 서비스 3곳이 공유하는 값(16/24 라운드, 150ms · (0.4, 0, 0.2, 1), 중앙 단일 컬럼)으로 맞췄습니다.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 48px; flex: 1">
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">간격 Spacing</span><span style="font-size: 13px; color: #716d8e">4px 기반 · 추출값 유지 + 시장 3곳 공통 20px 추가</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px">
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-1</span><span style="color: #625e80">2px</span><span style="height: 14px; width: 2px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-2</span><span style="color: #625e80">4px</span><span style="height: 14px; width: 4px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-3</span><span style="color: #625e80">8px</span><span style="height: 14px; width: 8px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-4</span><span style="color: #625e80">12px</span><span style="height: 14px; width: 12px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-5</span><span style="color: #625e80">16px</span><span style="height: 14px; width: 16px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-6</span><span style="color: #625e80">20px</span><span style="height: 14px; width: 20px; background: #f2b544; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-7</span><span style="color: #625e80">24px</span><span style="height: 14px; width: 24px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-8</span><span style="color: #625e80">32px</span><span style="height: 14px; width: 32px; background: #f2b544; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-9</span><span style="color: #625e80">40px</span><span style="height: 14px; width: 40px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-10</span><span style="color: #625e80">52px</span><span style="height: 14px; width: 52px; background: #2b63c6; border-radius: 2px"></span></div>
+        <div style="display: grid; grid-template-columns: 90px 44px 1fr; align-items: center; gap: 12px"><span style="font-family: ui-monospace, Menlo, monospace; color: #4a4668">space-11</span><span style="color: #625e80">120px</span><span style="height: 14px; width: 120px; background: #2b63c6; border-radius: 2px"></span></div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">파란 막대는 인스타그램 추출값, 노란 막대는 사주 서비스에서 더한 값(20은 3곳 모두, 32는 사주타이트·청월당). 1·6·10·18px은 2·8·12·16으로 흡수. 카드 안쪽 여백 16, 포스터 그리드 간격 12, 섹션 사이 40, 화면 좌우 16(모바일)/20(이상), 탭·버튼 높이 44.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">라운드 Radius</span><span style="font-size: 13px; color: #716d8e">추출 22px 필 + 시장 공통 16 / 24</span></div>
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px">
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 100%; height: 64px; border-radius: 8px; background: #eceaf5; border: 1px solid #dcd9ea"></div><span style="font-size: 12px; font-weight: 600">sm · 8</span><span style="font-size: 11px; color: #625e80">배지 · 스와치</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 100%; height: 64px; border-radius: 12px; background: #eceaf5; border: 1px solid #dcd9ea"></div><span style="font-size: 12px; font-weight: 600">md · 12</span><span style="font-size: 11px; color: #625e80">포스터 이미지 · 한자 칸 · 소셜 버튼</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 100%; height: 64px; border-radius: 16px; background: #fff4d6; border: 1px solid #f7d98a"></div><span style="font-size: 12px; font-weight: 600">lg · 16 ★</span><span style="font-size: 11px; color: #625e80">카드 · 입력 · 시장 2/3</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 100%; height: 64px; border-radius: 22px; background: #2b63c6"></div><span style="font-size: 12px; font-weight: 600">pill · 22 ★</span><span style="font-size: 11px; color: #625e80">44px 버튼 · 칩 · 추출</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 100%; height: 64px; border-radius: 24px; background: #fff4d6; border: 1px solid #f7d98a"></div><span style="font-size: 12px; font-weight: 600">xl · 24</span><span style="font-size: 11px; color: #625e80">바텀시트 · 히어로 포스터</span></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start"><div style="width: 64px; height: 64px; border-radius: 999px; background: #eceaf5; border: 1px solid #dcd9ea"></div><span style="font-size: 12px; font-weight: 600">full</span><span style="font-size: 11px; color: #625e80">아바타 · 오행 점</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px">
+        <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">테두리 · 그림자</span></div>
+        <div style="display: flex; gap: 12px">
+          <div style="flex: 1; height: 56px; border-radius: 12px; background: #ffffff; border: 1px solid #dcd9ea; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #4a4668">border 1px gray-200 (기본)</div>
+          <div style="flex: 1; height: 56px; border-radius: 12px; background: #ffffff; border: 1px solid #c9c6dc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #4a4668">border 1px gray-300 (입력)</div>
+          <div style="flex: 1; height: 56px; border-radius: 12px; background: #ffffff; box-shadow: 0 4px 16px rgba(17, 17, 18, 0.08); display: flex; align-items: center; justify-content: center; font-size: 12px; color: #4a4668">shadow-float · 시트 전용</div>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">인스타그램처럼 기본은 그림자 없이 1px 테두리로 면을 나눕니다. 그림자는 떠 있는 요소(바텀시트·툴팁) 하나뿐입니다.</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">모션 Motion</span><span style="font-size: 13px; color: #716d8e">시장 3곳 공통 곡선 · 150 / 200 / 300ms</span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <div style="border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #625e80">--duration-fast</span><span style="font-size: 20px; font-weight: 600">150ms</span><span style="font-size: 12px; color: #4a4668">버튼·링크·입력 상태 변화</span></div>
+        <div style="border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #625e80">--duration-base</span><span style="font-size: 20px; font-weight: 600">200ms</span><span style="font-size: 12px; color: #4a4668">모달·탭 전환·카드 펼침</span></div>
+        <div style="border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #625e80">--duration-slow</span><span style="font-size: 20px; font-weight: 600">300ms</span><span style="font-size: 12px; color: #4a4668">바텀시트 · 결과 드러남</span></div>
+        <div style="border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; grid-column: span 2"><span style="font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #625e80">--ease-standard</span><span style="font-size: 14px; font-weight: 600; font-family: ui-monospace, Menlo, monospace">cubic-bezier(0.4, 0, 0.2, 1)</span><span style="font-size: 12px; color: #4a4668">진입·전환 기본 — 사주타이트·청월당·사주키드 모두 이 곡선</span></div>
+        <div style="border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #625e80">--ease-exit</span><span style="font-size: 14px; font-weight: 600; font-family: ui-monospace, Menlo, monospace">cubic-bezier(0.4, 0, 1, 1)</span><span style="font-size: 12px; color: #4a4668">닫힘·사라짐</span></div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">인스타그램의 <span style="font-family: ui-monospace, Menlo, monospace">cubic-bezier(0, 0, 1, 1)</span>은 사실상 linear라 버렸고, 100ms도 150ms로 올렸습니다(세 서비스 모두 버튼 150ms). 운세 뽑기·카드 뒤집기 연출은 300ms까지, 포스터 캐러셀(청월당 Swiper)은 300ms 스냅, 마키·무한 핑 같은 지속 애니메이션은 쓰지 않습니다. <span style="font-family: ui-monospace, Menlo, monospace">prefers-reduced-motion</span>에서는 모두 0ms.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; gap: 12px"><span style="font-size: 17px; font-weight: 600">반응형 Breakpoints</span><span style="font-size: 13px; color: #716d8e">추출 58개 → 6개</span></div>
+      <div style="position: relative; height: 72px; border-radius: 12px; background: #f7f6fc; border: 1px solid #eceaf5; padding: 0 16px; display: flex; align-items: center">
+        <div style="position: relative; width: 100%; height: 4px; background: #dcd9ea; border-radius: 2px">
+          <div style="position: absolute; left: 0%; top: -6px; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">375</span></div>
+          <div style="position: absolute; left: 10%; top: -6px; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">480</span></div>
+          <div style="position: absolute; left: 37%; top: -6px; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">768</span></div>
+          <div style="position: absolute; left: 61%; top: -6px; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">1024</span></div>
+          <div style="position: absolute; left: 85%; top: -6px; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">1280</span></div>
+          <div style="position: absolute; left: 100%; top: -6px; transform: translateX(-100%); display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 16px; height: 16px; border-radius: 999px; background: #2b63c6; border: 3px solid #ffffff; box-sizing: border-box"></span><span style="font-size: 11px; font-weight: 600; white-space: nowrap">1440</span></div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; font-size: 12px; line-height: 1.5; color: #4a4668">
+        <div style="padding: 10px 12px; border-radius: 8px; background: #f7f6fc"><strong style="font-weight: 600; color: #262345">~479 compact</strong><br>1열 · 하단 탭바 · 명식 4주 4열 고정 · 좌우 16</div>
+        <div style="padding: 10px 12px; border-radius: 8px; background: #f7f6fc"><strong style="font-weight: 600; color: #262345">480~767 medium</strong><br>컬럼 폭 그대로, 좌우 20 · 시트가 중앙 모달로</div>
+        <div style="padding: 10px 12px; border-radius: 8px; background: #f7f6fc"><strong style="font-weight: 600; color: #262345">768~ desktop</strong><br>중앙 단일 컬럼 max-width 600px · 바깥은 gray-50 · 사이드 내비 없음</div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">사주타이트·청월당은 데스크톱에서도 모바일 폭 컬럼(440~600px)을 가운데 두는 "모바일 웹" 레이아웃입니다. 풀이 글은 폭이 넓어지면 읽기 어려워 같은 방식을 택하고, 1024·1280·1440은 바깥 여백에만 씁니다. 청월당이 305~456px 사이에 30개 브레이크포인트를 둔 건 포스터 폭 맞추기 때문 — 우리는 <span style="font-family: ui-monospace, Menlo, monospace">grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))</span>과 컨테이너 쿼리로 대체합니다.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

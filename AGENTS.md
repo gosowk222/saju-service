@@ -1,9 +1,84 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# 새 사주 서비스의 AI 에이전트 작업 규칙
 
-## This is NOT the Next.js you know
+## 목적과 기준
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+이 서비스는 설치된 `sajuengine`을 이용해 캐릭터가 설명하는 사주 상품을 만들고 메신저 형태로 제공한다. 연애만이 아니라 재물, 직업, 성향, 관계, 기간별 흐름, 종합 리포트를 확장 대상으로 둔다. 먼저 사용자의 현재 작업 범위와 `docs/SAJUENGINE_SERVICE_GUIDE.md`, 설치된 패키지 README와 공개 타입을 읽는다.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+문서의 기준 패키지는 `0.1.0`, 소스 커밋은 `abc77f71531591969151fd5b6e4b51c32e0ac3d9`, inquiry policyVersion은 `1.1.0`이다. 설치된 버전이 다르면 실제 공개 타입을 먼저 확인한다. 존재하지 않는 API를 만들어 문서 예제처럼 사용하지 않는다.
 
-<!-- END:nextjs-agent-rules -->
+## 엔진과 앱의 책임
+
+- 사주 기둥, 절기, 대운, 세운, 월운, 일운 계산은 패키지를 사용한다. 앱에 두 번째 계산기를 만들지 않는다.
+- 상품별 질문, 추가 해석과 판단 규칙, 캐릭터, LLM, 문장 검사, 저장, 결제, 화면은 앱에서 구현한다.
+- 추가 규칙은 앱에 `InquiryRule`로 두고 `createInquiryReader`에 등록한다. 엔진 소스와 `node_modules`를 직접 수정하지 않는다. 공통 계산의 실제 누락이나 오류가 발견되면 재현 사례를 정리한다.
+- 이전 앱의 `src/reading`은 참고 구현이다. 그 앱의 수많은 문장 검사, 페르소나, 금칙어, 모델 설정을 새 앱의 필수 조건으로 복사하지 않는다.
+- 공개 import만 사용한다: `sajuengine`, `sajuengine/node`, `sajuengine/materials`, `sajuengine/catalog`, `sajuengine/testing`.
+
+## 계산과 근거
+
+- 입력은 `PublicBirthInputSchema`와 `toAnalysisInput`을 사용한다. 시각 미상을 임의의 정오로 채우지 않는다. 시간대와 보정 정책을 명시한다.
+- 같은 요청 안에서 `createFeatureSession`으로 계산을 재사용하고 `finally`에서 폐기한다. 여러 사용자의 출생정보를 전역 캐시에 섞지 않는다.
+- 기능 ID는 앱이 정의한다. 원본 앱의 F01 같은 상품 ID가 패키지에 등록돼 있다고 가정하지 않는다.
+- 기간 ID는 `reader.periods` 또는 실제 결과에서 얻는다. 달력의 1월과 절기 기준 월운을 동일하게 다루지 않는다.
+- 원국, 대상 기간, 보조 기간, 상대의 근거를 구분한다. 타인의 근거와 다른 기간의 근거 ID를 직접 근거로 쓰지 않는다.
+- `twelveStages`는 원국과 대상 기간, `contextTwelveStages`는 명시한 보조 기간이다. `monthSequence`와 일반 rating은 참고 맥락이며 분야별 점수나 직접 결론 근거로 승격하지 않는다.
+- `available`은 해석할 근거가 있다는 뜻이다. 적중률이 아니다. `unsupported`, `insufficient-evidence`, 시각 미상 coverage를 유지한다.
+- 결과의 출처, 규칙 버전, 반대 근거, 보류 조건을 서버에 보존한다. `human-reviewed`는 실제 검토를 받은 규칙에만 쓴다.
+
+## 상품과 문장
+
+- 계산된 사실, 서비스가 채택한 해석, 사용자가 제공한 상황, 창작 장면을 내부 데이터에서 구분한다.
+- LLM에는 그 구분과 근거가 붙은 작성용 재료를 전달한다. LLM이 사주를 새로 계산하거나 없는 사용자 상황을 사실로 만들게 하지 않는다.
+- 해석 규칙은 재료의 의미를 정하고, 판단 규칙은 질문에 대한 채택·반대·보류를 정한다. 서비스 점수는 사건 확률이 아니며 기준과 버전을 기록한다.
+- 구체적인 장소, 외모, 대사 등 창작 요소는 창작으로 저장한다. 날짜에도 계산·규칙으로 고른 추천일인지 연출용 날짜인지 출처를 둔다.
+- 캐릭터는 말투, 성격, 비유, 설명 순서를 바꾼다. 동일한 상품과 규칙의 근거 및 결론을 말투 때문에 바꾸지 않는다.
+- 메신저 말풍선에 내부 기술 용어와 근거 ID를 노출할 필요는 없다. 창작 콘텐츠 여부는 이용자가 이해할 수 있는 상품 설명이나 해당 장면 표시로 전달한다.
+- 건강 진단, 실제 수익, 합격과 재회, 만남 확정일 등을 내장 결과처럼 만들지 않는다. 생활 관리나 행동 제안은 해당 범위의 서비스 콘텐츠로 작성한다.
+
+## 생성과 검증
+
+- 먼저 계산과 규칙을 LLM 없이 검증하고, Mock 메시지로 화면을 연결한다.
+- 결과 생성은 주제 단위 등 상품에 맞게 묶는다. 말풍선마다 별도 LLM 호출을 전제하지 않는다. 생성 완료 결과를 저장하고 다시 보기에서 재생성하지 않는다.
+- 최소 검사는 응답 형식, 알려진 근거 참조, 대상·기간·계산값 일치, 창작 구분, 필수 주제 누락이다. 말투는 필요할 때 부드럽게 조정하며 무한 재시도하지 않는다.
+- 규칙에는 적용·비적용·반대 근거·부족한 입력 사례를 테스트한다. 화면에는 loading/error/partial 상태와 저장 결과 다시 보기를 확인한다.
+- 비용이 드는 실 LLM 호출은 사용자가 설정한 개발 환경과 예산 안에서 실행한다. 실행하지 않았다면 `LIVE_NOT_RUN`으로 보고하며 Mock 통과를 문장 품질 검증이라고 쓰지 않는다.
+- API 키, 출생정보, 사용자 대화와 결과 원문을 공개 로그나 커밋에 남기지 않는다.
+
+## 완료 보고
+
+바뀐 상품 동작, 계산·규칙·화면의 검증 결과, 실제 LLM 실행 여부, 추가 환경 변수, 남은 작업을 쉬운 한국어로 설명한다. 엔진과 앱의 버전 및 생성 정책을 결과와 함께 기록한다.
+
+## UI 디자인 시스템
+
+UI를 만들거나 수정하기 전에 다음 파일을 읽는다.
+
+- saju-design-system/DESIGN_SYSTEM.md
+- saju-design-system/tokens.json
+- saju-design-system/boards/Components.html
+- 작업할 화면에 해당하는 saju-design-system/boards/\*.html
+
+디자인 값은 tokens.json, 사용 규칙은 DESIGN_SYSTEM.md,
+화면 구성은 해당 보드를 기준으로 구현한다.
+
+색상, 글꼴, 글자 크기, 간격, 모서리, 그림자, 모션은
+디자인 시스템에 정의된 토큰과 컴포넌트 규격을 사용한다.
+임의의 디자인 값을 컴포넌트에 직접 추가하지 않는다.
+
+tokens.css를 실제 전역 스타일에 연결한다.
+Tailwind를 사용하면 설치된 버전에 맞게 토큰을 연결하고,
+기본 Tailwind 값과 이 디자인 시스템의 값이 같다고 가정하지 않는다.
+
+보드의 인라인 스타일을 그대로 복사하지 않고,
+같은 값을 토큰 참조로 바꾸어 공통 컴포넌트로 구현한다.
+
+토큰에 없는 값은 문서의 컴포넌트 규격과 예외를 확인한다.
+추가 디자인 값이 필요하면 필요한 토큰과 이유를 제안한다.
+flex, grid, 100%, auto 등 일반적인 배치 설정은 사용할 수 있다.
+
+모바일과 데스크톱에서 화면을 확인하고,
+메신저의 긴 문장, 작성 중 표시, 오류, 다시 보기 상태를 점검한다.
+
+보드에 등장하는 기능과 예시 데이터는 현재 개발 범위를
+자동으로 확장하는 요구사항으로 취급하지 않는다.
+분야색과 오행색의 연결은 화면 표현에만 사용하며,
+사주 계산이나 판단 규칙으로 사용하지 않는다.

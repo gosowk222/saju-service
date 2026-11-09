@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -6,11 +6,18 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   turbopack: {
     rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
+      '*.css': {
+        loaders: ['@tailwindcss/turbopack'],
+        as: '*.css',
       },
     },
+  },
+  serverExternalPackages: ['sajuengine', '@js-temporal/polyfill', 'manseryeok'],
+  outputFileTracingIncludes: {
+    '/': [
+      './node_modules/@js-temporal/polyfill/package.json',
+      './node_modules/@js-temporal/polyfill/dist/**/',
+    ],
   },
 };
 

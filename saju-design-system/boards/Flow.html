@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>화면 설계 개요</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+</style>
+<div style="width: 1280px; height: 520px; box-sizing: border-box; padding: 48px 64px; display: flex; flex-direction: column; gap: 28px; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: #625e80">08 · SCREENS</span>
+    <h2 style="margin: 0; font-family: 'Noto Serif KR', serif; font-size: 32px; font-weight: 700; line-height: 1.25">화면 설계 · 12개 화면 흐름</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #4a4668; max-width: 900px">참고 레이아웃의 12단계 흐름(진입 → 로그인 → 홈 → 탐색 → 상품 → 풀이 → 재방문 → 결제 → 보관)을 그대로 따르되, 일러스트·캐릭터·서비스명은 쓰지 않고 우리 토큰(보라 primary · 라벤더 면 · 분야색 틴트 · 포스터 카드)으로 다시 그렸습니다. 아래 두 줄이 화면, 포스터 자리는 [일러스트] 박스입니다.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 440px; gap: 40px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 15px; font-weight: 600">흐름</span>
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">01</span><span style="font-size: 13px; font-weight: 600">랜딩 · 첫 진입</span><span style="font-size: 11px; color: #625e80">소개 + 시작하기</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">02</span><span style="font-size: 13px; font-weight: 600">로그인</span><span style="font-size: 11px; color: #625e80">카카오 · 구글 · 애플 · 이메일</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">03</span><span style="font-size: 13px; font-weight: 600">홈</span><span style="font-size: 11px; color: #625e80">오늘의 운세 · 분야 · 추천</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">04</span><span style="font-size: 13px; font-weight: 600">카테고리 목록</span><span style="font-size: 11px; color: #625e80">풀이 상품 그리드</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">05</span><span style="font-size: 13px; font-weight: 600">상품 상세</span><span style="font-size: 11px; color: #625e80">구성 · 가격 3단 · 구매</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">06</span><span style="font-size: 13px; font-weight: 600">풀이 결과</span><span style="font-size: 11px; color: #625e80">대화형 + 결과 카드</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">07</span><span style="font-size: 13px; font-weight: 600">오늘의 운세</span><span style="font-size: 11px; color: #625e80">하루 1회 무료</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">08</span><span style="font-size: 13px; font-weight: 600">마이페이지</span><span style="font-size: 11px; color: #625e80">이용권 · 메뉴</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">09</span><span style="font-size: 13px; font-weight: 600">이용권 충전</span><span style="font-size: 11px; color: #625e80">4단 묶음 · 결제</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">10</span><span style="font-size: 13px; font-weight: 600">추가 질문 구매</span><span style="font-size: 11px; color: #625e80">3단 묶음</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">11</span><span style="font-size: 13px; font-weight: 600">내 풀이 보관함</span><span style="font-size: 11px; color: #625e80">진행중 · 완료</span></div>
+        <div style="border-radius: 12px; background: #f7f6fc; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; color: #716d8e">12</span><span style="font-size: 13px; font-weight: 600">내 사주 명식</span><span style="font-size: 11px; color: #625e80">마이 → 내 사주 정보</span></div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #4a4668">하단 탭은 참고안대로 <strong style="font-weight: 600; color: #262345">홈 · 탐색 · 보관함 · 마이</strong> 4개로 통일. 모든 CTA는 primary 보라, 보조 동작은 primary-100 톤 버튼. 골드는 이용권 코인과 유료 배지에만. 포스터·썸네일·아바타는 모두 일러스트 자리라 라벨 박스로 두었습니다.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 15px; font-weight: 600">참고안 색 분석 → 반영</span>
+      <div style="display: flex; gap: 6px">
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #8b7bf0"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #efedfb; border: 1px solid #dcd9ea; box-sizing: border-box"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #2b2457"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #f28bb3"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #f2b544"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #6fa8f0"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #5cc0a0"></span>
+        <span style="flex: 1; height: 28px; border-radius: 6px; background: #fee500"></span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.55; color: #4a4668">
+        <span><strong style="font-weight: 600; color: #257f60">채택</strong> 보라 주조색(#8B7CF6 → 버튼용 #6E5CE6로 보정) · 라벤더 면 · 인디고 텍스트 — v1.3에서 팔레트 전면 교체</span>
+        <span><strong style="font-weight: 600; color: #257f60">채택</strong> 분야마다 다른 틴트 아이콘 — 핑크·골드·블루·오렌지·민트·보라 6색을 오행 틴트와 한 쌍으로</span>
+        <span><strong style="font-weight: 600; color: #257f60">채택</strong> 이용권 = 골드 코인, 말풍선 2색(풀이 라벤더 gray-100 / 나 primary), 카카오 노랑</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #fde8ef; color: #c2366b; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"></path></svg></span><span style="font-size: 11px; font-weight: 500">연애</span><span style="font-size: 10px; color: #716d8e">rose</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #fff4d6; color: #9a6700; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M9.5 9.5h3.5a1.75 1.75 0 0 1 0 3.5H9.5m0 0h4a1.75 1.75 0 0 1 0 3.5H9.5"></path></svg></span><span style="font-size: 11px; font-weight: 500">재물</span><span style="font-size: 10px; color: #716d8e">gold · 土</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #e3eefc; color: #2b63c6; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span><span style="font-size: 11px; font-weight: 500">직업</span><span style="font-size: 10px; color: #716d8e">blue · 水</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #e1f5ee; color: #257f60; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="5"></circle><circle cx="15" cy="12" r="5"></circle></svg></span><span style="font-size: 11px; font-weight: 500">궁합</span><span style="font-size: 10px; color: #716d8e">wood · 木</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #ffebd9; color: #b55a12; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg></span><span style="font-size: 11px; font-weight: 500">인생</span><span style="font-size: 10px; color: #716d8e">fire · 火</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #eceaf5; color: #716d8e; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></span><span style="font-size: 11px; font-weight: 500">성격</span><span style="font-size: 10px; color: #716d8e">metal · 金</span></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px"><span style="width: 44px; height: 44px; border-radius: 12px; background: #6e5ce6; color: #ffffff; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></span><span style="font-size: 11px; font-weight: 500">오늘</span><span style="font-size: 10px; color: #716d8e">ink</span></div>
+      </div>
+      <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #4a4668">전체 토큰 값은 02 색상 보드. 텍스트용은 모두 4.5:1 이상으로 보정했습니다.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>홈 화면</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+button{font-family:inherit}
+</style>
+<div style="width: 390px; height: 1240px; box-sizing: border-box; display: flex; flex-direction: column; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345; overflow: hidden; position: relative">
+
+  <header style="height: 56px; margin-top: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; flex-shrink: 0">
+    <span style="font-family: 'Noto Serif KR', serif; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">사주풀이</span>
+    <div style="display: flex">
+      <button type="button" aria-label="알림" style="width: 44px; height: 44px; border: 0; background: transparent; color: #262345; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; position: relative"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg><span style="position: absolute; top: 10px; right: 12px; width: 8px; height: 8px; border-radius: 999px; background: #b55a12; border: 2px solid #ffffff"></span></button>
+      <a href="MyPage.html" aria-label="마이페이지" style="width: 44px; height: 44px; color: #262345; display: inline-flex; align-items: center; justify-content: center; text-decoration: none"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></a>
+    </div>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; gap: 24px; padding: 4px 16px 16px; overflow: hidden">
+    <a href="Daily.html" style="text-decoration: none; color: inherit; border-radius: 24px; background: #6e5ce6; padding: 20px; display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden">
+      <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0">
+        <span style="font-size: 12px; font-weight: 600; color: #ffe7a8">오늘의 운세 · 1일 1회 무료</span>
+        <span style="font-family: 'Noto Serif KR', serif; font-size: 20px; font-weight: 700; color: #ffffff; line-height: 1.3">오늘의 운세가<br>도착했어요</span>
+        <span style="height: 32px; padding: 0 14px; border-radius: 22px; background: #ffffff; color: #262345; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; align-self: flex-start; margin-top: 4px">지금 확인하기</span>
+      </div>
+      <div style="width: 96px; height: 96px; border-radius: 16px; background: #2b2457; display: flex; align-items: center; justify-content: center; font-size: 11px; color: rgba(255, 255, 255, 0.5); flex-shrink: 0">[일러스트]</div>
+    </a>
+
+    <section aria-label="분야" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 8px">
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #fde8ef; color: #c2366b; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"></path></svg></span><span style="font-size: 12px; font-weight: 500">연애</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #fff4d6; color: #9a6700; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M9.5 9.5h3.5a1.75 1.75 0 0 1 0 3.5H9.5m0 0h4a1.75 1.75 0 0 1 0 3.5H9.5"></path></svg></span><span style="font-size: 12px; font-weight: 500">재물</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #e3eefc; color: #2b63c6; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span><span style="font-size: 12px; font-weight: 500">직업</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #e1f5ee; color: #257f60; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="5"></circle><circle cx="15" cy="12" r="5"></circle></svg></span><span style="font-size: 12px; font-weight: 500">궁합</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #ffebd9; color: #b55a12; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg></span><span style="font-size: 12px; font-weight: 500">인생</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #eceaf5; color: #716d8e; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></span><span style="font-size: 12px; font-weight: 500">성격</span></a>
+      <a href="Daily.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #6e5ce6; color: #ffffff; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></span><span style="font-size: 12px; font-weight: 500">오늘</span></a>
+      <a href="Category.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: 56px; height: 56px; border-radius: 16px; background: #ffffff; border: 1px solid #dcd9ea; box-sizing: border-box; color: #262345; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></span><span style="font-size: 12px; font-weight: 500">전체</span></a>
+    </section>
+
+    <a href="Reading.html" style="text-decoration: none; color: inherit; border: 1px solid #dcd9ea; border-radius: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; background: #f7f6fc">
+      <div style="display: flex; gap: 3px; flex-shrink: 0">
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: #ffebd9; color: #b55a12; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 500">丙</span>
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: #e1f5ee; color: #257f60; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 500">甲</span>
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: #fff4d6; color: #9a6700; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 500">戊</span>
+        <span style="width: 30px; height: 30px; border-radius: 8px; background: #eceaf5; color: #716d8e; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 16px; font-weight: 500">庚</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0">
+        <span style="font-size: 11px; color: #625e80">하늘 님 · 연애 성향 풀이 중</span>
+        <span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">3 / 7 항목 — 이어보기</span>
+      </div>
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#625e80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+    </a>
+
+    <section aria-label="추천 풀이" style="display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">추천 풀이</h2>
+        <a href="Category.html" style="font-size: 13px; font-weight: 500; color: #625e80; text-decoration: none; display: inline-flex; align-items: center; gap: 2px">더보기<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <a href="Product.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px">
+          <div style="aspect-ratio: 3 / 4; border-radius: 12px; background: #4a2a5e; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px">
+            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%)"></div>
+            <span style="position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 8px; border-radius: 6px; background: #f2b544; color: #191600; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center">유료</span>
+            <span style="position: relative; font-size: 11px; color: rgba(255, 255, 255, 0.72)">연애편</span>
+            <span style="position: relative; font-family: 'Noto Serif KR', serif; font-size: 22px; font-weight: 700; color: #ffffff; line-height: 1.15">연애 성향 풀이</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 600; line-height: 1.4">내 사랑의 패턴 읽기</span>
+            <span style="font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums">3,900원~</span>
+          </div>
+        </a>
+        <a href="Product.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px">
+          <div style="aspect-ratio: 3 / 4; border-radius: 12px; background: #26386a; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px">
+            <div style="position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0) 60%)"></div>
+            <span style="position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 8px; border-radius: 6px; background: #257f60; color: #ffffff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center">무료</span>
+            <span style="position: relative; font-size: 11px; color: rgba(255, 255, 255, 0.72)">직장편</span>
+            <span style="position: relative; font-family: 'Noto Serif KR', serif; font-size: 22px; font-weight: 700; color: #ffffff; line-height: 1.15">직업 · 적성 풀이</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 600; line-height: 1.4">나에게 맞는 일의 방향</span>
+            <span style="font-size: 14px; font-weight: 700; color: #257f60">무료 <span style="font-size: 12px; font-weight: 400; color: #716d8e">· 3분</span></span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section aria-label="실시간 리뷰" style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">실시간 유저 리뷰</h2>
+        <a href="#reviews" style="font-size: 13px; font-weight: 500; color: #625e80; text-decoration: none">전체보기</a>
+      </div>
+      <div style="border: 1px solid #dcd9ea; border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 13px; font-weight: 600">★★★★★ <span style="font-weight: 400; color: #716d8e">5.0</span></span><span style="font-size: 12px; color: #716d8e">방금 전</span></div>
+        <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #4a4668">이직 고민이 길었는데 시기를 짚어줘서 마음이 정리됐어요.</p>
+        <span style="font-size: 12px; color: #625e80">김** · 29세 · 직업 · 적성 풀이</span>
+      </div>
+    </section>
+  </main>
+
+  <nav aria-label="주 메뉴" style="height: 56px; padding-bottom: 28px; border-top: 1px solid #dcd9ea; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; background: #ffffff; flex-shrink: 0; box-sizing: content-box">
+    <a href="Home.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #262345; font-size: 11px; font-weight: 600"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z"></path></svg>홈</a>
+    <a href="Category.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M15.5 8.5l-2 5-5 2 2-5z"></path></svg>탐색</a>
+    <a href="Library.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>보관함</a>
+    <a href="MyPage.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>마이</a>
+  </nav>
+</div>
+</body>
+</html>

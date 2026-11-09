@@ -1,0 +1,21 @@
+{
+  "name": "sajuengine-service-examples",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "smoke": "npm run build && node dist/03-run-smoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "sajuengine": "file:../vendor/sajuengine-0.1.0.tgz"
+  }
+}

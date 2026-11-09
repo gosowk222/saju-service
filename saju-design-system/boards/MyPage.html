@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>마이페이지 화면</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&amp;family=Noto+Serif+KR:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#ffffff;color:#262345;font-family:'Noto Sans KR',-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6e5ce6}a:hover{color:#5748c4;text-decoration:underline}
+button{font-family:inherit}
+</style>
+<div style="width: 390px; height: 960px; box-sizing: border-box; display: flex; flex-direction: column; background: #ffffff; font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif; color: #262345; overflow: hidden; position: relative">
+
+  <header style="height: 56px; margin-top: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; flex-shrink: 0">
+    <span style="font-size: 20px; font-weight: 600">마이페이지</span>
+    <button type="button" aria-label="설정" style="width: 44px; height: 44px; border: 0; background: transparent; color: #262345; display: inline-flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg></button>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 4px 16px 16px; overflow: hidden">
+    <a href="Sample.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid #dcd9ea; border-radius: 16px">
+      <span style="width: 56px; height: 56px; border-radius: 999px; background: #e1f5ee; color: #257f60; display: inline-flex; align-items: center; justify-content: center; font-family: 'Noto Serif KR', serif; font-size: 26px; font-weight: 500; flex-shrink: 0">甲</span>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <span style="font-size: 17px; font-weight: 600">하늘 님</span>
+        <span style="font-size: 13px; color: #625e80">甲寅일주 · 1992.03.14 · 寅時</span>
+      </div>
+      <span style="font-size: 13px; font-weight: 500; color: #4a4668; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0">프로필 관리<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></span>
+    </a>
+
+    <div style="border-radius: 16px; background: #6e5ce6; padding: 16px; display: flex; align-items: center; gap: 12px">
+      <span style="width: 40px; height: 40px; border-radius: 999px; background: #f2b544; color: #4a3200; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M9.5 10h3.5a1.5 1.5 0 0 1 0 3h-3.5m0 0h4a1.5 1.5 0 0 1 0 3h-4"></path></svg></span>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 1px">
+        <span style="font-size: 12px; color: rgba(255, 255, 255, 0.72)">보유 이용권</span>
+        <span style="font-size: 22px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums">12장 <span style="font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.72)">· 무료 질문 2회</span></span>
+      </div>
+      <a href="Credits.html" style="height: 36px; padding: 0 14px; border-radius: 22px; background: #6e5ce6; color: #ffffff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; text-decoration: none; flex-shrink: 0">충전하기</a>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <a href="Library.html" style="text-decoration: none; color: inherit; border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px"><span style="font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums">7</span><span style="font-size: 12px; color: #625e80">내 풀이</span></a>
+      <a href="Library.html" style="text-decoration: none; color: inherit; border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px"><span style="font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: #2b63c6">2</span><span style="font-size: 12px; color: #625e80">진행 중</span></a>
+      <a href="#wish" style="text-decoration: none; color: inherit; border: 1px solid #dcd9ea; border-radius: 12px; padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px"><span style="font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums">4</span><span style="font-size: 12px; color: #625e80">찜한 상품</span></a>
+    </div>
+
+    <ul style="margin: 0; padding: 0; list-style: none; border: 1px solid #dcd9ea; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column">
+      <li style="border-bottom: 1px solid #eceaf5"><a href="Sample.html" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M3 12h18M12 3v18"></path></svg><span style="flex: 1">내 사주 정보</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+      <li style="border-bottom: 1px solid #eceaf5"><a href="Library.html" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg><span style="flex: 1">내 풀이 보관함</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+      <li style="border-bottom: 1px solid #eceaf5"><a href="#orders" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12l2 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"></path><path d="M4 7h16M9 11a3 3 0 0 0 6 0"></path></svg><span style="flex: 1">구매 내역</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+      <li style="border-bottom: 1px solid #eceaf5"><a href="Credits.html" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="3"></circle></svg><span style="flex: 1">이용권 내역</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+      <li style="border-bottom: 1px solid #eceaf5"><a href="#wish" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"></path></svg><span style="flex: 1">찜한 상품</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+      <li><a href="#notice" style="text-decoration: none; color: inherit; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 12px; font-size: 15px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4668" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg><span style="flex: 1">공지 · 고객센터</span><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a9a6c0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></a></li>
+    </ul>
+
+    <p style="margin: 0; text-align: center; font-size: 12px; color: #a9a6c0">버전 1.0.0 · <a href="#logout" style="color: #716d8e; text-decoration: none">로그아웃</a></p>
+  </main>
+
+  <nav aria-label="주 메뉴" style="height: 56px; padding-bottom: 28px; border-top: 1px solid #dcd9ea; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; background: #ffffff; flex-shrink: 0; box-sizing: content-box">
+    <a href="Home.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z"></path></svg>홈</a>
+    <a href="Category.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M15.5 8.5l-2 5-5 2 2-5z"></path></svg>탐색</a>
+    <a href="Library.html" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #625e80; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>보관함</a>
+    <a href="MyPage.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: #262345; font-size: 11px; font-weight: 600"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>마이</a>
+  </nav>
+</div>
+</body>
+</html>

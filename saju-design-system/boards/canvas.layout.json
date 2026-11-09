@@ -1,0 +1,35 @@
+{
+  "v": 3,
+  "attachments": {},
+  "createdOnFiles": {"v": 1, "at": "2026-11-09T06:36:00Z"},
+  "title": "사주풀이 디자인 시스템",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 840, "title": "01 개요 · 토큰 분석"},
+    "Benchmark.dc.html": {"x": 1360, "y": 0, "w": 1280, "h": 1100, "title": "00 시장 벤치마크 · 사주타이트 · 청월당 · 사주키드"},
+    "Colors.dc.html": {"x": 0, "y": 1220, "w": 1280, "h": 1440, "title": "02 색상"},
+    "Typography.dc.html": {"x": 0, "y": 2780, "w": 1280, "h": 900, "title": "03 타이포그래피"},
+    "Foundations.dc.html": {"x": 0, "y": 3800, "w": 1280, "h": 820, "title": "04 간격 · 라운드 · 모션 · 반응형"},
+    "Components.dc.html": {"x": 0, "y": 4740, "w": 1280, "h": 1720, "title": "05 컴포넌트"},
+    "Flow.dc.html": {"x": 0, "y": 6580, "w": 1280, "h": 520, "title": "08 화면 설계 · 흐름과 색 분석"},
+    "Landing.dc.html": {"x": 0, "y": 7220, "w": 390, "h": 844, "title": "S01 랜딩 · 첫 진입", "radius": 44},
+    "Login.dc.html": {"x": 470, "y": 7220, "w": 390, "h": 844, "title": "S02 회원가입 · 로그인", "radius": 44},
+    "Home.dc.html": {"x": 940, "y": 7220, "w": 390, "h": 1240, "title": "S03 홈", "radius": 44},
+    "Category.dc.html": {"x": 1410, "y": 7220, "w": 390, "h": 1000, "title": "S04 카테고리 목록", "radius": 44},
+    "Product.dc.html": {"x": 1880, "y": 7220, "w": 390, "h": 1100, "title": "S05 상품 상세", "radius": 44},
+    "Reading.dc.html": {"x": 2350, "y": 7220, "w": 390, "h": 1000, "title": "S06 풀이 결과 · 대화형", "radius": 44},
+    "Daily.dc.html": {"x": 0, "y": 8580, "w": 390, "h": 1000, "title": "S07 오늘의 운세 · 무료", "radius": 44},
+    "MyPage.dc.html": {"x": 470, "y": 8580, "w": 390, "h": 960, "title": "S08 마이페이지", "radius": 44},
+    "Credits.dc.html": {"x": 940, "y": 8580, "w": 390, "h": 900, "title": "S09 이용권 충전", "radius": 44},
+    "Questions.dc.html": {"x": 1410, "y": 8580, "w": 390, "h": 844, "title": "S10 추가 질문 구매", "radius": 44},
+    "Library.dc.html": {"x": 1880, "y": 8580, "w": 390, "h": 900, "title": "S11 내 풀이 보관함", "radius": 44},
+    "Sample.dc.html": {"x": 2350, "y": 8580, "w": 390, "h": 844, "title": "S12 내 사주 정보 · 명식", "radius": 44}
+  },
+  "order": ["Main.dc.html", "Benchmark.dc.html", "Colors.dc.html", "Typography.dc.html", "Foundations.dc.html", "Components.dc.html", "Flow.dc.html", "Landing.dc.html", "Login.dc.html", "Home.dc.html", "Category.dc.html", "Product.dc.html", "Reading.dc.html", "Daily.dc.html", "MyPage.dc.html", "Credits.dc.html", "Questions.dc.html", "Library.dc.html", "Sample.dc.html"],
+  "notes": {
+    "t1": {"x": 0, "y": -300, "w": 240, "text": "사주풀이 디자인 시스템 v1.3 — 인스타그램 구조 + 사주 서비스 화면 문법 + 참고 레이아웃 팔레트", "kind": "title1", "maxW": 2640},
+    "t2": {"x": 0, "y": 6280, "text": "화면 설계 — 12개 화면 · 참고 레이아웃 흐름 기반", "kind": "title1", "maxW": 2740}
+  },
+  "designSystems": []
+}
