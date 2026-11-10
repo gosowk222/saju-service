@@ -120,6 +120,73 @@ test.beforeEach(async ({ request }) => {
 });
 
 /** 얼굴과 부채는 모든 폭에서, 벽걸이와 책은 360px 이상(디자인 기준 375px 근처)에서 가리지 않는다. */
+/**
+ * 화면에서 가장 큰 그림(LCP)이 늦게 불러오는 그림(loading="lazy")이면 안 된다.
+ * Next 개발 서버가 콘솔에 띄우는 LCP 경고와 같은 조건이다 (next/dist/shared/lib/get-img-props.js).
+ */
+async function expectLcpNotLazy(page: Page, label: string) {
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(500);
+  const lcp = await page.evaluate(() => {
+    const w = window as unknown as { __lcp: { tag: string; loading: string | null; src: string }[] };
+    return w.__lcp.at(-1) ?? null;
+  });
+  expect(lcp, `${label}: LCP 후보가 있어야 한다`).not.toBeNull();
+  if (lcp!.tag === "IMG") expect(lcp!.loading, `${label}: ${lcp!.src}`).not.toBe("lazy");
+  return lcp!;
+}
+
+async function trackLcp(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __lcp: { tag: string; loading: string | null; src: string }[] };
+    w.__lcp = [];
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as unknown as { element: Element | null }[]) {
+        const element = entry.element;
+        w.__lcp.push({
+          tag: element?.tagName ?? "",
+          loading: element?.getAttribute("loading") ?? null,
+          src: element instanceof HTMLImageElement ? element.currentSrc : "",
+        });
+      }
+    }).observe({ type: "largest-contentful-paint", buffered: true });
+  });
+}
+
+test("첫 화면의 가장 큰 그림은 바로 불러온다 (Next LCP 경고 조건)", async ({ page }) => {
+  // 로그인하지 않은 방문자 기준. 홈과 상품 화면은 로그인 없이 열린다.
+  await trackLcp(page);
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const url of ["/home", "/products", "/products/first-overview"]) {
+      await page.goto(url);
+      const lcp = await expectLcpNotLazy(page, `${url} ${width}px`);
+      if (url !== "/products/first-overview") {
+        const first = page.locator("main img").first();
+        await expect(first).toHaveAttribute("loading", "eager");
+        await expect(first).toHaveAttribute("fetchpriority", "high");
+      }
+      console.log(`[LCP] ${url} ${width}px: ${lcp.tag} ${lcp.src.slice(0, 90)}`);
+    }
+  }
+});
+
+test.describe("스크립트 없이 받은 첫 화면", () => {
+  // 스크립트를 끄면 서버가 먼저 보낸 대기 화면이 그대로 남는다. 그 화면을 찍어 모양을 확인한다.
+  test.use({ javaScriptEnabled: false });
+
+  test("불러오는 동안 상품 상세는 같은 모양의 스켈레톤으로 자리를 잡는다", async ({ page }) => {
+    await page.goto("/products/first-overview");
+    const skeleton = page.locator('[aria-busy="true"]').first();
+    await expect(skeleton).toBeVisible();
+    const ratio = await skeleton
+      .locator("span.aspect-16\\/10")
+      .evaluate((element) => element.getBoundingClientRect().width / element.getBoundingClientRect().height);
+    expect(Math.abs(ratio - 1.6)).toBeLessThan(0.02);
+    await page.screenshot({ path: path.join(SHOTS, "product-skeleton-390.png") });
+  });
+});
+
 const HERO_WIDTHS = [320, 360, 375, 390, 430, 479, 600, 768, 1280];
 const CHARACTER_ZONES = BANNER_ZONES.filter((zone) => zone.name === "얼굴" || zone.name === "부채");
 
