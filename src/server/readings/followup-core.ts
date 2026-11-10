@@ -11,18 +11,25 @@ import { answerFollowup, type GenerationMeta } from "@/server/llm/narrate";
 
 export type FollowupStatus = "answered" | "off_topic" | "clarify";
 
-export const CLARIFY_REPLY = "어떤 부분이 궁금한지 조금만 더 알려 주세요. 예를 들어 '일할 때 제 약점이 뭐예요?'처럼 물어보면 바로 답할게요. 이번 질문은 횟수에서 빠지지 않았어요.";
-const NOT_CHARGED = "이번 질문은 횟수에서 빠지지 않았어요.";
 
 /** 이전 계획(1.0.0)의 사용자 상황에는 궁금한 점의 원문이 들어 있다. 범위 판정 전 원문이라 후속 답변 재료로 쓰지 않는다. */
 function baseContext(plan: AnyReadingPlan): UserContextStatement[] {
   return plan.userContext.filter((item) => item.source !== "concern");
 }
 
-/** 질문이 범위 안 질문을 하나도 갖지 않을 때의 처리. 둘 다 횟수를 차감하지 않는다. */
-export function routeWithoutItems(product: ProductDefinition, analysis: QuestionAnalysis): { status: FollowupStatus; answer: string } {
+/**
+ * 질문이 범위 안 질문을 하나도 갖지 않을 때의 처리. 둘 다 횟수를 차감하지 않는다.
+ * 모델 없이 보내는 문장이라 풀이를 맡은 캐릭터의 고정 문장(persona.lines)을 쓴다.
+ */
+export function routeWithoutItems(
+  product: ProductDefinition,
+  persona: Persona,
+  analysis: QuestionAnalysis,
+): { status: FollowupStatus; answer: string } {
   const clarify = analysis.needsClarification && !excludedItems(analysis).length;
-  return clarify ? { status: "clarify", answer: CLARIFY_REPLY } : { status: "off_topic", answer: product.scope.outOfScopeReply };
+  return clarify
+    ? { status: "clarify", answer: persona.lines.clarify }
+    : { status: "off_topic", answer: persona.lines.outOfScope(product.scope.topicsLabel) };
 }
 
 /**
@@ -86,18 +93,19 @@ export async function answerAnalyzedFollowup(input: {
       percentSources: [...plan.facts.map((fact) => fact.text), ...statements.flatMap(statementTexts)],
       termSources: [...topics.flatMap((topic) => topic.statements).flatMap(statementTexts), ...input.messages.map((message) => message.text), ...(input.lastTurn ? [input.lastTurn.answer] : [])],
       excluded: excluded.map(({ summary, domain }) => ({ summary, domain })),
+      persona: input.persona,
     },
   });
 
   if (answer.output.mode === "clarify") {
-    return { status: "clarify", answer: `${answer.output.clarifyQuestion.trim()}\n\n${NOT_CHARGED}`, refs: [], meta: answer.meta };
+    return { status: "clarify", answer: `${answer.output.clarifyQuestion.trim()}\n\n${input.persona.lines.notCharged}`, refs: [], meta: answer.meta };
   }
   const body = questions
     .map((item) => answer.output.sections.find((section) => section.questionRef === item.ref)?.text)
     .filter((text): text is string => Boolean(text?.trim()))
     .map(tidyEmphasis)
     .join("\n\n");
-  const note = excluded.length ? `\n\n${product.scope.partialScopeNote.replace("{excluded}", excludedLabel(excluded))}` : "";
+  const note = excluded.length ? `\n\n${input.persona.lines.partialScope(excludedLabel(excluded))}` : "";
   return {
     status: "answered",
     answer: `${body}${note}`,

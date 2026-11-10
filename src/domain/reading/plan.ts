@@ -1,5 +1,5 @@
 import type { AssessmentFacet, InquiryConclusion, InquiryReader } from "sajuengine";
-import type { Persona } from "../personas";
+import { addressFor, type Persona } from "../personas";
 import type { ProductDefinition, ProductTopic } from "../products/types";
 import { RULESET_ID, RULESET_VERSION, detailKey, familyLabel, type RuleDetailSink } from "../rules/first-overview";
 import { PATTERN_LABEL, STRENGTH_LABEL, withJosa } from "../rules/materials";
@@ -214,21 +214,17 @@ export function buildReadingPlan(input: {
 }
 
 /**
- * 결제 전에 보여 줄 짧은 맛보기. LLM 없이 계산값과 규칙 결론만으로 만든다.
+ * 결제 전에 보여 줄 짧은 맛보기. LLM 없이 계산값과 규칙 결론만으로 만들고, 문장은 풀이를 맡은 캐릭터의 고정 문장을 쓴다.
  * 본문은 결제 후에 별도로 생성되므로 브라우저로 미리 내려가지 않는다.
  */
-export function buildReadingPreview(plan: ReadingPlanV2, chart: ChartView): ReadingPreview {
+export function buildReadingPreview(plan: ReadingPlanV2, chart: ChartView, persona: Persona): ReadingPreview {
   const bubbles: string[] = [];
   if (chart.dayMaster) {
     const { ko, hanja, element } = chart.dayMaster;
-    bubbles.push(`${plan.nickname} 님의 일간은 ${ko}(${hanja}), ${element}(${ELEMENT_HANJA[element]})의 기운이에요.`);
+    bubbles.push(persona.lines.previewDayMaster(addressFor(persona, plan.nickname).call, `${ko}(${hanja}), ${element}(${ELEMENT_HANJA[element]})`));
   }
   const temperament = plan.topics[0];
   const lead = temperament?.statements[0];
-  if (lead) {
-    bubbles.push(lead.status === "candidate" ? lead.text : `아직 단정하기는 어렵지만, ${lead.text}`);
-  } else {
-    bubbles.push("이 사주에서는 성향을 단정할 근거가 충분하지 않아, 확인되는 범위만 조심스럽게 읽어 드려요.");
-  }
+  bubbles.push(lead ? persona.lines.previewLead(lead.text, lead.status !== "candidate") : persona.lines.previewNone);
   return { bubbles, limitNotes: chart.notes };
 }

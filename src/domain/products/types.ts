@@ -57,10 +57,11 @@ export interface ProductScope {
   readonly intents: readonly QuestionIntent[];
   /** 입력 화면과 후속 질문 안내에 쓰는 한 줄 설명. */
   readonly summary: string;
-  /** 후속 질문 전체가 범위 밖일 때의 안내. */
-  readonly outOfScopeReply: string;
-  /** 후속 질문 일부가 범위 밖일 때 답변 끝에 붙이는 안내. */
-  readonly partialScopeNote: string;
+  /**
+   * 캐릭터가 범위 밖 질문에 답할 때 말하는 주제 목록 (예: "성향, 강점, 일, 돈").
+   * 안내 문장 자체는 캐릭터 말투라 캐릭터 설정(personas)의 lines에 있다.
+   */
+  readonly topicsLabel: string;
 }
 
 /** 시기 질문의 기본 분석 범위. */

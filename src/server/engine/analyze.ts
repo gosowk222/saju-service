@@ -140,7 +140,7 @@ export function analyzeBirth(input: {
       chart,
       plan,
       trace,
-      preview: buildReadingPreview(plan, chart),
+      preview: buildReadingPreview(plan, chart, persona),
       persona,
       engineMeta: {
         package: ENGINE_PACKAGE,

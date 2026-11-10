@@ -6,17 +6,17 @@ import type { ProductDefinition } from "./types";
  */
 export const FIRST_OVERVIEW: ProductDefinition = {
   id: "first-overview",
-  version: "3.1.0",
+  version: "3.2.0",
   name: "나를 읽는 짧은 사주",
   tagline: "성향부터 돈, 사람, 가족, 행운까지 아홉 가지를 한 번에",
   description:
-    "타고난 사주를 바탕으로 나의 성향과 강점, 일하는 방식, 돈을 다루는 습관, 연애와 사람 관계, 가족과 친구, 잘 맞는 곳과 행운의 색·숫자·방향까지 상담사가 메신저로 차근차근 설명해 드려요. 궁금한 점을 적으면 그 고민을 중심으로 풀어 드려요.",
+    "타고난 사주를 바탕으로 나의 성향과 강점, 일하는 방식, 돈을 다루는 습관, 연애와 사람 관계, 가족과 친구, 잘 맞는 곳과 행운의 색·숫자·방향까지 자칭 천재 사주꾼 묘묘가 메신저로 집요하게 짚어 드려요. 입은 얄밉지만 약점은 물론 어떻게 써먹을지까지 알려 줘요. 궁금한 점을 적으면 그 고민을 중심으로 풀어 드려요.",
   priceKrw: 990,
   orderName: "나를 읽는 짧은 사주",
   followupLimit: 3,
   archive: true,
   pdf: true,
-  personaId: "yeoul",
+  personaId: "myomyo",
   featureId: "first-overview-natal",
   rulesetId: "first-overview",
   expectedBubbles: "메시지 약 55개 · 궁금한 점 중심 구성",
@@ -123,9 +123,7 @@ export const FIRST_OVERVIEW: ProductDefinition = {
     },
     intents: ["explain", "apply", "timing", "compare", "outcome", "general"],
     summary: "성향, 강점, 일, 돈, 연애, 인간관계, 친구, 가족, 지역과 행운을 다뤄요. 건강과 투자도 생활 습관 관점에서 이야기해요.",
-    outOfScopeReply:
-      "이 풀이에서는 성향, 강점, 일, 돈, 연애, 인간관계, 친구, 가족, 지역과 행운(건강·투자는 생활 습관 관점)에 대한 질문에 답할 수 있어요. 그 안에서 궁금한 점을 물어봐 주세요. 이번 질문은 횟수에서 빠지지 않았어요.",
-    partialScopeNote: "{excluded} 이야기는 이 풀이에서 다루지 않아 빼고 답했어요.",
+    topicsLabel: "성향, 강점, 일, 돈, 연애, 인간관계, 친구, 가족, 지역과 행운(건강·투자는 생활 습관 관점)",
   },
   timing: {
     domains: ["career", "wealth", "romance", "social"],
@@ -231,15 +229,15 @@ export const FIRST_OVERVIEW: ProductDefinition = {
     hint: "성향·강점·일·돈·연애·인간관계 안에서 적어 주면 그 고민을 중심으로 풀어 드려요. 없으면 건너뛰어도 돼요.",
   },
   sampleBubbles: [
-    { text: "안녕하세요, 저는 여울이에요. 오늘은 타고난 기운을 같이 읽어 볼게요. 돌려 말하지 않고 솔직하게 갈게요." },
+    { text: "어라~? 왔네. 난 묘묘. 네 사주, 내가 제대로 읽어 줄게. 칭찬만 기대하고 왔으면 좀 아쉬울걸?" },
     {
-      text: "사주에서 드러나는 힘을 보면, 생각을 말이나 결과물로 꺼내면서 정리하는 쪽이에요. 머릿속에서만 굴리면 오히려 길을 잃어요.",
+      text: "흐응, 생각을 말이나 결과물로 꺼내야 정리가 되는 타입이네. 머릿속에서만 굴리면 오히려 길 잃지?",
     },
     {
-      text: "대신 약점도 분명해요. 떠오른 걸 바로 말해 버려서, **듣는 사람이 준비되기 전에 결론부터 들이밀어요.**",
+      text: "근데 떠오르면 바로 말해 버리지? **듣는 사람이 준비되기 전에 결론부터 들이미는 게 문제야.** 맞는 말을 해도 반발부터 사는 이유가 그거라고.",
     },
     {
-      text: "회의 시작 5분 만에 \"그거 이렇게 바꾸면 되잖아요\" 했는데 다들 조용해지는 순간, 있잖아요. 아이디어는 맞았는데 순서가 빨랐던 거예요.",
+      text: "회의 시작 5분 만에 \"그거 이렇게 바꾸면 되잖아요\" 했는데 다들 조용해지는 순간, 있잖아. 아이디어는 맞았는데 순서가 빨랐던 거야. 다음엔 '하나 말해도 돼요?'부터 꺼내. 그게 이기는 순서야.",
       scene: true,
     },
   ],

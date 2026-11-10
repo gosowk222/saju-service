@@ -262,7 +262,7 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
       let status: string;
       let answer: string;
       if (!inScopeItems(classified.analysis).length) {
-        ({ status, answer } = routeWithoutItems(product, classified.analysis));
+        ({ status, answer } = routeWithoutItems(product, persona, classified.analysis));
       } else {
         const answered = await answerAnalyzedFollowup({
           plan: base.plan,

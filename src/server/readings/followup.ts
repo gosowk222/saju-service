@@ -128,7 +128,7 @@ export async function askFollowup(input: {
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
     const items = inScopeItems(analysis);
     if (!items.length) {
-      result = { ...routeWithoutItems(product, analysis), refs: [] };
+      result = { ...routeWithoutItems(product, persona, analysis), refs: [] };
     } else {
       const { timing } = await timingFor({ admin, readingId, birth: reading.data.birth_input as PublicBirthInput, items, referenceDate });
       const initialAnalysis = isPlanV2(plan) ? await loadAnalysis<QuestionAnalysis>(admin, readingId, INITIAL_QUESTION_KEY) : null;
