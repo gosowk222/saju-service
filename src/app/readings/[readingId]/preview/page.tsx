@@ -58,7 +58,12 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
         ))}
 
         <section className="flex flex-col gap-3">
-          <h2 className="type-title">맛보기</h2>
+          <div className="flex flex-col gap-1">
+            <h2 className="type-title">맛보기</h2>
+            <p className="type-caption text-gray-600">
+              {persona.name} · {persona.intro}
+            </p>
+          </div>
           {reading.preview.bubbles.map((bubble) => (
             <div key={bubble} className="flex items-start gap-3">
               <PersonaAvatar glyph={persona.avatarGlyph} />

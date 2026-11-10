@@ -59,6 +59,20 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
           </dl>
         </Card>
 
+        <section className="flex flex-col gap-3" aria-label="풀이해 줄 캐릭터">
+          <h2 className="type-title">풀이해 줄 캐릭터</h2>
+          <div className="flex items-start gap-3">
+            <PersonaAvatar glyph={persona.avatarGlyph} large />
+            <div className="flex min-w-0 flex-col gap-2">
+              <p className="flex flex-col">
+                <span className="type-label font-semibold text-gray-900">{persona.name}</span>
+                <span className="type-caption text-gray-600">{persona.intro}</span>
+              </p>
+              <p className="rounded-t-lg rounded-br-lg rounded-bl-(--space-2) bg-gray-100 px-4 py-3 type-body text-gray-900">{persona.signatureLine}</p>
+            </div>
+          </div>
+        </section>
+
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <h2 className="type-title">풀이 예시</h2>

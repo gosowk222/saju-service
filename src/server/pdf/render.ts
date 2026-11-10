@@ -99,9 +99,21 @@ export function renderReadingPdf(input: PdfInput): Promise<Buffer> {
   });
 }
 
+/**
+ * PDF 글꼴(Noto Sans KR)에 없는 그림 이모티콘(😏처럼 기본 문자 영역 밖의 것)은 빈 네모로 찍히므로 뺀다.
+ * ♡처럼 한국어 글꼴에 있는 기호는 남긴다. 화면에서는 그대로 보인다.
+ */
+export function withoutEmoji(text: string): string {
+  return text
+    .replace(/(?=\p{Extended_Pictographic})[\u{10000}-\u{10FFFF}]️?|️/gu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.!?,~])/g, "$1")
+    .replace(/[ \t]+$/gm, "");
+}
+
 /** 문단 하나를 쓴다. **강조** 구절은 굵게 쓴다. 문단 사이 빈 줄은 문단 간격으로 바꾼다. */
 function writeRich(doc: PDFKit.PDFDocument, text: string, options: { x: number; width: number; color: string }): void {
-  for (const paragraph of text.split(/\n\s*\n/).filter((part) => part.trim())) {
+  for (const paragraph of withoutEmoji(text).split(/\n\s*\n/).filter((part) => part.trim())) {
     const runs = splitEmphasis(paragraph.trim());
     doc.fillColor(options.color).fontSize(11.5);
     runs.forEach((run, index) => {

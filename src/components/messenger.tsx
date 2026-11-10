@@ -18,6 +18,8 @@ const NEAR_BOTTOM_PX = 120;
 interface Props {
   readonly readingId: string;
   readonly personaName: string;
+  /** 조사를 붙인 이름 (묘묘가). 안내 문구에 쓴다. */
+  readonly personaSubject: string;
   readonly personaGlyph: string;
   readonly topicTitles: Readonly<Record<string, string>>;
   /** 후속 질문 입력 아래에 보여 줄 상품 범위 안내. */
@@ -95,7 +97,7 @@ const ERROR_TEXT: Readonly<Record<string, string>> = {
   attempts_exhausted: "여러 번 시도했지만 풀이를 만들지 못했어요. 고객센터로 문의해 주세요.",
 };
 
-export function Messenger({ readingId, personaName, personaGlyph, topicTitles, scopeSummary, initialState, chart, nickname }: Props) {
+export function Messenger({ readingId, personaName, personaSubject, personaGlyph, topicTitles, scopeSummary, initialState, chart, nickname }: Props) {
   const [state, setState] = useState(initialState);
   // 이 화면에서 생성을 지켜본 경우에만 전달 효과를 쓴다. 다시 열면 바로 보여 준다.
   const [animateReveal] = useState(initialState.status !== "completed");
@@ -258,7 +260,7 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
           <div aria-live="polite" className="flex flex-col gap-3">
             <Bubble glyph={personaGlyph} name={personaName} continued={visible.length > 0}>
               <TypingDots />
-              <span className="sr-only">{personaName}이 입력하고 있어요</span>
+              <span className="sr-only">{personaSubject} 입력하고 있어요</span>
             </Bubble>
             {animating ? (
               <button type="button" onClick={() => setSkipReveal(true)} className="self-center type-label text-primary-600">
@@ -269,8 +271,8 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
                 {connectionLost
                   ? "인터넷 연결이 끊겼어요. 풀이는 계속 만들어지고 있으니, 연결되면 이어서 보여 드릴게요."
                   : visible.length
-                    ? `${personaName}이 다음 이야기를 쓰고 있어요.`
-                    : `${personaName}이 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
+                    ? `${personaSubject} 다음 이야기를 쓰고 있어요.`
+                    : `${personaSubject} 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
               </p>
             )}
           </div>

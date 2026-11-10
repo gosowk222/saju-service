@@ -59,7 +59,7 @@ async function LibraryList() {
               href={`/readings/${row.reading_id}`}
               className="flex items-center gap-4 rounded-lg border border-gray-200 p-4 text-gray-900 hover:text-gray-900 hover:no-underline"
             >
-              <PersonaAvatar glyph={persona?.avatarGlyph ?? "여"} large />
+              <PersonaAvatar glyph={persona?.avatarGlyph ?? "사"} large />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <StatusBadgeRow job={jobById.get(row.reading_id)} name={persona?.name} />
                 <span className="truncate type-label font-semibold">{findProduct(reading.product_id)?.name ?? "사주 풀이"}</span>
