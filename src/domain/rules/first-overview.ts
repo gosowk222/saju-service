@@ -701,8 +701,6 @@ export function createFirstOverviewRules(sink?: RuleDetailSink): InquiryRule[] {
   return [temperamentRule(sink), strengthsRule(sink), careerRule(sink), wealthRule(sink), romanceRule(sink), socialRule(sink), createTimingRule(sink)];
 }
 
-export const FIRST_OVERVIEW_RULES: readonly InquiryRule[] = createFirstOverviewRules();
-
 export function familyLabel(family: string): string {
   return FAMILY_LABEL[family as Family] ?? family;
 }

@@ -37,10 +37,6 @@ function prioritized(statements: readonly InterpretationStatement[], aspects: re
   return [...statements].sort((a, b) => rank(a) - rank(b));
 }
 
-export function timingKey(domain: string, startMonth: string, endMonth: string): string {
-  return `${domain}:${startMonth}..${endMonth}`;
-}
-
 /** 시기 질문이 요청한 기간과 실제로 분석한 기간을 잇는 키. */
 export function requestedTimingKey(item: QuestionItem): string | null {
   const domain = itemDomain(item);

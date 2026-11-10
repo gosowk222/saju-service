@@ -3,8 +3,6 @@
 /** 상품 주제로 쓸 수 있는 엔진 질문 분야. */
 export type InquiryDomain = "temperament" | "strengths" | "career" | "wealth" | "romance" | "social";
 
-export const INQUIRY_DOMAINS: readonly InquiryDomain[] = ["temperament", "strengths", "career", "wealth", "romance", "social"];
-
 /**
  * 질문 분류에 쓰는 전체 분야. 분류는 상품과 무관하게 "무엇에 대한 답을 원하는가"로 정하고,
  * 상품이 다루는지는 서버가 scope.domains로 판단한다.
