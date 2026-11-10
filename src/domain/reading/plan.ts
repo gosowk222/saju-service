@@ -146,7 +146,8 @@ export function buildReadingPlan(input: {
   const trace: TopicTrace[] = [];
 
   const topics: TopicPlanV2[] = product.topics.map((topic) => {
-    const answer = reader.answer({ domain: topic.inquiryDomain, kind: "natal" });
+    // 가족 규칙이 자녀를 보는 계열을 고를 때 성별을 쓴다. 다른 규칙은 이 값을 읽지 않는다.
+    const answer = reader.answer({ domain: topic.inquiryDomain, kind: "natal", context: { gender } });
     const selected = selectConclusions(answer.conclusions);
     const status = topicStatus(selected);
     trace.push(traceOf(topic.id, topic.inquiryDomain, answer, new Set(selected.map((conclusion) => conclusion.id))));

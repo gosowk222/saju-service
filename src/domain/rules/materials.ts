@@ -100,7 +100,7 @@ export function nearThreshold(value: number, threshold: number, margin = 5): boo
   return Math.abs(value - threshold) <= margin;
 }
 
-type PositionKey = "year" | "month" | "day" | "hour";
+export type PositionKey = "year" | "month" | "day" | "hour";
 interface NatalPositionView {
   readonly stem: { readonly tenGod: string | null };
   readonly branch: { readonly tenGod: string | null };
@@ -178,6 +178,14 @@ export function relationEvidence(
       options.types.some((type) => entry.tags.includes(`relation:${type}`)) &&
       (options.dayBranch === undefined || entry.tags.includes("day-branch") === options.dayBranch),
   );
+}
+
+/**
+ * 관계 근거가 걸린 원국 기둥. 엔진 근거 ID의 구조(natal:<기둥>:<글자>)에서 읽는다. 설명 문장(assertion)은 읽지 않는다.
+ * ID 형식이 바뀌어 기둥을 읽지 못하면 빈 배열을 돌려주고, 규칙은 그 관계를 쓰지 않는다 (tests/unit/rules.test.ts).
+ */
+export function relationPositions(entry: InquiryEvidence): PositionKey[] {
+  return [...entry.id.matchAll(/natal:(year|month|day|hour):/g)].map((match) => match[1] as PositionKey);
 }
 
 export function periodEvidence(evidence: readonly InquiryEvidence[], periodId: string): InquiryEvidence | undefined {

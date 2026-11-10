@@ -1,4 +1,5 @@
-import type { InquiryConclusionDraft, InquiryEvidence, InquiryRule, InquiryRuleContext } from "sajuengine";
+import type { InquiryRule, InquiryRuleContext } from "sajuengine";
+import { common, drafter, textDetail } from "./drafting";
 import {
   FAMILY_LABEL,
   FAMILY_MEANING,
@@ -6,22 +7,18 @@ import {
   PATTERN_LABEL,
   STRENGTH_LABEL,
   dayBranchTenGod,
-  familyPercents,
   findJudgment,
   hourKnown,
-  isPartial,
   nearThreshold,
   observedOnlyMissing,
   pairObservation,
   percentText,
-  rankFamilies,
   relationEvidence,
   shinsalEvidence,
   strengthBand,
   tenGodCounts,
   tenGodFamily,
   topicGuards,
-  uniqueIds,
   type Family,
 } from "./materials";
 import {
@@ -41,7 +38,6 @@ import {
   SOCIAL_COMPETITION,
   SOCIAL_CONFLICT,
   SOCIAL_COOPERATION,
-  SOCIAL_GWIIN,
   STRENGTH_REACTION,
   TEMPERAMENT_BALANCED,
   TEMPERAMENT_CONDITION,
@@ -50,19 +46,14 @@ import {
   WEALTH_INCOME,
   WEALTH_KEEPING,
   WEALTH_RELATIONS,
-  type ReadingText,
 } from "./natal-tables";
 import {
-  GUARD_CAVEAT,
-  OUTCOME_CAVEAT,
-  PARTIAL_CAVEAT,
   SHINSAL_CAVEAT,
-  detailKey,
   ruleMetadata,
   type CompareDetail,
-  type RuleDetail,
   type RuleDetailSink,
 } from "./common";
+import { createLifeRules } from "./life";
 import { createTimingRule } from "./timing";
 
 /**
@@ -96,72 +87,7 @@ export const MIX_MIN_PERCENT = 18;
 /** 비중 낮음 기준. */
 export const SCARCE_MAX_PERCENT = 12;
 
-interface Drafter {
-  readonly add: (entry: {
-    readonly key: string;
-    readonly text: string;
-    readonly hold?: boolean;
-    readonly support: readonly (InquiryEvidence | undefined)[];
-    readonly counter?: readonly (InquiryEvidence | undefined)[];
-    readonly caveats?: readonly string[];
-    readonly detail: RuleDetail;
-  }) => void;
-  readonly drafts: InquiryConclusionDraft[];
-}
-
-function drafter(ruleId: string, context: InquiryRuleContext, sink: RuleDetailSink | undefined, guards: readonly InquiryEvidence[]): Drafter {
-  const drafts: InquiryConclusionDraft[] = [];
-  const partial = isPartial(context);
-  return {
-    drafts,
-    add: ({ key, text, hold = false, support, counter = [], caveats = [], detail }) => {
-      const supportIds = uniqueIds(support);
-      if (!supportIds.length) return;
-      const counterIds = uniqueIds([...counter, ...guards]).filter((id) => !supportIds.includes(id));
-      drafts.push({
-        key,
-        statement: text,
-        status: hold ? "deferred" : "candidate",
-        supportingEvidenceIds: supportIds,
-        counterEvidenceIds: counterIds,
-        caveats: [
-          OUTCOME_CAVEAT,
-          ...(partial ? [PARTIAL_CAVEAT] : []),
-          ...(guards.length ? [GUARD_CAVEAT] : []),
-          ...caveats,
-        ],
-      });
-      sink?.set(detailKey(ruleId, context.periodId, text), detail);
-    },
-  };
-}
-
-function textDetail(aspect: string, reading: ReadingText, basis: readonly string[], extra: Partial<RuleDetail> = {}): RuleDetail {
-  return {
-    aspect,
-    basis,
-    ...(reading.upside ? { upside: reading.upside } : {}),
-    ...(reading.weakness ? { weakness: reading.weakness } : {}),
-    ...(reading.action ? { action: reading.action } : {}),
-    ...extra,
-  };
-}
-
 const metadata = ruleMetadata;
-
-interface Common {
-  readonly percents: Readonly<Record<Family, number>>;
-  readonly families: InquiryEvidence;
-  readonly ranked: readonly Family[];
-  readonly partial: boolean;
-}
-
-function common(context: InquiryRuleContext): Common | null {
-  const percents = familyPercents(context);
-  const families = findJudgment(context.evidence, "m01.assessment.families");
-  if (!percents || !families) return null;
-  return { percents, families, ranked: rankFamilies(percents), partial: isPartial(context) };
-}
 
 // ─── 기본 성향 ──────────────────────────────────────────────
 
@@ -621,16 +547,15 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
       const counts = tenGodCounts(context);
       const band = strengthBand(context.assessment?.strength);
 
+      // 천을귀인(인복)은 3.0.0부터 친구와 인복 주제에서 다룬다 (life.ts).
       const cooperation = peer >= 25 ? "crew" : peer <= 12 ? "few" : resource >= 25 ? "listener" : "flexible";
-      const gwiin = shinsalEvidence(context.evidence, "cheonul-gwiin", null);
       const coopReading = SOCIAL_COOPERATION[cooperation];
       out.add({
         key: "cooperation",
-        text: [coopReading.claim, ...(gwiin.length ? [SOCIAL_GWIIN] : [])].join(" "),
+        text: coopReading.claim,
         hold: partial && (nearThreshold(peer, 25, 3) || nearThreshold(peer, 12, 3)),
-        support: [families, ...gwiin],
-        caveats: gwiin.length ? [SHINSAL_CAVEAT] : [],
-        detail: textDetail("친구·동료와의 협력", coopReading, [percentText("peer", percents), ...(gwiin.length ? ["원국에 천을귀인 신살 표지"] : [])]),
+        support: [families],
+        detail: textDetail("동료·모임에서의 협력", coopReading, [percentText("peer", percents)]),
       });
 
       const yangin = shinsalEvidence(context.evidence, "yangin", null);
@@ -698,7 +623,16 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
  * 규칙 자체는 상태를 갖지 않으며, sink는 그 요청에서만 쓰고 버린다.
  */
 export function createFirstOverviewRules(sink?: RuleDetailSink): InquiryRule[] {
-  return [temperamentRule(sink), strengthsRule(sink), careerRule(sink), wealthRule(sink), romanceRule(sink), socialRule(sink), createTimingRule(sink)];
+  return [
+    temperamentRule(sink),
+    strengthsRule(sink),
+    careerRule(sink),
+    wealthRule(sink),
+    romanceRule(sink),
+    socialRule(sink),
+    ...createLifeRules(sink),
+    createTimingRule(sink),
+  ];
 }
 
 export function familyLabel(family: string): string {

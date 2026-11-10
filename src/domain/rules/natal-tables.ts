@@ -288,7 +288,8 @@ export const SHINSAL_ENVIRONMENT: Readonly<Record<string, string>> = {
   yeokma: "이동과 변화의 역마 표지가 있어요. 한자리에 묶이기보다 현장을 다니고 새 사람을 만나는 환경에서 살아나요.",
   jangseong: "앞에 서서 이끄는 장성 표지로 읽어요. 역할과 권한이 주어질 때 능력이 더 커져요.",
 };
-export const SHINSAL_ENVIRONMENT_ORDER = ["munchang", "hakdang", "cheonul-gwiin", "hwagae", "yeokma", "jangseong"] as const;
+/** 천을귀인(인복)은 친구와 인복 주제, 역마(이동)는 잘 맞는 곳 주제에서 다루므로 강점 환경에서는 쓰지 않는다 (3.0.0). */
+export const SHINSAL_ENVIRONMENT_ORDER = ["munchang", "hakdang", "hwagae", "jangseong"] as const;
 
 /** 가장 약한 계열을 보완해 능력을 행동으로 잇는 방법. */
 export const SCARCE_ACTION: Readonly<Record<Family, string>> = {
@@ -690,8 +691,6 @@ export const SOCIAL_COOPERATION: Readonly<Record<"crew" | "few" | "listener" | "
     },
   },
 };
-
-export const SOCIAL_GWIIN = "필요할 때 도움을 주는 사람을 만나는 천을귀인 표지로 읽어요. 혼자 해결하려 하기보다 도움을 청할 때 관계가 넓어져요.";
 
 export const SOCIAL_COMPETITION: Readonly<Record<"rival" | "yielding", ReadingText>> = {
   rival: {
