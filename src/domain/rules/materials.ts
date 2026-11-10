@@ -165,6 +165,39 @@ export function shinsalEvidence(evidence: readonly InquiryEvidence[], shinsalId:
   );
 }
 
+/** 엔진 신살 ID의 한국어 이름. 목록에 없는 신살은 설명 재료로 쓰지 않는다. */
+export const SHINSAL_LABEL: Readonly<Record<string, string>> = {
+  munchang: "문창귀인",
+  hakdang: "학당귀인",
+  "cheonul-gwiin": "천을귀인",
+  cheondeok: "천덕귀인",
+  woldeok: "월덕귀인",
+  taegeuk: "태극귀인",
+  cheonju: "천주귀인",
+  cheonui: "천의성",
+  geumyeo: "금여록",
+  hwagae: "화개살",
+  yeokma: "역마살",
+  jangseong: "장성살",
+  hamji: "도화살",
+  hongyeom: "홍염살",
+  gosin: "고신살",
+  gwasuk: "과숙살",
+  yangin: "양인살",
+  baekho: "백호살",
+  goegang: "괴강살",
+  geopsal: "겁살",
+  jaesal: "재살",
+  cheonsal: "천살",
+  jisal: "지살",
+  wolsal: "월살",
+  mangsin: "망신살",
+  banan: "반안살",
+  yukhae: "육해살",
+  hyeonchim: "현침살",
+  gwimungwan: "귀문관살",
+};
+
 export const OPPOSING_RELATIONS = ["branch-clash", "branch-punishment", "branch-self-punishment", "branch-harm", "branch-break", "branch-wonjin"] as const;
 
 export function relationEvidence(

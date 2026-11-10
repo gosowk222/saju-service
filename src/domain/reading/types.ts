@@ -28,6 +28,11 @@ export type InterpretationStatement = {
   readonly action?: string;
   readonly counterNote?: string;
   readonly compare?: CompareDetail;
+  /**
+   * 명리 설명 재료 (상품 3.1.0부터). 이 해석이 쓴 엔진 근거를 원국 글자·십성·신살·합충 문장으로 옮긴 것이다
+   * ("월주의 유금(酉金)은 식신이에요."). 이전에 만든 계획에는 없다.
+   */
+  readonly lore?: readonly string[];
 };
 
 export type UserContextStatement = {

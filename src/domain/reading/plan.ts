@@ -4,6 +4,7 @@ import type { ProductDefinition, ProductTopic } from "../products/types";
 import { RULESET_ID, RULESET_VERSION, detailKey, familyLabel, type RuleDetailSink } from "../rules/first-overview";
 import { PATTERN_LABEL, STRENGTH_LABEL, withJosa } from "../rules/materials";
 import { ELEMENT_HANJA } from "./chart";
+import { DAY_MASTER_IMAGE, elementCountLore, loreFor, type LoreContext } from "./lore";
 import type {
   ChartElement,
   ChartView,
@@ -27,7 +28,13 @@ function buildFacts(chart: ChartView, assessment: AssessmentFacet | null): FactS
   if (chart.dayMaster) {
     const { ko, hanja, element } = chart.dayMaster;
     add(`일간은 ${ko}(${hanja})이고 오행으로는 ${element}(${ELEMENT_HANJA[element]})입니다.`, "core.document.facts.positions.day.stem");
+    if (DAY_MASTER_IMAGE[ko]) {
+      const name = withJosa(`일간 ${ko}${element}(${hanja}${ELEMENT_HANJA[element]})`, "은/는");
+      add(`${name} 전통적으로 ${DAY_MASTER_IMAGE[ko]}에 빗댑니다.`, "core.document.facts.positions.day.stem");
+    }
   }
+  const counts = elementCountLore(chart);
+  if (counts) add(counts, "core.document.facts.positions");
   if (assessment?.strength) {
     add(`일간의 힘은 ${STRENGTH_LABEL[assessment.strength] ?? assessment.strength}으로 계산되었습니다.`, "facets.assessment.strength");
   }
@@ -77,8 +84,14 @@ export function targetFor(topic: Pick<ProductTopic, "depth">, weight: TopicWeigh
   return topic.depth.standard;
 }
 
-export function toStatement(ref: string, conclusion: InquiryConclusion, sink: RuleDetailSink | undefined): InterpretationStatement {
+export function toStatement(
+  ref: string,
+  conclusion: InquiryConclusion,
+  sink: RuleDetailSink | undefined,
+  loreContext?: LoreContext,
+): InterpretationStatement {
   const detail = sink?.get(detailKey(conclusion.rule.ruleId, conclusion.periodId, conclusion.statement));
+  const lore = loreContext ? loreFor(conclusion.supportingEvidence, detail?.basis ?? [], loreContext) : [];
   return {
     ref,
     kind: "service-interpretation",
@@ -99,6 +112,7 @@ export function toStatement(ref: string, conclusion: InquiryConclusion, sink: Ru
           ...(detail.compare ? { compare: detail.compare } : {}),
         }
       : {}),
+    ...(lore.length ? { lore } : {}),
   };
 }
 
@@ -163,7 +177,7 @@ export function buildReadingPlan(input: {
           : status === "tentative"
             ? "확정하기 어려운 후보입니다. 경향으로만 말하고 한계를 함께 말합니다."
             : null,
-      statements: selected.map((conclusion) => toStatement(`s${nextStatement++}`, conclusion, sink)),
+      statements: selected.map((conclusion) => toStatement(`s${nextStatement++}`, conclusion, sink, { chart, assessment })),
       outline: topic.outline,
       depth: topic.depth,
       weight,

@@ -5,6 +5,7 @@ import {
   FAMILY_MEANING,
   OPPOSING_RELATIONS,
   PATTERN_LABEL,
+  SHINSAL_LABEL,
   STRENGTH_LABEL,
   dayBranchTenGod,
   findJudgment,
@@ -205,7 +206,7 @@ function strengthsRule(sink?: RuleDetailSink): InquiryRule {
           text: present.map((item) => SHINSAL_ENVIRONMENT[item.id]).join(" "),
           support: present.flatMap((item) => item.entries),
           caveats: [SHINSAL_CAVEAT],
-          detail: { aspect: "강점이 살아나는 환경", basis: present.map((item) => `원국에 ${item.id} 신살 표지가 있음`) },
+          detail: { aspect: "강점이 살아나는 환경", basis: present.map((item) => `원국에 ${SHINSAL_LABEL[item.id] ?? item.id} 신살 표지가 있음`) },
         });
       }
 
