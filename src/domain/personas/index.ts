@@ -34,6 +34,8 @@ export interface PersonaLines {
   /** 결제 전 맛보기: 첫 해석. text는 규칙이 쓴 문장이다. */
   readonly previewLead: (text: string, tentative: boolean) => string;
   readonly previewNone: string;
+  /** 질문 없이 반응만 보냈을 때 (칭찬, 놀림·허세 지적, 의심). seed로 여러 문장 가운데 하나를 고른다. */
+  readonly reaction: (kind: "praise" | "tease" | "doubt", seed: string) => string;
 }
 
 export interface Persona {
@@ -72,6 +74,13 @@ export function withSubject(name: string): string {
   const final = finalConsonant(name);
   if (final === null) return `${name}이(가)`;
   return `${name}${final ? "이" : "가"}`;
+}
+
+/** 같은 말을 넣으면 늘 같은 문장을 고른다 (테스트와 재요청에서 답이 흔들리지 않게). */
+export function pick<T>(options: readonly T[], seed: string): T {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return options[hash % options.length]!;
 }
 
 /**
@@ -184,6 +193,25 @@ export const MYOMYO: Persona = {
     previewDayMaster: (call, dayMaster) => `${call}, 네 일간은 ${dayMaster} 기운이야. 흐응, 시작부터 재밌는데?`,
     previewLead: (text, tentative) => (tentative ? `아직 단정은 못 하지만, ${toCasual(text)}` : `일단 첫인상부터 말해 줄게. ${toCasual(text)}`),
     previewNone: "이 사주는 성향을 단정할 근거가 부족해. 확인되는 데까지만 제대로 읽어 줄게.",
+    reaction: (kind, seed) =>
+      pick(
+        {
+          praise: [
+            "흐, 흐응. 뭐, 당연하지. 내가 좀 잘하거든. …아무튼! 더 궁금한 거 있으면 바로 물어봐. 이번 건 횟수에서 안 뺐어.",
+            "어라~? 이제야 알아봤어? 흥, 칭찬은 접수해 둘게. 궁금한 거 생기면 물어봐. 이번 건 횟수에서 안 뺐어.",
+            "흐흥, 그 정도는 기본이지. …그, 그렇게 말해 주면 좀 기분 좋긴 하네. 다음 질문 해. 이번 건 횟수에서 안 뺐어.",
+          ],
+          tease: [
+            "뭐, 뭐야. 허세 아니거든? 다 원국에 근거 있는 말이라고. …흥, 궁금한 거나 물어봐. 이번 건 횟수에서 안 뺐어.",
+            "허, 허세라니! 내가 언제. …크흠, 아무튼 근거 없는 말은 안 했어. 더 물어볼 거 있으면 해 봐. 이번 건 횟수에서 안 뺐어.",
+          ],
+          doubt: [
+            "어라~? 어디가 안 맞는 것 같은데? 어느 주제의 어떤 말이 걸리는지 말해 주면 근거부터 다시 짚어 줄게. 이번 건 횟수에서 안 뺐어.",
+            "흐응, 안 맞는 것 같다고? 그럼 어떤 설명이 걸렸는지 콕 집어 말해 줘. 틀렸으면 정정하고, 맞으면 왜 그런지 보여 줄게. 이번 건 횟수에서 안 뺐어.",
+          ],
+        }[kind],
+        seed,
+      ),
   },
 };
 

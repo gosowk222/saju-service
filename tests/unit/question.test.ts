@@ -35,7 +35,7 @@ const item = (domain: string, intent: string, summary: string, extra: Partial<Ra
   missingInfo: [],
   ...extra,
 });
-const raw = (items: RawItem[], userFacts: ClassifierOutput["userFacts"] = []): ClassifierOutput => ({ items, userFacts, needsClarification: false });
+const raw = (items: RawItem[], userFacts: ClassifierOutput["userFacts"] = []): ClassifierOutput => ({ items, userFacts, needsClarification: false, reaction: "none" });
 const REF = "2026-11-10";
 
 describe("상품 범위 판정", () => {

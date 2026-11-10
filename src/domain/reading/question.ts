@@ -9,7 +9,14 @@ import type { InquiryDomain, ProductDefinition, QuestionDomain, QuestionIntent }
  */
 
 /** 1.1.0: 가족·친구·지역 분야, 건강·투자를 답할 주제로 잇는 topicDomain을 더했다. 1.0.0으로 저장된 분석도 읽는다. */
-export const QUESTION_ANALYSIS_VERSION = "question-analysis-1.1.0";
+export const QUESTION_ANALYSIS_VERSION = "question-analysis-1.2.0";
+
+/**
+ * 풀이에 대한 사용자의 반응 (question-analysis-1.2.0). 질문이 아니라 캐릭터가 받아칠 말이다.
+ * praise: 칭찬·감탄, tease: 캐릭터를 놀리거나 허세를 지적, doubt: 맞지 않는다거나 틀린 것 같다고 함.
+ */
+export const REACTIONS = ["none", "praise", "tease", "doubt"] as const;
+export type Reaction = (typeof REACTIONS)[number];
 
 export const QUESTION_DOMAINS: readonly QuestionDomain[] = [
   "temperament",
@@ -95,6 +102,8 @@ export const ClassifierOutputSchema = z.object({
     ),
   userFacts: z.array(z.object({ text: z.string(), domain: z.string() })),
   needsClarification: z.boolean(),
+  // 1.2.0 이전 출력에는 없다.
+  reaction: z.enum(REACTIONS).catch("none"),
 });
 export type ClassifierOutput = z.infer<typeof ClassifierOutputSchema>;
 
@@ -135,7 +144,11 @@ export interface QuestionAnalysis {
   readonly items: readonly QuestionItem[];
   readonly userFacts: readonly { readonly text: string; readonly domain: QuestionDomain }[];
   readonly needsClarification: boolean;
+  /** 1.2.0부터. 이전에 저장한 분석에는 없으며 none으로 본다. */
+  readonly reaction?: Reaction;
 }
+
+export const reactionOf = (analysis: QuestionAnalysis): Reaction => analysis.reaction ?? "none";
 
 export function seoulDate(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -193,7 +206,11 @@ export function inScope(product: ProductDefinition, domain: QuestionDomain): boo
 }
 
 /** 분류기 출력을 검증하고 상품 범위를 적용한다. 모르는 값은 버리거나 안전한 값으로 바꾼다. */
-export function buildQuestionAnalysis(product: ProductDefinition, referenceDate: string, raw: ClassifierOutput): QuestionAnalysis {
+export function buildQuestionAnalysis(
+  product: ProductDefinition,
+  referenceDate: string,
+  raw: Omit<ClassifierOutput, "reaction"> & { readonly reaction?: Reaction },
+): QuestionAnalysis {
   const items: QuestionItem[] = [];
   for (const entry of raw.items) {
     const summary = clean(entry.summary, 120);
@@ -229,12 +246,13 @@ export function buildQuestionAnalysis(product: ProductDefinition, referenceDate:
       .filter((fact) => fact.text)
       .slice(0, 3),
     needsClarification: raw.needsClarification,
+    reaction: raw.reaction ?? "none",
   };
 }
 
 /** 궁금한 점이 비어 있으면 분류기를 부르지 않고 이 값을 쓴다. */
 export function emptyAnalysis(referenceDate: string): QuestionAnalysis {
-  return { version: QUESTION_ANALYSIS_VERSION, source: "empty", referenceDate, items: [], userFacts: [], needsClarification: false };
+  return { version: QUESTION_ANALYSIS_VERSION, source: "empty", referenceDate, items: [], userFacts: [], needsClarification: false, reaction: "none" };
 }
 
 /** 생성에 쓸 정제된 값. 범위 밖 질문과 범위 밖 사실은 빠진다. */
