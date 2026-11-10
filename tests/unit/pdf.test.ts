@@ -31,7 +31,7 @@ function input(count: number, overrides: Partial<PdfInput> = {}): PdfInput {
     refs: ["s1", "f1"],
   }));
   return {
-    productName: "나를 읽는 짧은 사주",
+    productName: "묘묘의 사주 참견",
     nickname: "달빛",
     createdAt: "2026년 11월 9일",
     personaName: "묘묘",

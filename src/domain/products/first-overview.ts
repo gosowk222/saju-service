@@ -4,11 +4,14 @@ import type { ProductDefinition } from "./types";
  * 첫 상품. 이름, 가격, 질문 횟수, 주제 구성, 답변 범위, 분량 기준은 이 파일에서 바꾼다.
  * 내용을 바꾸면 version도 올린다. 이미 만든 주문과 풀이에는 당시 버전이 기록되어 있다.
  */
+const NAME = "묘묘의 사주 참견";
+
 export const FIRST_OVERVIEW: ProductDefinition = {
   id: "first-overview",
-  version: "3.2.0",
-  name: "나를 읽는 짧은 사주",
-  tagline: "성향부터 돈, 사람, 가족, 행운까지 아홉 가지를 한 번에",
+  // 3.2.1: 이름, 부설명, 그림만 바꿨다 (이전 이름 "나를 읽는 짧은 사주"). 풀이 구성, 가격, 질문 횟수는 3.2.0과 같다.
+  version: "3.2.1",
+  name: NAME,
+  tagline: "칭찬만 들을 줄 알았어? 성향부터 행운까지, 다 짚어줄게.",
   description:
     "타고난 사주를 바탕으로 나의 성향과 강점, 일하는 방식, 돈을 다루는 습관, 연애와 사람 관계, 가족과 친구, 잘 맞는 곳과 행운의 색·숫자·방향까지 자칭 천재 사주꾼 묘묘가 메신저로 집요하게 짚어 드려요. 입은 얄밉지만 약점은 물론 어떻게 써먹을지까지 알려 줘요. 궁금한 점을 적으면 그 고민을 중심으로 풀어 드려요.",
   art: {
@@ -28,7 +31,7 @@ export const FIRST_OVERVIEW: ProductDefinition = {
     },
   },
   priceKrw: 990,
-  orderName: "나를 읽는 짧은 사주",
+  orderName: NAME,
   followupLimit: 3,
   freeReactions: 1,
   archive: true,

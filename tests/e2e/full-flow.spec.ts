@@ -14,7 +14,7 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await login(page, request);
 
   await expect(page.getByRole("heading", { name: /나를 읽어 볼까요/ })).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).first().click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).first().click();
   await expect(page.getByText("실제 개인 풀이가 아닌 예시예요")).toBeVisible();
   await expect(page.getByText("990원").first()).toBeVisible();
   await expect(page.getByText("3회 포함")).toBeVisible();
@@ -53,7 +53,7 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await page.goto("/library");
   await expect(page.getByText("완료")).toBeVisible();
   await expect(page.getByText(/달빛 님/)).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).click();
   await expect(page).toHaveURL(readingUrl);
   await expect(page.getByText("풀이 완료")).toBeVisible();
   expect(await page.getByText(/\[테스트 응답\]/).count()).toBeGreaterThanOrEqual(21);

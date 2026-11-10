@@ -138,7 +138,7 @@ test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", as
 
   await page.goto("/library");
   await expect(page.getByText("다시 시도 필요")).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).click();
 
   await setControl(request, { openai: "ok" });
   await page.getByRole("button", { name: "다시 시도하기" }).click();
