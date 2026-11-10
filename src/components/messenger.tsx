@@ -107,6 +107,8 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
   const [notice, setNotice] = useState<string | null>(null);
   const [showJump, setShowJump] = useState(false);
   const [includeFollowups, setIncludeFollowups] = useState(false);
+  /** 사용자 쪽 인터넷이 끊겼는지. 서버는 그동안에도 풀이를 계속 만든다. */
+  const [connectionLost, setConnectionLost] = useState(false);
   const stickToBottom = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
@@ -124,9 +126,15 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
       try {
         // 생성이 끝날 때까지 응답이 오지 않는다. 그동안 완성된 주제는 아래 주기 확인으로 받는다.
         const next = await apiFetch<ReadingStateView>(`/api/readings/${readingId}/generate`, { method: "POST", json: { retry } });
+        setConnectionLost(false);
         setState(next);
       } catch (failure) {
-        setNotice(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");
+        if (failure instanceof ClientApiError && (failure.status === 0 || failure.status >= 502)) {
+          // 응답만 못 받았을 뿐 서버는 계속 만든다. 아래 주기 확인이 이어서 보여 주므로 실패 알림을 띄우지 않는다.
+          if (failure.status === 0) setConnectionLost(true);
+        } else {
+          setNotice(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");
+        }
       } finally {
         setStarting(false);
         startingRef.current = false;
@@ -149,12 +157,16 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
     const timer = setInterval(() => {
       apiFetch<ReadingStateView>(`/api/readings/${readingId}/state`)
         .then((next) => {
+          setConnectionLost(false);
           // 이 화면이 시작 요청을 기다리는 중이 아닐 때만 끊긴 작업을 다시 시작한다.
           if (next.status === "queued" && !startingRef.current) started.current = false;
           // 늦게 도착한 이전 확인 결과가 완료 상태를 덮어쓰지 않게 한다.
           setState((current) => (current.status === "completed" ? current : next));
         })
-        .catch(() => undefined);
+        // 연결이 돌아오면 다음 확인에서 이어서 받는다.
+        .catch((failure: unknown) => {
+          if (failure instanceof ClientApiError && failure.status === 0) setConnectionLost(true);
+        });
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [state.status, readingId]);
@@ -253,10 +265,12 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
                 전체 바로 보기
               </button>
             ) : (
-              <p className="self-center type-caption text-gray-600">
-                {visible.length
-                  ? `${personaName}이 다음 이야기를 쓰고 있어요.`
-                  : `${personaName}이 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
+              <p className="self-center text-center type-caption text-gray-600">
+                {connectionLost
+                  ? "인터넷 연결이 끊겼어요. 풀이는 계속 만들어지고 있으니, 연결되면 이어서 보여 드릴게요."
+                  : visible.length
+                    ? `${personaName}이 다음 이야기를 쓰고 있어요.`
+                    : `${personaName}이 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
               </p>
             )}
           </div>
