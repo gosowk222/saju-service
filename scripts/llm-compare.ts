@@ -3,7 +3,7 @@
  *
  *   npm run llm:compare                                         gpt-5.6-luna와 gpt-6-luna 비교 (사례 전체)
  *   npm run llm:compare -- --models=gpt-5.6-luna --cases=career-jobseeker,romance-mixed
- *   npm run llm:compare -- --date=2026-11-10 --out=docs/model-comparison
+ *   npm run llm:compare -- --date=2026-11-10 --out=docs/model-comparison --tag=retry   (파일 이름 뒤에 붙일 표시)
  *
  * 실제 API를 호출해 비용이 발생한다. 키가 없으면 LIVE_NOT_RUN을 출력하고 끝낸다.
  * 모든 입력은 가상의 정보다. 자동 집계 외의 품질 평가는 사람이 본문을 읽고 채운다.
@@ -101,6 +101,18 @@ export const QUALITY_CASES: readonly QualityCase[] = [
     followups: [
       { kind: "범위 밖", question: "파이썬으로 정렬 코드 짜 줘", expected: "off_topic" },
       { kind: "범위 밖(투자)", question: "요즘 어떤 주식 사면 좋을까요?", expected: "off_topic" },
+    ],
+  },
+  {
+    id: "strengths-question",
+    note: "강점 · 학생 · 음력 입력 · 성향과 인간관계 후속 질문",
+    nickname: "구름",
+    situationId: "student",
+    concern: "제 강점이 뭔지, 그걸 공부에 어떻게 쓰면 좋을지 궁금해요.",
+    birth: { birthDate: "1988-03-15", calendar: "lunar", isLeapMonth: false, gender: "female", birthTime: { status: "branch", branch: "인" }, birthPlace: SEOUL },
+    followups: [
+      { kind: "성향 후속 질문", question: "제가 쉽게 지치는 편인데 그건 왜 그런 거예요?", expected: "answered" },
+      { kind: "인간관계 후속 질문", question: "팀플만 하면 자꾸 제가 일을 다 떠안아요. 어떻게 해야 해요?", expected: "answered" },
     ],
   },
   {
@@ -328,7 +340,8 @@ async function main() {
   }
   const dir = path.resolve(readArg("out") ?? "docs/model-comparison");
   mkdirSync(dir, { recursive: true });
-  const stamp = `${referenceDate}-${models.join("+")}`;
+  const tag = readArg("tag");
+  const stamp = `${referenceDate}-${models.join("+")}${tag ? `-${tag}` : ""}`;
   const file = path.join(dir, `${stamp}.md`);
   writeFileSync(file, report(results, models, referenceDate));
   writeFileSync(path.join(dir, `${stamp}.json`), JSON.stringify(results, null, 2));

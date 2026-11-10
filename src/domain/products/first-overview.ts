@@ -19,7 +19,7 @@ export const FIRST_OVERVIEW: ProductDefinition = {
   personaId: "yeoul",
   featureId: "first-overview-natal",
   rulesetId: "first-overview",
-  expectedBubbles: "메시지 약 40~60개",
+  expectedBubbles: "메시지 약 30개 · 궁금한 점 중심 구성",
   topics: [
     {
       id: "temperament",
@@ -80,8 +80,8 @@ export const FIRST_OVERVIEW: ProductDefinition = {
   scope: {
     domains: ["temperament", "strengths", "career", "wealth", "romance", "social"],
     domainGuide: {
-      temperament: "평소 성격, 반응 방식, 습관, 나라는 사람 전반",
-      strengths: "잘하는 것, 재능, 강점을 공부나 일에 쓰는 방법",
+      temperament: "평소 성격, 반응 방식, 습관, 쉽게 지치거나 에너지가 빨리 닳는 이유, 나라는 사람 전반",
+      strengths: "잘하는 것, 재능, 강점을 공부 방법이나 일에 쓰는 방법",
       career: "일하는 방식, 직무 적성, 직장 생활, 취업·이직·창업·프리랜서의 선택과 시기",
       wealth: "돈을 버는 방식, 소비·저축 습관, 돈 관리, 빌려주기·동업 같은 금전 관계, 돈과 관련된 시기 (특정 종목·코인 판단은 제외)",
       romance: "연애 성향과 매력, 연인과의 관계와 갈등, 새 인연과 만남 시기, 데이트 비용처럼 연애 관계 안에서 생기는 문제",
