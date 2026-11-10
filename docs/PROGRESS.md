@@ -60,6 +60,10 @@
 | 실제 모델 확인 (`gpt-5.6-luna`, 가상 사례 2개) | 실행. `docs/READING_QUALITY.md` 14절 |
 | `gpt-6-luna` 비교 | LIVE_NOT_RUN |
 
+### 후속 답변 스트리밍과 묘묘의 반응 (2026-11-11)
+
+후속 답변도 문단이 완성될 때마다 먼저 보여 준다 (followup-2.5.0, followup-output-2.1.0). 질문 없이 칭찬·허세 지적·의심만 보내면 묘묘가 고정 반응 문장으로 받아치고 차감하지 않는다 (question-1.3.0, 질문 분석 1.2.0).
+
 ### 캐릭터 묘묘 (2026-11-11)
 
 기본 캐릭터를 여울에서 묘묘(자칭 천재 사주꾼, 반말)로 바꾸고 여울을 코드에서 지웠다. 설정은 `src/domain/personas/index.ts` 한곳, 설명은 `docs/personas/myomyo.md`. 버전: 캐릭터 myomyo 1.0.0, 상품 3.2.0, 프롬프트 reading-2.5.0·followup-2.4.0·question-1.2.0. 실제 모델 문장은 LIVE_NOT_RUN.
