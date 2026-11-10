@@ -11,6 +11,22 @@ export const FIRST_OVERVIEW: ProductDefinition = {
   tagline: "성향부터 돈, 사람, 가족, 행운까지 아홉 가지를 한 번에",
   description:
     "타고난 사주를 바탕으로 나의 성향과 강점, 일하는 방식, 돈을 다루는 습관, 연애와 사람 관계, 가족과 친구, 잘 맞는 곳과 행운의 색·숫자·방향까지 자칭 천재 사주꾼 묘묘가 메신저로 집요하게 짚어 드려요. 입은 얄밉지만 약점은 물론 어떻게 써먹을지까지 알려 줘요. 궁금한 점을 적으면 그 고민을 중심으로 풀어 드려요.",
+  art: {
+    // 카드 안에는 이름 글자가 함께 있으므로 장식용이다. 보관함 썸네일은 얼굴과 머리핀 부분만 쓴다.
+    poster: {
+      src: "/images/products/first-overview-poster.png",
+      width: 1086,
+      height: 1448,
+      alt: "",
+      square: { x: 0.24, y: 0.03, size: 0.56 },
+    },
+    banner: {
+      src: "/images/products/first-overview-banner.png",
+      width: 1586,
+      height: 992,
+      alt: "보라색 한복을 입은 묘묘가 부채를 들고 자신만만하게 웃고 있는 그림",
+    },
+  },
   priceKrw: 990,
   orderName: "나를 읽는 짧은 사주",
   followupLimit: 3,

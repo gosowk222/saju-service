@@ -1,5 +1,7 @@
 /** 앱이 정하는 상품 정의. 판매 정보, 주제 구성, 입력 항목, 답변 범위를 한 파일에 모은다. */
 
+import type { ImageAsset } from "@/domain/images";
+
 /** 상품 주제로 쓸 수 있는 엔진 질문 분야. */
 export type InquiryDomain = "temperament" | "strengths" | "career" | "wealth" | "romance" | "social" | "family" | "friends" | "place";
 
@@ -94,14 +96,29 @@ export interface ProductExpression {
   readonly scenes: "minimal" | "rich";
 }
 
+/**
+ * 상품 그림. 상품명과 부설명은 그림에 넣지 않고 화면 글자로 올린다.
+ * 화면은 글자를 포스터 아래쪽, 배너 왼쪽에 놓으므로 그림은 그 자리를 비워 둔다.
+ */
+export interface ProductArt {
+  /** 3:4 포스터 카드. 아래쪽 여백에 부설명과 제목이 올라간다. 보관함 썸네일은 square 영역을 쓴다. */
+  readonly poster: ImageAsset;
+  /** 상품 상세의 16:10 배너. 왼쪽 여백에 부설명과 제목이 올라간다. */
+  readonly banner: ImageAsset;
+}
+
 export interface ProductDefinition {
   readonly id: string;
   readonly version: string;
+  /** 화면, 결제창, 보관함, PDF에 보이는 상품 이름. 주문에는 이름 대신 상품 ID와 버전이 남는다. */
   readonly name: string;
+  /** 부설명. 포스터와 상세 배너에서 상품 이름 위에 보인다. */
   readonly tagline: string;
   readonly description: string;
+  readonly art: ProductArt;
   /** 결제 금액의 최종 기준. 브라우저가 보낸 금액은 쓰지 않는다. */
   readonly priceKrw: number;
+  /** 결제창에 보이는 주문 이름. */
   readonly orderName: string;
   readonly followupLimit: number;
   /**

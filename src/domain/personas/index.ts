@@ -5,6 +5,8 @@
  * 사람이 읽는 설정 문서: docs/personas/myomyo.md
  */
 
+import type { ImageAsset } from "@/domain/images";
+
 /** 말버릇. 같은 말을 반복하지 않도록 쓸 수 있는 횟수를 정해 두고 검사에서 센다. */
 export interface Catchphrase {
   /** 프롬프트에 보여 주는 표현. */
@@ -46,7 +48,10 @@ export interface Persona {
   readonly id: string;
   readonly version: string;
   readonly name: string;
+  /** 프로필 그림이 없을 때 원 안에 대신 보여 줄 글자. */
   readonly avatarGlyph: string;
+  /** 1:1 프로필 그림 (투명 배경). 메신저, 맛보기, 상품 소개의 원형 아바타에 쓴다. */
+  readonly avatar?: ImageAsset;
   readonly role: string;
   /** 화면에 보이는 한 줄 소개. */
   readonly intro: string;
@@ -65,6 +70,13 @@ export interface Persona {
   /** 그림 이모티콘을 쓸 수 있는 횟수. */
   readonly emojiLimit: { readonly perReading: number; readonly perAnswer: number };
   readonly lines: PersonaLines;
+}
+
+/** 아바타를 그리는 데 필요한 값만. 브라우저 컴포넌트에 넘길 수 있다 (lines의 함수는 넘기지 않는다). */
+export type PersonaFace = Pick<Persona, "avatarGlyph" | "avatar">;
+
+export function faceOf(persona: Persona): PersonaFace {
+  return { avatarGlyph: persona.avatarGlyph, avatar: persona.avatar };
 }
 
 function finalConsonant(word: string): number | null {
@@ -117,6 +129,8 @@ export const MYOMYO: Persona = {
   version: "1.0.0",
   name: "묘묘",
   avatarGlyph: "묘",
+  // 작은 원 안에서도 눈, 입, 머리핀이 보이도록 가운데 80%만 보여 준다. 바로 옆에 이름이 있으므로 장식용이다.
+  avatar: { src: "/images/personas/myomyo-profile.png", width: 1254, height: 1254, alt: "", square: { x: 0.1, y: 0.04, size: 0.8 } },
   role: "자칭 천재 사주 풀이꾼. 입은 얄밉지만 풀이는 집요하고 성실하다.",
   intro: "입은 얄밉고, 풀이는 집요한 자칭 천재 사주꾼.",
   signatureLine: "칭찬만 듣고 가려고 했어? 아쉽네~. 네 약점도 말할 건데. 뭐, 어떻게 써먹을지도 알려줄게. 내가 좀 잘하거든. 😏",
