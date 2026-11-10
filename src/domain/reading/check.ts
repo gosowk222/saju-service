@@ -7,6 +7,7 @@ import type {
   FollowupOutputV2,
   InterpretationStatement,
   NarrationBubble,
+  NarrationTopic,
   NarrationOutput,
   NarrationOutputV2,
   NarrationPlanV2,
@@ -297,13 +298,24 @@ function planPercents(plan: NarrationPlanV2): Set<string> {
 
 const CITES = /^[sft]\d+$/;
 
-export function checkNarrationV2(
-  output: NarrationOutputV2,
-  plan: NarrationPlanV2,
-  chart: ChartView,
-  excluded: readonly ExcludedQuestion[] = [],
-): string[] {
-  const issues: string[] = [];
+/**
+ * 풀이를 부분마다 검사하는 도구. 전체 검사(checkNarrationV2)와, 주제가 완성될 때마다 먼저 보여 주는 생성이 함께 쓴다.
+ * 같은 문장 반복은 한 검사기 안에서 이어서 확인한다.
+ */
+export interface NarrationChecker {
+  /** 시작이나 마무리 말풍선. */
+  readonly frame: (text: string) => string[];
+  /** 궁금한 점에 대한 답 전체. 질문이 없으면 비어 있어야 한다. */
+  readonly focus: (bubbles: readonly NarrationBubble[]) => string[];
+  /** 한 주제의 말풍선 전체. */
+  readonly topic: (topic: NarrationTopic) => string[];
+  /** 범위 밖으로 뺀 질문이 다시 나왔는지. */
+  readonly excluded: (texts: readonly string[]) => string[];
+  /** 이미 보낸 문장을 같은 문장 반복 확인에 넣는다. 굵게 표시는 빼고 비교한다. */
+  readonly remember: (text: string) => void;
+}
+
+export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, excluded: readonly ExcludedQuestion[] = []): NarrationChecker {
   const timing = timingStatements(plan);
   const dates = allowedDates(timing);
   const percents = planPercents(plan);
@@ -313,17 +325,8 @@ export function checkNarrationV2(
   const questionRefs = plan.questions.map((question) => question.ref);
   const hardMax = plan.length.bubbleHardMax;
 
-  const expected = plan.topics.map((topic) => topic.topicId).join(",");
-  const actual = output.topics.map((topic) => topic.topicId).join(",");
-  if (expected !== actual) issues.push(`주제 구성이 다릅니다: ${actual}`);
-
-  for (const frame of [output.opening, output.closing]) {
-    if (!frame.trim()) issues.push("시작 또는 마무리 말풍선이 비어 있습니다.");
-    if (frame.length > hardMax) issues.push("시작 또는 마무리 말풍선이 너무 깁니다.");
-    issues.push(...checkTextV2(frame, chart, percents, dates, terms));
-  }
-
-  const checkBubble = (bubble: NarrationBubble, where: string, allowed: ReadonlySet<string>, scenesAllowed: boolean) => {
+  const bubbleIssues = (bubble: NarrationBubble, where: string, allowed: ReadonlySet<string>, scenesAllowed: boolean): string[] => {
+    const issues: string[] = [];
     const text = bubble.text.trim();
     if (!text) issues.push(`${where}: 빈 말풍선입니다.`);
     if (text.length > hardMax) issues.push(`${where}: 말풍선이 너무 깁니다 (${text.length}자). 나눠서 써 주세요.`);
@@ -341,54 +344,93 @@ export function checkNarrationV2(
       if (SCENE_AS_FACT.test(text)) issues.push(`${where}: 창작 장면을 사실처럼 표현했습니다.`);
       if (/\d{4}\s*년|\d{1,2}\s*월/.test(text)) issues.push(`${where}: 창작 장면에 날짜를 넣었습니다.`);
     }
+    return issues;
   };
 
-  // 궁금한 점에 대한 답
-  if (!plan.questions.length && output.focus.length) issues.push("궁금한 점이 없는데 답변 영역을 썼습니다.");
-  if (plan.questions.length) {
-    if (output.focus.length < 2) issues.push("궁금한 점에 대한 답이 너무 짧습니다.");
-    const focusAllowed = new Set([...shared, ...questionRefs, ...statementsOf(plan).map((item) => item.ref), ...timing.map((item) => item.ref)]);
-    const focusScenes = plan.questions.some((question) => plan.topics.find((topic) => topic.topicId === question.topicId)?.creativeSceneAllowed);
-    if (output.focus.filter((bubble) => bubble.kind === "creative-scene").length > 1) issues.push("답변 영역의 창작 장면은 1개까지입니다.");
-    output.focus.forEach((bubble) => checkBubble(bubble, plan.focusSection.id, focusAllowed, focusScenes));
-    for (const question of plan.questions) {
-      if (!output.focus.some((bubble) => bubble.refs.includes(question.ref))) issues.push(`질문(${question.ref})에 대한 답이 없습니다: ${question.summary}`);
-      const timingPlan = plan.timing.find((entry) => entry.id === question.timingId);
-      if (timingPlan && timingPlan.status === "available") {
-        const refs = new Set(timingPlan.months.map((month) => month.ref));
-        if (!output.focus.some((bubble) => bubble.refs.some((ref) => refs.has(ref)))) issues.push(`질문(${question.ref})의 기간 분석을 답에 쓰지 않았습니다.`);
+  return {
+    frame: (text) => {
+      const issues: string[] = [];
+      if (!text.trim()) issues.push("시작 또는 마무리 말풍선이 비어 있습니다.");
+      if (text.length > hardMax) issues.push("시작 또는 마무리 말풍선이 너무 깁니다.");
+      issues.push(...checkTextV2(text, chart, percents, dates, terms));
+      return issues;
+    },
+    focus: (bubbles) => {
+      const issues: string[] = [];
+      if (!plan.questions.length) {
+        if (bubbles.length) issues.push("궁금한 점이 없는데 답변 영역을 썼습니다.");
+        return issues;
       }
-    }
-  }
+      if (bubbles.length < 2) issues.push("궁금한 점에 대한 답이 너무 짧습니다.");
+      const focusAllowed = new Set([...shared, ...questionRefs, ...statementsOf(plan).map((item) => item.ref), ...timing.map((item) => item.ref)]);
+      const focusScenes = plan.questions.some((question) => plan.topics.find((topic) => topic.topicId === question.topicId)?.creativeSceneAllowed);
+      if (bubbles.filter((bubble) => bubble.kind === "creative-scene").length > 1) issues.push("답변 영역의 창작 장면은 1개까지입니다.");
+      for (const bubble of bubbles) issues.push(...bubbleIssues(bubble, plan.focusSection.id, focusAllowed, focusScenes));
+      for (const question of plan.questions) {
+        if (!bubbles.some((bubble) => bubble.refs.includes(question.ref))) issues.push(`질문(${question.ref})에 대한 답이 없습니다: ${question.summary}`);
+        const timingPlan = plan.timing.find((entry) => entry.id === question.timingId);
+        if (timingPlan && timingPlan.status === "available") {
+          const refs = new Set(timingPlan.months.map((month) => month.ref));
+          if (!bubbles.some((bubble) => bubble.refs.some((ref) => refs.has(ref)))) issues.push(`질문(${question.ref})의 기간 분석을 답에 쓰지 않았습니다.`);
+        }
+      }
+      return issues;
+    },
+    topic: (topic) => {
+      const planned = plan.topics.find((item) => item.topicId === topic.topicId);
+      if (!planned) return [`상품에 없는 주제입니다: ${topic.topicId}`];
+      const issues: string[] = [];
+      const allowed = new Set([
+        ...shared,
+        ...planned.statements.map((item) => item.ref),
+        ...plan.timing.filter((entry) => entry.topicId === planned.topicId).flatMap((entry) => [...entry.months, ...entry.years].map((item) => item.ref)),
+        ...plan.questions.filter((question) => question.topicId === planned.topicId).map((question) => question.ref),
+      ]);
+      if (topic.bubbles.length < Math.min(2, planned.target)) issues.push(`${topic.topicId}: 말풍선이 너무 적습니다 (${topic.bubbles.length}개).`);
+      if (planned.status !== "limited" && !topic.bubbles.some((bubble) => bubble.kind === "explanation")) issues.push(`${topic.topicId}: 설명 말풍선이 없습니다.`);
+      if (topic.bubbles.filter((bubble) => bubble.kind === "creative-scene").length > 1) issues.push(`${topic.topicId}: 창작 장면은 주제당 1개까지입니다.`);
+      for (const bubble of topic.bubbles) issues.push(...bubbleIssues(bubble, topic.topicId, allowed, planned.creativeSceneAllowed));
+      return issues;
+    },
+    excluded: (texts) => checkExcluded(texts, excluded),
+    remember: (text) => {
+      seen.add(text.replace(/\*\*/g, "").trim());
+    },
+  };
+}
+
+export function checkNarrationV2(
+  output: NarrationOutputV2,
+  plan: NarrationPlanV2,
+  chart: ChartView,
+  excluded: readonly ExcludedQuestion[] = [],
+): string[] {
+  const issues: string[] = [];
+  const check = narrationChecker(plan, chart, excluded);
+
+  const expected = plan.topics.map((topic) => topic.topicId).join(",");
+  const actual = output.topics.map((topic) => topic.topicId).join(",");
+  if (expected !== actual) issues.push(`주제 구성이 다릅니다: ${actual}`);
+
+  for (const frame of [output.opening, output.closing]) issues.push(...check.frame(frame));
+  issues.push(...check.focus(output.focus));
 
   let total = 2 + output.focus.length;
   for (const topic of output.topics) {
-    const planned = plan.topics.find((item) => item.topicId === topic.topicId);
-    if (!planned) {
-      issues.push(`상품에 없는 주제입니다: ${topic.topicId}`);
-      continue;
-    }
-    total += topic.bubbles.length;
-    const allowed = new Set([
-      ...shared,
-      ...planned.statements.map((item) => item.ref),
-      ...plan.timing.filter((entry) => entry.topicId === planned.topicId).flatMap((entry) => [...entry.months, ...entry.years].map((item) => item.ref)),
-      ...plan.questions.filter((question) => question.topicId === planned.topicId).map((question) => question.ref),
-    ]);
-    if (topic.bubbles.length < Math.min(2, planned.target)) issues.push(`${topic.topicId}: 말풍선이 너무 적습니다 (${topic.bubbles.length}개).`);
-    if (planned.status !== "limited" && !topic.bubbles.some((bubble) => bubble.kind === "explanation")) issues.push(`${topic.topicId}: 설명 말풍선이 없습니다.`);
-    if (topic.bubbles.filter((bubble) => bubble.kind === "creative-scene").length > 1) issues.push(`${topic.topicId}: 창작 장면은 주제당 1개까지입니다.`);
-    topic.bubbles.forEach((bubble) => checkBubble(bubble, topic.topicId, allowed, planned.creativeSceneAllowed));
+    if (plan.topics.some((item) => item.topicId === topic.topicId)) total += topic.bubbles.length;
+    issues.push(...check.topic(topic));
   }
   if (total < plan.length.totalBubbles.min || total > plan.length.totalBubbles.max) {
     issues.push(`전체 말풍선 개수가 형식 범위를 벗어났습니다 (${total}개).`);
   }
 
   issues.push(
-    ...checkExcluded(
-      [output.opening, output.closing, ...output.focus.map((bubble) => bubble.text), ...output.topics.flatMap((topic) => topic.bubbles.map((bubble) => bubble.text))],
-      excluded,
-    ),
+    ...check.excluded([
+      output.opening,
+      output.closing,
+      ...output.focus.map((bubble) => bubble.text),
+      ...output.topics.flatMap((topic) => topic.bubbles.map((bubble) => bubble.text)),
+    ]),
   );
   return issues;
 }
