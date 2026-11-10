@@ -49,11 +49,10 @@ const grant = async (user: string, campaign = CAMPAIGN) =>
 
 const redeem = async (user: string, readingId: string, requestId = randomUUID(), productId = "first-overview") =>
   (
-    await svc<{ r: Outcome }>(`select redeem_free_ticket($1, $2, $3, $4, $5, '3.2.1', 3, '{"productId":"first-overview"}'::jsonb) as r`, [
+    await svc<{ r: Outcome }>(`select redeem_free_ticket($1, $2, $3, $4, '3.2.1', 3, '{"productId":"first-overview"}'::jsonb) as r`, [
       user,
       readingId,
       requestId,
-      CAMPAIGN,
       productId,
     ])
   )[0]!.r;
@@ -409,7 +408,7 @@ describe("브라우저 권한", () => {
     [`select is_kakao_member(gen_random_uuid())`],
     [`select grant_free_ticket(gen_random_uuid(), '${CAMPAIGN}')`],
     [`select grant_free_tickets_to_kakao_members('${CAMPAIGN}')`],
-    [`select redeem_free_ticket(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), '${CAMPAIGN}', 'first-overview', '1', 3, '{}'::jsonb)`],
+    [`select redeem_free_ticket(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'first-overview', '1', 3, '{}'::jsonb)`],
     [`select restore_free_ticket(gen_random_uuid(), 'x')`],
   ])("서버 전용 함수를 호출할 수 없다: %s", async (sql) => {
     const user = await member();

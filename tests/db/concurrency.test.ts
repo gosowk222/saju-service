@@ -125,9 +125,19 @@ async function createReading(user: string): Promise<string> {
 
 const grantSql = (user: string) => ({ sql: `select grant_free_ticket($1, $2) as r`, params: [user, CAMPAIGN] });
 const redeemSql = (user: string, readingId: string, requestId: string) => ({
-  sql: `select redeem_free_ticket($1, $2, $3, $4, 'first-overview', '3.2.1', 3, '{}'::jsonb) as r`,
-  params: [user, readingId, requestId, CAMPAIGN],
+  sql: `select redeem_free_ticket($1, $2, $3, 'first-overview', '3.2.1', 3, '{}'::jsonb) as r`,
+  params: [user, readingId, requestId],
 });
+const adminGrantSql = (adminId: string, user: string, requestId: string) => ({
+  sql: `select admin_grant_free_ticket($1, $2, $3) as r`,
+  params: [adminId, user, requestId],
+});
+
+async function adminMember() {
+  const id = await member();
+  await svc(`select set_user_role($1, 'admin')`, [id]);
+  return id;
+}
 const claimSql = (user: string, readingId: string) => ({
   sql: `select claim_generation($1, $2, true, 'gpt-5.6-luna', 'reading-2.5.0', 'narration-2.1.0', 'low', 300, 4) as r`,
   params: [user, readingId],
@@ -310,5 +320,41 @@ describe.skipIf(!BASE_URL)("실제 Postgres 동시 요청", () => {
         expect(ticket!.status).toBe("redeemed");
       }
     }
+  });
+
+  it("관리자 지급을 같은 요청으로 10번 동시에 보내면 한 장, 다른 요청 5번이면 다섯 장이다", async () => {
+    const boss = await adminMember();
+    const user = await member();
+    const requestId = randomUUID();
+    const same = await race<{ outcome: string }>(Array.from({ length: 10 }, () => adminGrantSql(boss, user, requestId)));
+    const outcomes = same.map((result) => (result.ok ? result.value.outcome : result.error));
+    expect(outcomes.filter((outcome) => outcome === "granted")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "exists")).toHaveLength(9);
+    await race(Array.from({ length: 5 }, () => adminGrantSql(boss, user, randomUUID())));
+    expect(await count(`select count(*)::int as n from public.free_tickets where user_id = $1 and source = 'admin'`, [user])).toBe(6);
+  });
+
+  it("이용권이 세 장일 때 서로 다른 풀이 10건이 동시에 와도 정확히 세 건만 쓰인다", async () => {
+    const boss = await adminMember();
+    const user = await member();
+    await svc(grantSql(user).sql, grantSql(user).params);
+    await svc(adminGrantSql(boss, user, randomUUID()).sql, adminGrantSql(boss, user, randomUUID()).params);
+    await svc(adminGrantSql(boss, user, randomUUID()).sql, adminGrantSql(boss, user, randomUUID()).params);
+    const readings = await Promise.all(Array.from({ length: 10 }, () => createReading(user)));
+    const results = await race<{ outcome: string }>(readings.map((readingId) => redeemSql(user, readingId, randomUUID())));
+    expect(results.filter((result) => !result.ok)).toEqual([]);
+    const outcomes = results.map((result) => (result.ok ? result.value.outcome : ""));
+    expect(outcomes.filter((outcome) => outcome === "redeemed")).toHaveLength(3);
+    expect(outcomes.filter((outcome) => outcome === "ticket_used")).toHaveLength(7);
+    expect(await count(`select count(*)::int as n from public.free_tickets where user_id = $1 and status = 'redeemed'`, [user])).toBe(3);
+    expect(await count(`select count(*)::int as n from public.entitlements where user_id = $1`, [user])).toBe(3);
+    expect(await count(`select count(distinct reading_id)::int as n from public.free_tickets where user_id = $1`, [user])).toBe(3);
+  });
+
+  it("관리자가 설정을 동시에 바꿔도 마지막 값 하나만 남는다", async () => {
+    const boss = await adminMember();
+    const results = await race(Array.from({ length: 6 }, (_, index) => ({ sql: `select set_readings_open_to_all($1, $2) as r`, params: [boss, index % 2 === 0] })));
+    expect(results.filter((result) => !result.ok)).toEqual([]);
+    expect(await count(`select count(*)::int as n from public.app_settings where key = 'readings_open_to_all'`, [])).toBe(1);
   });
 });

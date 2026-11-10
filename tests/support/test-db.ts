@@ -25,6 +25,7 @@ export const SCHEMA_SQL = `
     is_anonymous boolean not null default false,
     banned_until timestamptz,
     deleted_at timestamptz,
+    last_sign_in_at timestamptz,
     created_at timestamptz not null default now()
   );
   -- Supabase Auth의 공식 연결 정보. 실제와 같이 service_role에는 읽기 권한을 주지 않는다.
