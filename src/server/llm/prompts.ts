@@ -24,7 +24,9 @@ import type {
  * - reading-2.0.0 / narration-2.0.0: 계획 2.0.0의 첫 풀이 프롬프트 (이미 이 버전으로 시작한 작업에만).
  * - reading-2.1.0 / narration-2.1.0: 채팅 말투, 장면을 녹이는 방식, 직설적인 약점, 말풍선마다 굵게 보일 구절(highlight).
  * - reading-2.2.0 / narration-2.1.0: 가족·친구·지역 주제와 행운 표, 과거 짐작 말투, 건강·투자·미래의 완곡한 표현.
- * - reading-2.3.0 / narration-2.1.0: 현재 풀이 (상품 3.1.0). 명리 설명 재료(lore)를 짧게 소개하기,
+ * - reading-2.4.0 / narration-2.1.0: 현재 풀이. 2.3.0에 이어서 쓰기(이미 보낸 부분은 비워 두고 나머지만 쓰기)를 더했다.
+ *   주제가 완성될 때마다 화면에 먼저 보여 주는 생성에서 쓴다.
+ * - reading-2.3.0 / narration-2.1.0: 상품 3.1.0. 명리 설명 재료(lore)를 짧게 소개하기,
  *   약점·강점을 선언하지 않고 알아맞히듯 말하기, 어울리는 직업과 업종. 입력 형식은 2.2.0과 같고 lore만 더한다.
  * - question-1.1.0: 궁금한 점과 후속 질문의 구조화 (1.0.0은 기록용).
  * - followup-2.3.0: 후속 질문 답변 (2.0.0~2.2.0은 기록용으로 남김).
@@ -526,6 +528,18 @@ const READING_RULES_2_3_0 = `
 - 설명 말풍선은 bubbleChars자 안팎으로 쓰고, 길어지면 나눈다. 한 말풍선에는 한 흐름을 담는다.
 `.trim();
 
+/**
+ * reading-2.4.0: 2.3.0과 같고, 이미 화면에 보낸 부분을 두고 나머지만 이어 쓰는 규칙을 더한다.
+ * 주제가 완성될 때마다 먼저 보여 주므로, 검사에 걸려 다시 쓸 때 보낸 말풍선을 바꾸지 않는다.
+ */
+const READING_RULES_2_4_0 = `${READING_RULES_2_3_0}
+
+[이어서 쓰기]
+- 입력에 alreadySent가 있으면 그 부분은 이미 사용자 화면에 나간 말이다. 고치거나 다시 쓰지 않는다.
+- alreadySent.opening이 있으면 opening은 빈 문자열로 둔다. alreadySent.focus가 비어 있지 않으면 focus는 빈 배열로 둔다. alreadySent.topics에 있는 주제는 topics에 순서대로 topicId만 두고 bubbles를 빈 배열로 둔다.
+- 나머지 주제와 closing은 이미 보낸 말에 이어지게 쓴다. 이미 보낸 설명, 명리 설명, 비유, 조언, 장면을 되풀이하지 않는다.
+- fixTheseProblemsFromPreviousAttempt가 있으면 그 문제는 아직 보내지 않은 부분에서 고친다.`;
+
 const EXPRESSION_TEXT = {
   directness: {
     gentle: "약점은 부드럽게 짚되 빠뜨리지 않는다.",
@@ -613,10 +627,18 @@ function questionInput(question: FocusQuestion, focusBubbles: number) {
 
 const contextInput = (items: readonly UserContextStatement[]) => items.map(({ ref, text }) => ({ ref, text }));
 
+/** 이미 화면에 보낸 부분 (굵게 표시를 뺀 문장). reading-2.4.0의 이어 쓰기에서만 입력에 넣는다. */
+export interface AlreadySent {
+  readonly opening: string | null;
+  readonly focus: readonly string[];
+  readonly topics: readonly { readonly topicId: string; readonly texts: readonly string[] }[];
+}
+
 export interface ReadingPromptV2Args {
   readonly plan: NarrationPlanV2;
   readonly persona: Persona;
   readonly previousIssues: readonly string[];
+  readonly alreadySent?: AlreadySent | null;
 }
 
 function readingInput2(args: ReadingPromptV2Args): string {
@@ -643,6 +665,7 @@ function readingInput2(args: ReadingPromptV2Args): string {
       limitNote: topic.limitNote,
       statements: topic.statements.map(statementInput),
     })),
+    ...(args.alreadySent ? { alreadySent: args.alreadySent } : {}),
     ...(previousIssues.length ? { fixTheseProblemsFromPreviousAttempt: previousIssues.slice(0, 15) } : {}),
   });
 }
@@ -682,6 +705,13 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
       input: readingInput2(v2),
     };
   },
+  "reading-2.4.0": (args) => {
+    const v2 = args as ReadingPromptV2Args;
+    return {
+      instructions: `${READING_RULES_2_4_0}\n\n${personaBlockV2(v2.persona, v2.plan.expression)}`,
+      input: readingInput2(v2),
+    };
+  },
 };
 
 /**
@@ -691,9 +721,13 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
  */
 export const PROMPTS_FOR_PLAN: Readonly<Record<string, { readonly prompt: string; readonly schema: string }>> = {
   "1.0.0": { prompt: "reading-1.0.0", schema: "narration-1.0.0" },
-  "2.0.0": { prompt: "reading-2.3.0", schema: "narration-2.1.0" },
+  "2.0.0": { prompt: "reading-2.4.0", schema: "narration-2.1.0" },
 };
-export const CURRENT_READING_PROMPT = "reading-2.3.0";
+export const CURRENT_READING_PROMPT = "reading-2.4.0";
+
+/** 주제가 완성될 때마다 먼저 보여 주고, 검사에 걸리면 남은 부분만 이어 쓰는 프롬프트. 이전 버전으로 시작한 작업은 한 번에 받는다. */
+const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set(["reading-2.4.0"]);
+export const isProgressivePrompt = (version: string) => PROGRESSIVE_PROMPTS.has(version);
 export const NARRATION_SCHEMA_VERSION = "narration-2.1.0";
 
 const NARRATION_SCHEMAS: Readonly<Record<string, { name: string; jsonSchema: Record<string, unknown>; parser: z.ZodType<NarrationOutput | NarrationOutputV2> }>> = {

@@ -2,13 +2,23 @@ import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
-import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan } from "@/domain/reading/types";
+import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan, type StoredMessage } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
 import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
-import { mergeUsage, narrateReading, toStoredMessages, type GenerationConfig, type NarrationInput } from "@/server/llm/narrate";
-import { isPlanV2Prompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import {
+  mergeUsage,
+  narrateReading,
+  narrateReadingProgressive,
+  sentPartsFrom,
+  toStoredMessages,
+  type GenerationConfig,
+  type GenerationMeta,
+  type NarrationInput,
+  type NewMessage,
+} from "@/server/llm/narrate";
+import { isPlanV2Prompt, isProgressivePrompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
@@ -28,6 +38,9 @@ interface ClaimResult {
 function retryable(error: LlmError): boolean {
   return !error.isConfigurationError;
 }
+
+/** 점유 시간이 지나 다른 요청이 이 풀이를 이어받았다. 이 요청은 더 저장하지 않고 멈춘다. */
+class GenerationHandedOver extends Error {}
 
 /**
  * 요청 안에서 생성을 끝낸다. 요청이 끊기면 점유 시간이 지난 뒤 다음 요청이 이어받는다.
@@ -121,7 +134,49 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
       narration = { version: "1.0.0", plan: plan as ReadingPlan };
     }
 
-    const { output, meta } = await narrateReading({ narration, chart, persona, config, deadlineAt });
+    let messages: StoredMessage[];
+    let meta: GenerationMeta;
+    if (narration.version === "2.0.0" && isProgressivePrompt(config.promptVersion)) {
+      // 주제가 완성될 때마다 메시지를 먼저 저장해 화면에 보여 준다. 이전 시도가 보낸 메시지는 그대로 두고 이어 쓴다.
+      const focusSectionId = narration.plan.focusSection.id;
+      const { data: existing } = await admin.from("reading_messages").select("seq, topic_id, text").eq("reading_id", readingId).order("seq", { ascending: true });
+      const rows = (existing ?? []) as { seq: number; topic_id: string | null; text: string }[];
+      let nextSeq = rows.reduce((max, row) => Math.max(max, row.seq), 0) + 1;
+      const commit = async (batch: readonly NewMessage[]) => {
+        const { data: job } = await admin.from("generation_jobs").select("status, attempts").eq("reading_id", readingId).maybeSingle();
+        if (!job || job.status !== "running" || job.attempts !== attempt) throw new GenerationHandedOver();
+        const { error: insertError } = await admin.from("reading_messages").insert(
+          batch.map((message, index) => ({
+            reading_id: readingId,
+            user_id: userId,
+            seq: nextSeq + index,
+            topic_id: message.topicId,
+            kind: message.kind,
+            text: message.text,
+            refs: message.refs,
+          })),
+        );
+        // 같은 순번이 이미 있으면 다른 요청이 이어받아 쓰고 있다.
+        if (insertError) throw new GenerationHandedOver();
+        nextSeq += batch.length;
+      };
+      const progressive = await narrateReadingProgressive({
+        plan: narration.plan,
+        excluded: narration.excluded,
+        chart,
+        persona,
+        config,
+        deadlineAt,
+        sent: sentPartsFrom(rows.map((row) => ({ topicId: row.topic_id, text: row.text })), focusSectionId),
+        commit,
+      });
+      messages = [{ ...progressive.closing, seq: nextSeq }];
+      meta = progressive.meta;
+    } else {
+      const whole = await narrateReading({ narration, chart, persona, config, deadlineAt });
+      messages = toStoredMessages(whole.output, product?.focusSection.id);
+      meta = whole.meta;
+    }
     const usage = prepared?.usage ? mergeUsage(prepared.usage, meta.usage) : meta.usage;
     const llmCalls = meta.llmCalls + preparedCalls;
     const durationMs = Date.now() - startedAt;
@@ -129,7 +184,7 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     const { data: saved, error: saveError } = await admin.rpc("complete_generation", {
       p_reading_id: readingId,
       p_attempt: attempt,
-      p_messages: toStoredMessages(output, product?.focusSection.id),
+      p_messages: messages,
       p_meta: {
         ...meta,
         usage,
@@ -153,6 +208,10 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     }
     return saved ? "completed" : "running";
   } catch (error) {
+    if (error instanceof GenerationHandedOver) {
+      console.info("[generation] handed over", { readingId, attempt });
+      return "running";
+    }
     if (error instanceof LlmError) {
       console.error("[generation] failed", { readingId, code: error.code });
       await fail(error.code, retryable(error), error.calls);
