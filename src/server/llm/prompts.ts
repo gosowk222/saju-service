@@ -170,6 +170,7 @@ const READING_RULES_2_0_0 = `
    - 이유를 관련 statements의 basis와 timing의 markers로 설명한다.
    - 시기 질문(timingId가 있는 질문): 살펴본 기간(windowLabel)을 밝히고, notable 대표 달을 중심으로 그 달의 표지와 추천 활동을, careful 대표 달은 조심할 점을 말한다. 나머지 달을 길게 나열하지 않는다. 세운 흐름(years)과 대운(decade)이 있으면 큰 흐름으로 한 문장만 덧붙인다. 그 달에 합격·채용·만남·수입이 생긴다고 말하지 않는다. status가 insufficient면 살펴본 기간 안에 뚜렷한 표지가 없었다고 이유와 함께 말한다.
    - timingNote가 있는 질문은 그 안내대로 시기 대신 성향과 지금 할 행동으로 답한다.
+   - timing.limits와 caveats는 쓰는 사람이 지킬 한계다. 그 문장을 그대로 옮기거나 '근사값', '참고 맥락' 같은 기술 표현을 쓰지 않고, 사용자에게 필요한 한계만 쉬운 말로 짧게 말한다.
    - 비교 질문(intent가 compare): compare의 기준을 하나씩 같은 잣대로 양쪽에 대어 비교한다. 사주로 알 수 없는 현실 조건(needs, missingInfo)은 '이 조건이 갖춰져 있다면 ~, 아니라면 ~'처럼 조건부로 정리하고, 필요하면 확인할 질문 하나를 던진다.
    - answerability가 limited인 질문: 알 수 없는 부분을 한 문장으로 분명히 하고, 판단할 수 있는 부분으로 넘어가 충분히 답한다.
    - 질문이 여러 개면 하나도 빠뜨리지 않고 각각 답한다. 각 답의 말풍선 refs에는 그 질문의 ref(q1 등)를 넣는다.
@@ -269,7 +270,7 @@ function timingInput(plan: TimingPlanV2) {
     topicId: plan.topicId,
     windowLabel: plan.windowLabel,
     status: plan.status,
-    decade: plan.decade ? `${plan.decade.label}${plan.decade.approximate ? " (경계는 근사값)" : ""}` : null,
+    decade: plan.decade ? plan.decade.label : null,
     years: plan.years.map(period),
     months: plan.months.map(period),
     notable: plan.notableRefs,
@@ -470,6 +471,7 @@ questions는 서버가 사용자의 메시지를 나누고 상품 범위 안의 
 - 시기(timing): timing을 바탕으로 살펴본 기간(windowLabel)을 밝히고, notable 달과 그 이유·추천 활동, careful 달과 조심할 점을 말한다. 그 달에 합격·채용·만남·수입이 생긴다고 말하지 않는다. status가 insufficient면 그 이유를 말한다. timingNote가 있으면 그 안내를 따른다.
 - 비교(compare): 같은 기준으로 양쪽을 나란히 비교한다. 사주로 알 수 없는 현실 조건은 조건부로 정리한다.
 - 결과 확정(answerability limited): 알 수 없는 부분을 한 문장으로 분명히 하고, 판단할 수 있는 부분(성향, 시기 흐름, 행동)으로 충분히 답한다.
+- timing.limits와 caveats는 지킬 한계다. 그 문장을 그대로 옮기거나 '근사값', '참고 맥락' 같은 기술 표현을 쓰지 않는다.
 - delivered나 lastTurn에 같은 질문의 답이 이미 있으면 그 결론은 한두 문장으로 짧게 확인하고, 거기 없던 구체적인 내용(달별 준비 순서, 확인할 조건, 새 예시)을 더한다. 같은 문단을 되풀이하지 않는다.
 - 새로 알려 준 상황이나 기간 때문에 기존 풀이와 다르게 보이는 부분이 있으면 왜 그런지 설명한다. 기존 판단과 모순되는 말을 하지 않는다.
 - 근거가 있는 약점은 돌려 말하지 않는다. 다만 사람을 깎아내리지 않는다.

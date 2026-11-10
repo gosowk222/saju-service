@@ -2,7 +2,7 @@ import type { AssessmentFacet, InquiryConclusion, InquiryReader } from "sajuengi
 import type { Persona } from "../personas";
 import type { ProductDefinition, ProductTopic } from "../products/types";
 import { RULESET_ID, RULESET_VERSION, detailKey, familyLabel, type RuleDetailSink } from "../rules/first-overview";
-import { PATTERN_LABEL, STRENGTH_LABEL } from "../rules/materials";
+import { PATTERN_LABEL, STRENGTH_LABEL, withJosa } from "../rules/materials";
 import { ELEMENT_HANJA } from "./chart";
 import type {
   ChartElement,
@@ -44,7 +44,7 @@ function buildFacts(chart: ChartView, assessment: AssessmentFacet | null): FactS
   if (assessment?.dominantElement && assessment.elementPercent) {
     const percents = assessment.elementPercent as Readonly<Record<string, number>>;
     const element = assessment.dominantElement as ChartElement;
-    add(`오행 중 ${element}(${ELEMENT_HANJA[element]})이 ${percents[element]}%로 가장 많습니다.`, "facets.assessment.elementPercent");
+    add(`오행 중 ${withJosa(`${element}(${ELEMENT_HANJA[element]})`, "이/가")} ${percents[element]}%로 가장 많습니다.`, "facets.assessment.elementPercent");
   }
   if (!chart.hourKnown) {
     add("태어난 시간을 몰라 시주는 계산하지 않았습니다.", "core.document.calculation.information");
