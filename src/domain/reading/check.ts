@@ -1,3 +1,4 @@
+import { findPersona, type Persona } from "../personas";
 import type { QuestionDomain } from "../products/types";
 import { timingStatements } from "./focus";
 import { allowedChartTerms, chartTermIssues } from "./lore";
@@ -230,8 +231,46 @@ function percentsOf(texts: readonly string[]): Set<string> {
   return values;
 }
 
+/**
+ * 강한 욕설과 비속어. 캐릭터의 약한 놀림(바보, 허접)은 막지 않는다.
+ * '시발점', '새끼손가락', '불이 꺼져', '엄마를 졸라' 같은 일상어는 걸리지 않게 뺐다.
+ */
+const STRONG_PROFANITY = /씨발|시발(?!점)|ㅅㅂ|존나|좆|병신|ㅂㅅ|개새|새끼(?!손가락)|닥쳐|지랄|엿\s?먹어/;
+/** 그림 이모티콘(😏처럼 기본 문자 영역 밖의 것). ♡는 말버릇으로 따로 센다. */
+const EMOJI = /(?=\p{Extended_Pictographic})[\u{10000}-\u{10FFFF}]/gu;
+
+/**
+ * 말버릇과 이모티콘을 센다. 설정(personas)의 횟수를 처음 넘는 순간 한 번만 알린다.
+ * scope가 reading이면 최초 풀이 전체, answer면 후속 답변 하나 기준이다 (questions는 질문 수).
+ */
+export function catchphraseCounter(persona: Persona | undefined, scope: "reading" | "answer", questions = 1) {
+  const counts = new Map<string, number>();
+  const reported = new Set<string>();
+  const limitOf = (perReading: number, perAnswer: number) => (scope === "reading" ? perReading : perAnswer * Math.max(1, questions));
+  const count = (text: string): string[] => {
+    if (!persona) return [];
+    const issues: string[] = [];
+    const bump = (key: string, label: string, found: number, max: number) => {
+      if (!found) return;
+      const total = (counts.get(key) ?? 0) + found;
+      counts.set(key, total);
+      if (total > max && !reported.has(key)) {
+        reported.add(key);
+        issues.push(`말버릇 '${label}'을(를) 너무 자주 썼습니다 (${max}번까지). 같은 말버릇과 놀림을 반복하지 않는다.`);
+      }
+    };
+    for (const phrase of persona.catchphrases) {
+      bump(phrase.pattern, phrase.text, text.split(phrase.pattern).length - 1, limitOf(phrase.maxPerReading, phrase.maxPerAnswer));
+    }
+    bump("emoji", "그림 이모티콘", (text.match(EMOJI) ?? []).length, limitOf(persona.emojiLimit.perReading, persona.emojiLimit.perAnswer));
+    return issues;
+  };
+  return { count };
+}
+
 function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<string>, dates: AllowedDates, terms: ReadonlySet<string>): string[] {
   const issues: string[] = [...checkAgainstChart(text, chart), ...checkDates(text, dates), ...chartTermIssues(text, terms)];
+  if (STRONG_PROFANITY.test(text)) issues.push(`강한 욕설이나 비속어가 있습니다: ${text.slice(0, 40)}`);
   if (MONEY_CLAIM.test(text)) issues.push(`근거 없는 금액이 있습니다: ${text.slice(0, 40)}`);
   if (PROBABILITY_CLAIM.test(text)) issues.push(`확률 표현이 있습니다: ${text.slice(0, 40)}`);
   if (FORBIDDEN_TOPIC.test(text)) issues.push(`결과를 단정하거나 진단·매매를 지시했습니다: ${text.slice(0, 40)}`);
@@ -324,6 +363,7 @@ export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, exclud
   const shared = [...plan.base.facts.map((fact) => fact.ref), ...plan.userContext.map((item) => item.ref)];
   const questionRefs = plan.questions.map((question) => question.ref);
   const hardMax = plan.length.bubbleHardMax;
+  const tics = catchphraseCounter(findPersona(plan.base.personaId), "reading");
 
   const bubbleIssues = (bubble: NarrationBubble, where: string, allowed: ReadonlySet<string>, scenesAllowed: boolean): string[] => {
     const issues: string[] = [];
@@ -332,7 +372,7 @@ export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, exclud
     if (text.length > hardMax) issues.push(`${where}: 말풍선이 너무 깁니다 (${text.length}자). 나눠서 써 주세요.`);
     if (seen.has(text)) issues.push(`같은 문장이 반복되었습니다: ${text.slice(0, 40)}`);
     seen.add(text);
-    issues.push(...checkTextV2(text, chart, percents, dates, terms));
+    issues.push(...checkTextV2(text, chart, percents, dates, terms), ...tics.count(text));
     for (const ref of bubble.refs) {
       if (!allowed.has(ref)) issues.push(`${where}: 없는 근거를 참조했습니다 (${ref}).`);
     }
@@ -352,7 +392,7 @@ export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, exclud
       const issues: string[] = [];
       if (!text.trim()) issues.push("시작 또는 마무리 말풍선이 비어 있습니다.");
       if (text.length > hardMax) issues.push("시작 또는 마무리 말풍선이 너무 깁니다.");
-      issues.push(...checkTextV2(text, chart, percents, dates, terms));
+      issues.push(...checkTextV2(text, chart, percents, dates, terms), ...tics.count(text));
       return issues;
     },
     focus: (bubbles) => {
@@ -394,7 +434,10 @@ export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, exclud
     },
     excluded: (texts) => checkExcluded(texts, excluded),
     remember: (text) => {
-      seen.add(text.replace(/\*\*/g, "").trim());
+      const plain = text.replace(/\*\*/g, "").trim();
+      seen.add(plain);
+      // 이미 보낸 말의 말버릇도 센다. 이미 보낸 것이라 여기서는 알리지 않는다.
+      tics.count(plain);
     },
   };
 }
@@ -447,6 +490,8 @@ export interface FollowupCheckContext {
   /** 원국 글자·신살 이름을 확인할 때 함께 허용할 문장 (전체 해석 재료와 이미 전달한 풀이). */
   readonly termSources?: readonly string[];
   readonly excluded: readonly ExcludedQuestion[];
+  /** 풀이를 맡은 캐릭터. 말버릇과 이모티콘 횟수를 센다. */
+  readonly persona?: Persona;
 }
 
 export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheckContext, chart: ChartView): string[] {
@@ -459,9 +504,11 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
     if (!question) issues.push("되묻는 질문이 비어 있습니다.");
     if (question.length > CLARIFY_MAX) issues.push("되묻는 질문이 너무 깁니다.");
     issues.push(...checkTextV2(question, chart, percents, dates, terms), ...checkExcluded([question], context.excluded));
+    issues.push(...catchphraseCounter(context.persona, "answer").count(question));
     return issues;
   }
   let total = 0;
+  const tics = catchphraseCounter(context.persona, "answer", context.questionRefs.length);
   for (const ref of context.questionRefs) {
     const section = output.sections.find((item) => item.questionRef === ref);
     if (!section || !section.text.trim()) issues.push(`질문(${ref})에 대한 답이 없습니다.`);
@@ -471,7 +518,7 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
     total += text.length;
     if (!context.questionRefs.includes(section.questionRef)) issues.push(`없는 질문에 답했습니다 (${section.questionRef}).`);
     if (text.length > FOLLOWUP_SECTION_MAX) issues.push("한 질문의 답변이 너무 깁니다.");
-    issues.push(...checkTextV2(text, chart, percents, dates, terms));
+    issues.push(...checkTextV2(text, chart, percents, dates, terms), ...tics.count(text));
     for (const ref of section.refs) {
       // 답하는 질문의 ref는 근거는 아니지만 틀린 참조도 아니다. 이것 때문에 다시 생성하지 않는다.
       if (!context.knownRefs.has(ref) && !context.questionRefs.includes(ref)) issues.push(`없는 근거를 참조했습니다 (${ref}).`);
