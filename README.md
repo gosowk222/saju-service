@@ -31,8 +31,11 @@ Supabase 대시보드의 Authentication > URL Configuration에서 Redirect URL�
 
 마이그레이션은 `supabase/migrations/`에 있습니다.
 
+파일 이름 순서대로 적용합니다. 두 번째 파일(풀이 품질 고도화)은 앱을 배포하기 전에 적용해야 합니다.
+
 ```sh
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261109120000_first_product_mvp.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261110120000_reading_quality.sql
 ```
 
 ### 테스트 결제

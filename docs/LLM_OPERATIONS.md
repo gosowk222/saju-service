@@ -1,23 +1,48 @@
 # OpenAI 운영 안내
 
-서비스의 풀이 생성과 후속 질문은 OpenAI API를 사용한다. 호출은 `src/server/llm/client.ts` 한곳에서만 한다.
+서비스의 풀이 생성과 후속 질문은 OpenAI API를 사용한다. 호출은 `src/server/llm/client.ts` 한곳에서만 하고, 설정은 `src/server/llm/config.ts`의 `LLM_SETTINGS` 한곳에서 관리한다.
 
 ## 현재 설정
 
 | 항목 | 값 | 위치 |
 | --- | --- | --- |
-| 개발 기본 모델 | `gpt-5.6-luna` | `src/server/llm/config.ts` |
+| 개발 기본 모델 | `gpt-5.6-luna` | `config.ts` |
 | 호출 모델 | `OPENAI_MODEL` 환경변수 | 서버 환경 |
 | API | Responses API, 구조화 출력 (`json_schema`, strict) | `client.ts` |
-| 추론 설정 | `reasoning.effort = low` | `LLM_SETTINGS` |
-| 출력 토큰 한도 | 풀이 9000, 후속 질문 2500 (추론 토큰 포함) | `LLM_SETTINGS` |
-| 요청 제한 시간 | 120초 | `LLM_SETTINGS` |
-| 네트워크·일시 오류 재시도 | 2회 | `LLM_SETTINGS` |
-| 검사 실패 재생성 | 1회 | `LLM_SETTINGS` |
-| 풀이당 실행 횟수 상한 | 4회 | `LLM_SETTINGS` |
-| 인스턴스당 동시 호출 | 4개 | `LLM_SETTINGS` |
+| 추론 설정 | `reasoning.effort = low` (작업별로 설정) | `LLM_SETTINGS.tasks` |
+| 출력 토큰 한도 (추론 포함) | 질문 정리 2,000 · 최초 풀이 24,000 · 후속 답변 6,000 | `LLM_SETTINGS.tasks` |
+| 요청 제한 시간 | 질문 정리 30초 · 최초 풀이 200초 · 후속 답변 90초 | `LLM_SETTINGS.tasks` |
+| 요청 전체 예산 | 생성 280초 (route `maxDuration` 300초) · 후속 질문 170초 (route 180초) | `generationBudgetMs`, `followupBudgetMs` |
+| 네트워크·일시 오류 재시도 | 2회. 남은 예산이 부족하면 재시도하지 않음 | `transportRetries`, `deadlineAt` |
+| 검사 실패 재생성 | 1회 (문제 목록을 붙여 다시 요청) | `validationRetries` |
+| 풀이당 실행 횟수 상한 | 4회 | `generationMaxAttempts` |
+| 인스턴스당 동시 호출 | 4개 | `concurrency` |
 
-`temperature`, `top_p`는 보내지 않는다. 두 모델의 공식 문서에서 지원 여부를 확인하지 못했고, 이 서비스에 필요하지도 않다.
+`temperature`, `top_p`는 보내지 않는다. 두 모델의 공식 문서에서 지원 여부를 확인하지 못했고, 이 서비스에 필요하지도 않다. 응답이 `incomplete`(출력 한도 도달 등)면 성공으로 저장하지 않고 `incomplete` 오류로 처리한다.
+
+## 프롬프트와 출력 형식 버전
+
+| 버전 | 쓰는 곳 |
+| --- | --- |
+| `question-1.0.0` | 궁금한 점과 후속 질문의 구조화 (분야·의도·선택지·기간·사용자 사실) |
+| `reading-2.0.0` / `narration-2.0.0` | 작성 재료 2.0.0으로 만든 최초 풀이. 시작 → 궁금한 점에 대한 답(`focus`) → 주제별 설명 → 마무리 |
+| `reading-1.0.0` / `narration-1.0.0` | 작성 재료 1.0.0으로 만든 이전 풀이를 이어서 생성할 때만 |
+| `followup-2.0.0` / `followup-output-2.0.0` | 후속 질문. 소질문마다 답하거나 되묻기(`clarify`) |
+
+생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 프롬프트를 바꿀 때는 `prompts.ts`의 기존 항목을 고치지 않고 새 버전을 추가한다. 작업의 프롬프트 버전은 저장된 작성 재료의 버전(`PROMPTS_FOR_PLAN`)으로 고른다.
+
+## 호출 구조와 비용
+
+| 흐름 | 호출 |
+| --- | --- |
+| 최초 풀이, 궁금한 점 없음 | 풀이 1회 (검사 실패 시 +1) |
+| 최초 풀이, 궁금한 점 있음 | 질문 정리 1회 + 풀이 1회 (+1). 질문 정리 결과와 기간 재료는 `reading_analyses`에 저장해 재시도에서 다시 부르지 않는다 |
+| 후속 질문 | 질문 정리 1회 + 답변 1회 (+1). 범위 밖이면 질문 정리 1회로 끝난다 |
+| PDF, 다시 보기, 보관함 | 호출 없음 (저장된 결과만 사용) |
+
+말풍선마다 호출하지 않는다. 고전 자료 전체나 대화 전체를 보내지 않는다. 후속 질문에는 질문 주제의 이전 말풍선 최대 14개와 직전 대화 한 번만 보낸다.
+
+가상 사례 8개를 `gpt-5.6-luna`로 실행한 실측(2026-11-10, `npm run llm:compare`)은 `docs/READING_QUALITY.md`와 `docs/model-comparison/`에 있다.
 
 ## 공식 문서 확인 결과 (2026-11-09)
 
@@ -48,17 +73,15 @@ ChatGPT나 코딩 도구 구독은 API 사용 권한과 별개다.
 | `auth_failed` | 키 오류 | 설정 오류 |
 | `quota_exceeded` | 사용 한도 초과 | 실패 기록, 사용자가 재시도 가능 |
 | `rate_limited` | 요청 한도 | 자동 재시도 후 실패 기록 |
-| `timeout`, `connection`, `server_error` | 일시 오류 | 자동 재시도 후 실패 기록 |
+| `timeout`, `connection`, `server_error` | 일시 오류 | 남은 예산 안에서 자동 재시도 후 실패 기록 |
 | `refused`, `incomplete`, `empty_response`, `invalid_output` | 응답 이상 | 실패 기록 |
 | `validation_failed` | 앱의 내용 검사 실패 | 1회 재생성 후 실패 기록 |
 
-오류가 나도 다른 모델로 바꾸지 않는다. 결제는 유지되며 같은 주문으로 재시도한다.
+오류가 나도 다른 모델로 바꾸지 않는다. 결제는 유지되며 같은 주문으로 재시도한다. 후속 질문의 생성·저장 실패는 차감하지 않는다.
 
 ## 저장되는 정보
 
-풀이는 `generation_jobs`에 요청 모델, 응답의 실제 모델, 프롬프트 버전, 출력 형식 버전, 추론 설정, 토큰 사용량, 처리 시간, 호출 수를 남긴다. 상품·규칙 버전은 `readings`에 있다. 후속 질문은 답변마다 `followups`에 따로 남긴다.
-
-생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 프롬프트를 바꿀 때는 `prompts.ts`의 기존 항목을 고치지 않고 새 버전을 추가한다.
+풀이는 `generation_jobs`에 요청 모델, 응답의 실제 모델, 프롬프트 버전, 출력 형식 버전, 추론 설정, 토큰 사용량, 처리 시간, 호출 수, 그리고 `generation_meta`(작성 재료·규칙·상품·캐릭터 버전, 질문 분석 버전과 질문 수, 기간 분석 버전과 기간)를 남긴다. 후속 질문은 답변마다 `followups`에 모델·버전·사용량과 질문 분석 요약(`analysis`: 분야, 의도, 범위, 기간)을 남긴다. 서버 로그에는 풀이 ID, 버전, 호출 수, 처리 시간, 토큰 수만 남기고 출생정보, 질문 원문, 답변 원문, 키는 남기지 않는다.
 
 저장된 풀이는 모델을 바꿔도 다시 생성하거나 덮어쓰지 않는다.
 
@@ -67,8 +90,8 @@ ChatGPT나 코딩 도구 구독은 API 사용 권한과 별개다.
 코드 수정 없이 환경변수만 바꾼다.
 
 1. 권한 확인: `npm run llm:check -- gpt-6-luna`
-2. 비교 실행: `npm run llm:compare` (가상 사례 6개, 실제 비용 발생)
-3. `docs/model-comparison/<날짜>.md`의 본문을 읽고 체크리스트를 채운다.
+2. 비교 실행: `npm run llm:compare -- --models=gpt-5.6-luna,gpt-6-luna --date=<기준일>` (가상 사례 8개 × 모델 2개, 실제 비용 발생. `--cases=career-jobseeker,romance-mixed`로 일부만 실행 가능)
+3. `docs/model-comparison/<기준일>-<모델>.md`의 본문을 읽고 체크리스트를 채운다. 같은 기준일을 쓰면 기간 분석 재료가 같아 두 모델을 같은 조건으로 비교할 수 있다.
 4. 문제가 없으면 운영 환경의 `OPENAI_MODEL=gpt-6-luna`로 바꾸고 재배포한다.
 5. 문제가 생기면 `OPENAI_MODEL=gpt-5.6-luna`로 되돌리고 재배포한다.
 
