@@ -20,7 +20,12 @@ export type GrantOutcome = "granted" | "exists" | "not_eligible" | "closed" | "e
  * 오류는 던지지 않고 결과로 돌려준다. 지급 오류가 로그인을 망가뜨리지 않게 하고, 다음 조회에서 다시 시도한다.
  */
 export async function ensureFreeTicket(userId: string, mode: CheckoutMode = checkoutMode()): Promise<GrantOutcome> {
-  if (!grantsOpen(mode)) return "closed";
+  return (await grantFreeTicket(userId, mode)).outcome;
+}
+
+/** ensureFreeTicket과 같고, 지급 함수가 돌려준 이용권 행도 함께 돌려준다. */
+async function grantFreeTicket(userId: string, mode: CheckoutMode): Promise<{ outcome: GrantOutcome; ticket: TicketRow | null }> {
+  if (!grantsOpen(mode)) return { outcome: "closed", ticket: null };
   try {
     const { data, error } = await createSupabaseAdminClient().rpc("grant_free_ticket", {
       p_user_id: userId,
@@ -28,12 +33,13 @@ export async function ensureFreeTicket(userId: string, mode: CheckoutMode = chec
     });
     if (error) {
       console.error("[free-ticket] grant failed", { code: error.code ?? "unknown" });
-      return "error";
+      return { outcome: "error", ticket: null };
     }
-    return (data as { outcome: GrantOutcome }).outcome;
+    const result = data as { outcome: GrantOutcome; ticket?: TicketRow };
+    return { outcome: result.outcome, ticket: result.ticket ?? null };
   } catch (error) {
     console.error("[free-ticket] grant failed", { reason: error instanceof Error ? error.name : typeof error });
-    return "error";
+    return { outcome: "error", ticket: null };
   }
 }
 
@@ -136,9 +142,13 @@ export async function loadFreeTicket(supabase: SupabaseClient, userId: string): 
   const mode = checkoutMode();
   let ticket = await readTicket(supabase);
   if (!ticket) {
-    const outcome = await ensureFreeTicket(userId, mode);
-    if (outcome === "granted" || outcome === "exists") ticket = await readTicket(supabase);
-    if (!ticket) return { state: "none", reason: outcome === "not_eligible" ? "not_eligible" : outcome === "closed" ? "closed" : "error" };
+    // 같은 렌더링 안에서 같은 조회를 다시 보내면 Next가 앞의 결과(없음)를 재사용하므로, 지급 함수가 돌려준 행을 쓴다.
+    const granted = await grantFreeTicket(userId, mode);
+    ticket = granted.ticket;
+    if (!ticket) {
+      const reason = granted.outcome === "not_eligible" ? "not_eligible" : granted.outcome === "closed" ? "closed" : "error";
+      return { state: "none", reason };
+    }
   }
   if (ticket.status === "available" || !ticket.reading_id) return { state: "available" };
   if (ticket.status === "completed") return { state: "completed", readingId: ticket.reading_id };
