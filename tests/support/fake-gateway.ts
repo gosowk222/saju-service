@@ -23,7 +23,15 @@ const control = {
   /** 스트리밍 응답에서 글자 묶음 사이의 간격. 주제별로 먼저 보이는지 확인할 때 늘린다. */
   streamDelayMs: 10,
 };
-const stats = { openaiCalls: 0, tossConfirms: 0, lastOpenaiBody: null as unknown, openaiModels: [] as string[] };
+const stats = {
+  openaiCalls: 0,
+  /** 최초 풀이 호출 수와 마지막 입력. 이어 쓰기(alreadySent)를 확인할 때 쓴다. */
+  narrationCalls: 0,
+  lastNarrationInput: null as unknown,
+  tossConfirms: 0,
+  lastOpenaiBody: null as unknown,
+  openaiModels: [] as string[],
+};
 const codes = new Map<string, User>();
 const refreshTokens = new Map<string, User>();
 const payments = new Map<string, { orderId: string; amount: number }>();
@@ -117,6 +125,7 @@ function fixtureQuestion(input: { text: string }) {
 }
 
 type NarrationV2Input = {
+  alreadySent?: { opening: string | null; focus: string[]; topics: { topicId: string }[] } | null;
   nickname: string;
   facts: { ref: string }[];
   questions: { ref: string; summary: string; timingId: string | null }[];
@@ -127,15 +136,18 @@ type NarrationV2Input = {
 /** 2.0.0 풀이 테스트 응답. 질문마다 답을 두고 주제마다 3개 이상 설명을 둔다. */
 function fixtureNarrationV2(input: NarrationV2Input) {
   const firstRef = input.topics.find((topic) => topic.statements.length)?.statements[0]?.ref ?? input.facts[0]!.ref;
+  // 이어 쓰기: 이미 보낸 부분은 비워 두고 나머지만 쓴다 (reading-2.4.0의 규칙).
+  const sent = input.alreadySent;
+  const sentTopics = new Set(sent?.topics.map((topic) => topic.topicId) ?? []);
   return {
-    opening: `[테스트 응답] 안녕하세요, ${input.nickname} 님.`,
-    focus: input.questions.flatMap((question) => {
+    opening: sent?.opening ? "" : `[테스트 응답] 안녕하세요, ${input.nickname} 님.`,
+    focus: sent?.focus.length ? [] : input.questions.flatMap((question) => {
       const ref = input.timing.find((entry) => entry.id === question.timingId)?.months[0]?.ref ?? firstRef;
       return [1, 2].map((index) => ({ kind: "explanation", refs: [question.ref, ref], text: `[테스트 응답] "${question.summary}"에 대한 ${index}번째 답이에요.` }));
     }),
     topics: input.topics.map((topic) => ({
       topicId: topic.topicId,
-      bubbles: Array.from({ length: Math.max(topic.target, 3) }, (_, index) => ({
+      bubbles: Array.from({ length: sentTopics.has(topic.topicId) ? 0 : Math.max(topic.target, 3) }, (_, index) => ({
         kind: "explanation",
         refs: [topic.statements[index % Math.max(topic.statements.length, 1)]?.ref ?? input.facts[0]!.ref],
         text:
@@ -165,16 +177,29 @@ function openaiResponse(text: string, model: string) {
  * 스트리밍 응답(SSE). 실제 서버처럼 글자를 조금씩 나눠 보내 주제가 완성될 때마다 먼저 저장되는 흐름을 확인한다.
  * 이벤트 형식은 Responses API의 response.output_text.delta, response.completed를 따른다.
  */
+/** 지금 흘려보내는 스트리밍 응답. 멈춰 세우면(frozen) 연결은 둔 채 더 보내지 않는다. 서버 요청이 멈춘 상황을 흉내 낼 때 쓴다. */
+const activeStreams = new Set<{ frozen: boolean }>();
+
 async function sendStream(res: ServerResponse, text: string, model: string) {
+  const handle = { frozen: false };
+  activeStreams.add(handle);
+  res.on("close", () => activeStreams.delete(handle));
   res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+  // 앱이 생성을 끊으면(검사 실패, 다른 요청이 이어받음) 더 보내지 않는다.
+  let closed = false;
+  res.on("close", () => (closed = true));
+  res.on("error", () => (closed = true));
   let sequence = 0;
-  const write = (event: Record<string, unknown>) => res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify({ ...event, sequence_number: sequence++ })}\n\n`);
+  const write = (event: Record<string, unknown>) => !closed && res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify({ ...event, sequence_number: sequence++ })}\n\n`);
   write({ type: "response.created", response: { ...openaiResponse("", model), status: "in_progress", output: [] } });
   const size = 160;
-  for (let index = 0; index < text.length; index += size) {
+  for (let index = 0; index < text.length && !closed; index += size) {
+    while (handle.frozen && !closed) await new Promise((resolve) => setTimeout(resolve, 100));
+    if (closed) return;
     write({ type: "response.output_text.delta", item_id: "m", output_index: 0, content_index: 0, delta: text.slice(index, index + size), logprobs: [] });
     await new Promise((resolve) => setTimeout(resolve, control.streamDelayMs));
   }
+  if (closed) return;
   write({ type: "response.completed", response: openaiResponse(text, model) });
   res.end();
 }
@@ -197,6 +222,8 @@ function handleOpenai(body: { model: string; input: string; stream?: boolean; te
     return send(res, 200, openaiResponse(JSON.stringify(fixtureQuestion(input as { text: string })), body.model));
   }
   if (schema === "saju_narration_v2") {
+    stats.narrationCalls += 1;
+    stats.lastNarrationInput = input;
     const text = JSON.stringify(fixtureNarrationV2(input as unknown as NarrationV2Input));
     if (body.stream) return void sendStream(res, text, body.model);
     return send(res, 200, openaiResponse(text, body.model));
@@ -370,6 +397,16 @@ async function main() {
       return send(res, 200, control);
     }
     if (pathname === "/__state") return send(res, 200, stats);
+    // 서버 요청이 중간에 멈춘 상황을 흉내 낸다: 생성 작업의 점유 시간을 지난 것으로 바꿔 다음 요청이 이어받게 한다.
+    if (pathname === "/__freeze_streams") {
+      for (const handle of activeStreams) handle.frozen = true;
+      return send(res, 200, { frozen: activeStreams.size });
+    }
+    if (pathname === "/__expire_generation") {
+      const readingId = (body as unknown as { readingId: string }).readingId;
+      await db.run("service_role", null, "update public.generation_jobs set lease_until = now() - interval '1 second' where reading_id = $1", [readingId]);
+      return send(res, 200, { ok: true });
+    }
     if (pathname === "/__expire") {
       refreshTokens.clear();
       return send(res, 200, { ok: true });
