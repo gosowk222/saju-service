@@ -322,6 +322,9 @@ function handleToss(pathname: string, body: { paymentKey: string; orderId: strin
 async function main() {
   const db = await createTestDb();
   await db.addUser(control.loginUser.id);
+  // 실제 기본값은 '관리자만'이다. 브라우저 테스트는 일반 회원 흐름이 대부분이라 '모든 회원'으로 시작하고,
+  // 관리자 설정 테스트(admin.spec.ts)가 바꾼 뒤 되돌린다.
+  await db.pg.query(`update public.app_settings set value = 'true'::jsonb where key = 'readings_open_to_all'`);
 
   /** 사용자와 연결된 로그인 수단을 데이터베이스(auth.identities)와 Auth 응답에 함께 등록한다. */
   async function register(user: User) {

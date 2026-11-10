@@ -174,7 +174,7 @@ test("브라우저 권한으로 데이터베이스를 직접 조작할 수 없�
     ["restore_free_ticket", { p_ticket_id: randomUUID(), p_reason: "x" }],
     [
       "redeem_free_ticket",
-      { p_user_id: userId, p_reading_id: randomUUID(), p_request_id: randomUUID(), p_campaign_id: "free-trial-2026-11", p_product_id: "first-overview", p_product_version: "1", p_question_limit: 99, p_binding: {} },
+      { p_user_id: userId, p_reading_id: randomUUID(), p_request_id: randomUUID(), p_product_id: "first-overview", p_product_version: "1", p_question_limit: 99, p_binding: {} },
     ],
   ] as const) {
     expect((await request.post(`${GATEWAY}/rest/v1/rpc/${fn}`, { headers, data })).status(), fn).toBe(403);
