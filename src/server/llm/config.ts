@@ -75,12 +75,17 @@ function isOpenAiHost(url: string): boolean {
   }
 }
 
+/** Claude Code가 띄운 프로세스에 들어가는 환경 변수. 사용자가 직접 연 터미널에는 없다. */
+const AGENT_MARKERS = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"] as const;
+
 /**
  * 실제 OpenAI 서버로 가는 호출을 막아야 하는 이유. 막지 않으면 null.
  *
- * 실제 호출은 Next 서버(사용자가 직접 여는 개발 서버나 배포 서버) 안에서만 허용한다. 개발 스크립트(llm:compare, llm:check)와
- * 테스트는 Next 밖에서 실행되므로 OPENAI_BASE_URL로 가짜 서버를 가리킬 때만 호출할 수 있다. 비용은 사용자가 내기 때문이다.
- * Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을 "nodejs"로 바꿔 넣으므로 이 표현을 그대로 둔다.
+ * 실제 호출은 사용자가 직접 연 Next 서버(개발 서버나 배포 서버) 안에서만 허용한다. 비용은 사용자가 내기 때문이다.
+ * - 개발 스크립트(llm:compare, llm:check)와 테스트는 Next 밖에서 실행되므로 OPENAI_BASE_URL로 가짜 서버를 가리킬 때만 호출한다.
+ * - Claude Code가 띄운 프로세스(스크립트, 빌드, 테스트 서버, 개발 서버)는 Next 서버라도 실제 OpenAI를 부르지 않는다.
+ * 환경 변수는 `env` 객체로 읽어 실행할 때의 값을 본다. Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을
+ * "nodejs"로 바꿔 넣으므로 이 표현을 그대로 둔다.
  */
 export function liveCallBlockReason(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -88,6 +93,9 @@ export function liveCallBlockReason(
 ): string | null {
   const base = env.OPENAI_BASE_URL?.trim();
   if (base && !isOpenAiHost(base)) return null;
+  if (AGENT_MARKERS.some((name) => env[name])) {
+    return "Claude Code가 실행한 프로세스에서는 실제 OpenAI를 호출하지 않습니다. 사용자가 직접 연 터미널의 개발 서버에서만 호출합니다.";
+  }
   if (runtime) return null;
   return "실제 OpenAI 호출은 직접 연 개발 서버(npm run dev)나 배포 서버 안에서만 할 수 있습니다.";
 }

@@ -190,6 +190,16 @@ describe("실제 API 호출 제한", () => {
     expect(liveCallBlockReason({}, "nodejs")).toBeNull();
   });
 
+  it("Claude Code가 띄운 프로세스는 Next 서버라도 실제 OpenAI를 부르지 않는다", () => {
+    expect(liveCallBlockReason({ CLAUDECODE: "1" }, "nodejs")).toContain("Claude Code");
+    expect(liveCallBlockReason({ CLAUDE_CODE_ENTRYPOINT: "claude-vscode" }, "nodejs")).toContain("Claude Code");
+    expect(liveCallBlockReason({ CLAUDECODE: "1", OPENAI_BASE_URL: "https://api.openai.com/v1" }, "nodejs")).toContain(
+      "Claude Code",
+    );
+    // 가짜 서버(브라우저 테스트)는 그대로 쓸 수 있다.
+    expect(liveCallBlockReason({ CLAUDECODE: "1", OPENAI_BASE_URL: "http://127.0.0.1:54399/openai/v1" }, "nodejs")).toBeNull();
+  });
+
   it("막힌 호출은 요청을 보내지 않고 설정 오류로 끝난다", async () => {
     const base = process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_BASE_URL;
