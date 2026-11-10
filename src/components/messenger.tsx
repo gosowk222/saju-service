@@ -329,11 +329,14 @@ export function Messenger({ readingId, personaName, personaSubject, personaFace,
           <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-5" role="alert">
             <p className="type-title text-gray-900">풀이를 만들지 못했어요</p>
             <p className="type-body text-gray-700">
-              {ERROR_TEXT[state.errorCode ?? ""] ?? "일시적인 문제가 생겼어요."} 결제는 그대로 유지되니 다시 결제할 필요가 없어요.
+              {ERROR_TEXT[state.errorCode ?? ""] ?? "일시적인 문제가 생겼어요."}{" "}
+              {state.source === "free_ticket"
+                ? "무료 이용권은 이 풀이에 그대로 남아 있어서 다시 시도해도 추가로 차감되지 않아요."
+                : "결제는 그대로 유지되니 다시 결제할 필요가 없어요."}
             </p>
             {state.canRetry ? (
               <Button size="lg" disabled={starting} onClick={() => startGeneration(true)}>
-                {starting ? "다시 만드는 중이에요" : "다시 시도하기"}
+                {starting ? "다시 만드는 중이에요" : state.source === "free_ticket" ? "추가 차감 없이 다시 시도하기" : "다시 시도하기"}
               </Button>
             ) : null}
           </div>

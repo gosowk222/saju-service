@@ -46,6 +46,9 @@ export async function createOrder(userId: string, readingId: string): Promise<Or
   if (error) {
     if (error.message.includes("already_paid")) throw new ApiError(409, "already_paid", "이미 구매한 풀이예요.");
     if (error.message.includes("not_found")) throw new ApiError(404, "not_found", "풀이를 찾을 수 없어요.");
+    if (error.message.includes("reading_closed")) {
+      throw new ApiError(409, "reading_closed", "이 풀이는 다시 시작할 수 없어요. 입력 수정에서 새로 만들어 주세요.");
+    }
     throw new ApiError(500, "order_failed", "주문을 만들지 못했어요.");
   }
   return data as OrderRow;

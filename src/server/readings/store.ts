@@ -59,7 +59,8 @@ export interface OrderRow {
 
 export interface JobRow {
   readonly reading_id: string;
-  readonly status: "queued" | "running" | "completed" | "failed";
+  /** cancelled: 무료 이용권을 반환하며 닫은 작업. 권한도 함께 사라진다. */
+  readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
   readonly attempts: number;
   readonly lease_until: string | null;
   readonly model_id: string | null;
@@ -70,9 +71,14 @@ export interface JobRow {
   readonly error_retryable: boolean | null;
 }
 
+/** 이용 권한의 출처: 검증된 결제 또는 가입 무료 이용권. */
+export type EntitlementSource = "payment" | "free_ticket";
+
 export interface EntitlementRow {
   readonly reading_id: string;
-  readonly order_id: string;
+  readonly source: EntitlementSource;
+  readonly order_id: string | null;
+  readonly ticket_id: string | null;
   readonly question_limit: number;
   readonly created_at: string;
 }
@@ -143,6 +149,8 @@ export type GenerationStatus = "queued" | "running" | "completed" | "failed";
 /** 브라우저로 보내는 풀이 상태. 내부 근거 ID는 포함하지 않는다. */
 export interface ReadingStateView {
   readonly status: GenerationStatus;
+  /** 실패 안내 문구를 고르는 데만 쓴다. 권한 판단에는 쓰지 않는다. */
+  readonly source: EntitlementSource;
   readonly errorCode: string | null;
   readonly canRetry: boolean;
   readonly messages: readonly { seq: number; topicId: string | null; kind: StoredMessage["kind"]; text: string }[];
@@ -155,7 +163,7 @@ export const USER_RETRY_LIMIT = 4;
 
 export async function loadReadingState(supabase: Db, readingId: string): Promise<ReadingStateView | null> {
   const [entitlement, job] = await Promise.all([getEntitlement(supabase, readingId), getJob(supabase, readingId)]);
-  if (!entitlement || !job) return null;
+  if (!entitlement || !job || job.status === "cancelled") return null;
   const leaseExpired = job.status === "running" && (!job.lease_until || new Date(job.lease_until) < new Date());
   const status: GenerationStatus = leaseExpired ? "queued" : job.status;
 
@@ -168,6 +176,7 @@ export async function loadReadingState(supabase: Db, readingId: string): Promise
 
   return {
     status,
+    source: entitlement.source,
     errorCode: job.error_code,
     canRetry: status === "failed" && job.attempts < USER_RETRY_LIMIT,
     messages: messages.map(({ seq, topicId, kind, text }) => ({ seq, topicId, kind, text })),

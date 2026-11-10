@@ -10,7 +10,7 @@ import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
-import type { JobRow, ReadingRow } from "@/server/readings/store";
+import type { EntitlementSource, JobRow, ReadingRow } from "@/server/readings/store";
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
@@ -27,10 +27,10 @@ async function LibraryList() {
   const supabase = await createSupabaseServerClient();
   const { data: entitlements } = await supabase
     .from("entitlements")
-    .select("reading_id, created_at")
+    .select("reading_id, source, created_at")
     .order("created_at", { ascending: false });
 
-  const rows = (entitlements ?? []) as { reading_id: string; created_at: string }[];
+  const rows = (entitlements ?? []) as { reading_id: string; source: EntitlementSource; created_at: string }[];
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -64,7 +64,7 @@ async function LibraryList() {
             >
               {product ? <ProductThumb product={product} /> : <GlyphAvatar glyph={persona?.avatarGlyph ?? "사"} large />}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <StatusBadgeRow job={jobById.get(row.reading_id)} name={persona?.name} />
+                <StatusBadgeRow job={jobById.get(row.reading_id)} name={persona?.name} free={row.source === "free_ticket"} />
                 <span className="truncate type-label font-semibold">{product?.name ?? "사주 풀이"}</span>
                 <span className="truncate type-caption text-gray-600">
                   {reading.nickname} 님 · {formatDate(row.created_at)}
@@ -79,10 +79,11 @@ async function LibraryList() {
   );
 }
 
-function StatusBadgeRow({ job, name }: { job: JobRow | undefined; name?: string }) {
+function StatusBadgeRow({ job, name, free }: { job: JobRow | undefined; name?: string; free: boolean }) {
   return (
     <div className="flex items-center gap-2">
       <StatusBadge job={job} />
+      {free ? <Badge tone="success">무료 이용권</Badge> : null}
       {name ? <span className="type-caption-sm text-gray-600">{name}</span> : null}
     </div>
   );

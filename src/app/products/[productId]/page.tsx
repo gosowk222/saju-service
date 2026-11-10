@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { ProductHero } from "@/components/product-card";
 import { RichText } from "@/components/rich-text";
@@ -7,6 +8,7 @@ import { Badge, Card, PageHeader, PersonaAvatar } from "@/components/ui/layout";
 import { SkeletonBlock, SkeletonScreen } from "@/components/ui/skeleton";
 import { findPersona } from "@/domain/personas";
 import { findProduct, formatPrice } from "@/domain/products";
+import { checkoutMode, FREE_TRIAL, grantsOpen } from "@/server/checkout/mode";
 
 async function ProductDetail({ params }: { params: Promise<{ productId: string }> }) {
   const { productId } = await params;
@@ -95,12 +97,31 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
         </div>
       </main>
       <div className="sticky bottom-0 flex items-center gap-4 border-t border-gray-200 bg-white px-5 py-4 pb-safe">
-        <span className="type-title type-price">{formatPrice(product.priceKrw)}</span>
+        <Suspense fallback={<span className="type-title type-price">{formatPrice(product.priceKrw)}</span>}>
+          <PriceLabel productId={product.id} priceKrw={product.priceKrw} />
+        </Suspense>
         <LinkButton href={`/readings/new?product=${product.id}`} size="lg" className="flex-1">
           내 사주 입력하기
         </LinkButton>
       </div>
     </>
+  );
+}
+
+/**
+ * 가격 자리. 무료 테스트 모드에서는 정가에 취소선을 긋고 무료 이용권으로 받을 수 있다고 알린다.
+ * 상품의 가격 설정은 바꾸지 않는다. 모드는 요청 시점의 서버 설정으로 정한다.
+ */
+async function PriceLabel({ productId, priceKrw }: { productId: string; priceKrw: number }) {
+  await connection();
+  if (!grantsOpen(checkoutMode()) || !FREE_TRIAL.productIds.includes(productId)) {
+    return <span className="type-title type-price">{formatPrice(priceKrw)}</span>;
+  }
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <Badge tone="success">무료 이용권 1장</Badge>
+      <span className="type-caption font-normal text-gray-500 line-through">{formatPrice(priceKrw)}</span>
+    </span>
   );
 }
 
