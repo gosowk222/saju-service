@@ -1,6 +1,6 @@
 import { LinkButton } from "@/components/ui/button";
 
-/** 스플래시. 이미 로그인한 사용자는 proxy에서 홈으로 보낸다. */
+/** 스플래시. 시작하면 로그인 없이 홈(메인 화면)으로 간다. 이미 로그인한 사용자는 proxy에서 바로 홈으로 보낸다. */
 export default function SplashPage() {
   return (
     <main className="flex flex-1 flex-col gap-5 p-5">
@@ -16,7 +16,7 @@ export default function SplashPage() {
           <p className="type-body text-on-image-muted">어려운 한자 없이, 상담사가 내 사주를 차근차근 설명해 드려요.</p>
         </div>
       </div>
-      <LinkButton href="/login" size="lg">
+      <LinkButton href="/home" size="lg">
         시작하기
       </LinkButton>
     </main>

@@ -6,12 +6,11 @@ test.beforeEach(async ({ request }) => {
   await setControl(request, { openai: "ok", tossFail: null, loginError: null });
 });
 
-test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async ({ page, request }) => {
+test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 이용한다", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /나를 읽는 시간/ })).toBeVisible();
   await page.getByRole("link", { name: "시작하기" }).click();
-  await expect(page).toHaveURL(/\/login/);
-  await login(page, request);
+  await expect(page).toHaveURL(/\/home$/);
 
   await expect(page.getByRole("heading", { name: /나를 읽어 볼까요/ })).toBeVisible();
   await page.getByRole("link", { name: /묘묘의 사주 참견/ }).first().click();
@@ -22,8 +21,11 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await expect(page.locator("strong", { hasText: "결론부터 들이미는 게 문제야" })).toBeVisible();
   await expect(page.getByText("입은 얄밉고, 풀이는 집요한 자칭 천재 사주꾼.")).toBeVisible();
 
+  // 로그인하지 않았으면 로그인 화면을 거쳐 사주 입력 화면으로 이어진다.
   await page.getByRole("link", { name: "내 사주 입력하기" }).click();
-  await page.waitForURL("**/readings/new*");
+  await expect(page).toHaveURL(/\/login\?next=/);
+  await login(page, request, { next: "/readings/new?product=first-overview" });
+  await page.waitForURL("**/readings/new?product=first-overview");
   await fillWizard(page, { concern: "이직이 고민이에요" });
   await expect(page.getByText("1998년 9월 19일")).toBeVisible();
   await page.getByRole("button", { name: "내 사주 보기" }).click();

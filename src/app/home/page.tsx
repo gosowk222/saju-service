@@ -5,10 +5,11 @@ import { LinkButton } from "@/components/ui/button";
 import { Card, Screen } from "@/components/ui/layout";
 import { DEFAULT_PRODUCT_ID, findProduct, PRODUCTS } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requirePageUser } from "@/server/auth";
+import { getVerifiedUser } from "@/server/auth";
 
+/** 로그인한 사용자에게만 작성 중인 입력을 이어서 하도록 보여 준다. 홈은 로그인 없이 볼 수 있다. */
 async function ContinueBanner() {
-  await requirePageUser("/home");
+  if (!(await getVerifiedUser())) return null;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("reading_drafts")
@@ -41,8 +42,8 @@ export default function HomePage() {
         <section className="flex flex-col gap-4">
           <h2 className="type-title">풀이 고르기</h2>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
-            {PRODUCTS.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {PRODUCTS.map((product, index) => (
+              <ProductCard key={product.id} product={product} order={index} />
             ))}
           </div>
         </section>

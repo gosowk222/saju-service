@@ -4,8 +4,12 @@ import { DEFAULT_AFTER_LOGIN } from "@/domain/auth/safe-next";
 import { requestOrigin } from "@/lib/request-origin";
 import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/env";
 
-/** 로그인이 필요한 화면. API는 각 라우트에서 직접 확인해 401을 돌려준다. */
-const PROTECTED_PREFIXES = ["/home", "/readings", "/checkout", "/library", "/my"];
+/**
+ * 로그인이 필요한 화면. 홈과 상품 목록·상세는 로그인 없이 볼 수 있다.
+ * 로그인하지 않은 채 이 화면을 열면(보관함, 마이, 사주 입력 등) 로그인 화면으로 보내고, 로그인 뒤 그 화면으로 돌아온다.
+ * API는 각 라우트에서 직접 확인해 401을 돌려준다.
+ */
+const PROTECTED_PREFIXES = ["/readings", "/checkout", "/library", "/my"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
