@@ -117,10 +117,16 @@ function fixtureNarration(input: { nickname: string; topics: { topicId: string; 
 /** 질문 정리 테스트 응답. 날씨·코드 질문은 범위 밖, 나머지는 원문을 그대로 요약으로 쓴다. */
 function fixtureQuestion(input: { text: string }) {
   const outside = /날씨|코드/.test(input.text);
+  // 질문 없이 칭찬이나 허세 지적만 보내면 반응만 돌려준다 (question-1.3.0).
+  const reaction = /맞췄|소름|대박/.test(input.text) ? "praise" : /허세|잘난 척/.test(input.text) ? "tease" : "none";
+  const onlyReaction = reaction !== "none" && !/[?？]|알려|어때|언제/.test(input.text);
   return {
-    items: [{ summary: input.text, domain: outside ? "non-saju" : "general", intent: "general", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] }],
+    items: onlyReaction
+      ? []
+      : [{ summary: input.text, domain: outside ? "non-saju" : "general", intent: "general", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] }],
     userFacts: [],
     needsClarification: false,
+    reaction,
   };
 }
 
@@ -231,23 +237,23 @@ function handleOpenai(body: { model: string; input: string; stream?: boolean; te
   if (schema === "saju_followup_v2") {
     if (mode === "followup-error") return send(res, 400, { error: { message: "fail" } });
     const questions = input.questions as { ref: string; summary: string }[];
-    return send(
-      res,
-      200,
-      openaiResponse(
-        JSON.stringify({
-          mode: "answer",
-          clarifyQuestion: "",
-          // 빈 줄로 나눈 문단은 화면에서 말풍선 하나씩으로 보인다.
-          sections: questions.map((question) => ({
-            questionRef: question.ref,
-            text: `[테스트 응답] "${question.summary}"에 대한 답변이에요.\n\n[테스트 응답] **두 번째 문단**은 다음 말풍선이에요.`,
-            refs: [],
-          })),
-        }),
-        body.model,
-      ),
-    );
+    // followup-output-2.1.0의 속성 순서(mode → sections[questionRef, refs, text] → clarifyQuestion)대로 쓴다.
+    // 빈 줄로 나눈 문단은 화면에서 말풍선 하나씩으로 보인다.
+    const text = JSON.stringify({
+      mode: "answer",
+      sections: questions.map((question) => ({
+        questionRef: question.ref,
+        refs: [],
+        text: [
+          `[테스트 응답] "${question.summary}"에 대한 답변이에요.`,
+          "[테스트 응답] **두 번째 문단**은 다음 말풍선이에요.",
+          "[테스트 응답] 세 번째 문단까지 차례로 보여요.",
+        ].join("\n\n"),
+      })),
+      clarifyQuestion: "",
+    });
+    if (body.stream) return void sendStream(res, text, body.model);
+    return send(res, 200, openaiResponse(text, body.model));
   }
   // 이전 형식(1.0.0) 응답. 이전 계획으로 시작된 작업을 확인할 때 쓴다.
   if ("question" in input) {
@@ -357,6 +363,34 @@ async function main() {
     }
   }
 
+  /** 서버 권한으로 행을 고친다 (후속 답변을 문단마다 먼저 저장). eq 조건만 지원하고, 고친 행을 돌려준다. */
+  async function handleUpdate(table: string, url: URL, body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse) {
+    const { role, userId } = identify(req);
+    const params: unknown[] = [];
+    const sets = Object.entries(body).map(([column, value]) => {
+      params.push(value !== null && typeof value === "object" ? JSON.stringify(value) : value);
+      return `${column} = $${params.length}`;
+    });
+    const clauses: string[] = [];
+    for (const [key, value] of url.searchParams) {
+      if (!value.startsWith("eq.")) continue;
+      params.push(value.slice(3));
+      clauses.push(`${key}::text = $${params.length}`);
+    }
+    try {
+      const rows = await db.run<Record<string, unknown>>(
+        role,
+        userId,
+        `update public.${table} set ${sets.join(", ")}${clauses.length ? ` where ${clauses.join(" and ")}` : ""} returning *`,
+        params,
+      );
+      return send(res, 200, rows);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return send(res, message.includes("permission denied") ? 403 : 400, { message });
+    }
+  }
+
   /** 서버 권한으로 행을 넣는다 (생성 중 완성된 주제의 메시지 저장). Prefer: return=minimal처럼 빈 본문으로 답한다. */
   async function handleInsert(table: string, body: unknown, req: IncomingMessage, res: ServerResponse) {
     const { role, userId } = identify(req);
@@ -447,6 +481,7 @@ async function main() {
     if (pathname === "/auth/v1/logout") return send(res, 204, undefined);
 
     if (pathname.startsWith("/rest/v1/rpc/")) return handleRpc(pathname.split("/").pop()!, body, req, res);
+    if (pathname.startsWith("/rest/v1/") && req.method === "PATCH") return handleUpdate(pathname.split("/").pop()!, url, body, req, res);
     if (pathname.startsWith("/rest/v1/") && req.method === "POST") return handleInsert(pathname.split("/").pop()!, JSON.parse(raw || "[]"), req, res);
     if (pathname.startsWith("/rest/v1/")) return handleSelect(pathname.split("/").pop()!, url, req, res);
 
