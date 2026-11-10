@@ -90,7 +90,8 @@ describe("모델 없이 보내는 묘묘의 문장", () => {
     expect(praise).toMatch(/흐|어라|흥/);
     expect(MYOMYO.lines.reaction("tease", "허세 좀 그만 부려")).toMatch(/허세/);
     expect(MYOMYO.lines.reaction("doubt", "틀린 것 같은데")).toMatch(/정정|근거/);
-    for (const kind of ["praise", "tease", "doubt"] as const) expect(MYOMYO.lines.reaction(kind, "아무 말")).toContain("횟수에서 안 뺐어");
+    expect(MYOMYO.lines.reactionFree).toContain("횟수에서 안 뺐어");
+    expect(MYOMYO.lines.reactionCharged).toContain("질문 1회로 셌어");
   });
 
   it("상품 화면 예시 대화도 묘묘 말투다", () => {

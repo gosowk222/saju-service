@@ -104,6 +104,11 @@ export interface ProductDefinition {
   readonly priceKrw: number;
   readonly orderName: string;
   readonly followupLimit: number;
+  /**
+   * 질문 없이 반응(칭찬·놀림·의심)만 보낸 메시지를 차감 없이 받아 주는 횟수 (풀이마다).
+   * 넘으면 캐릭터가 같은 반응 문장으로 답하되 질문 1회로 센다.
+   */
+  readonly freeReactions: number;
   readonly archive: boolean;
   readonly pdf: boolean;
   readonly personaId: string;

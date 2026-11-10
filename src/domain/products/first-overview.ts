@@ -14,6 +14,7 @@ export const FIRST_OVERVIEW: ProductDefinition = {
   priceKrw: 990,
   orderName: "나를 읽는 짧은 사주",
   followupLimit: 3,
+  freeReactions: 1,
   archive: true,
   pdf: true,
   personaId: "myomyo",

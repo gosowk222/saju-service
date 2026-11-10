@@ -13,7 +13,7 @@ import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
 import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
-import { answerAnalyzedFollowup, routeWithoutItems, type FollowupStatus } from "./followup-core";
+import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems, type FollowupStatus } from "./followup-core";
 
 export type { FollowupStatus };
 
@@ -132,7 +132,13 @@ export async function askFollowup(input: {
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
     const items = inScopeItems(analysis);
     if (!items.length) {
-      result = { ...routeWithoutItems(product, persona, analysis, question), refs: [] };
+      // 반응만 보낸 메시지는 이 풀이에서 앞서 몇 번 보냈는지 센다 (무료 횟수를 넘으면 차감).
+      let earlierReactions = 0;
+      if (isReactionOnly(analysis)) {
+        const { data: earlier } = await admin.from("followups").select("analysis").eq("reading_id", readingId).in("status", ["clarify", "answered"]);
+        earlierReactions = ((earlier ?? []) as { analysis: { reaction?: string; items: unknown[] } | null }[]).filter((row) => isReactionOnly(row.analysis)).length;
+      }
+      result = { ...routeWithoutItems(product, persona, analysis, question, earlierReactions), refs: [] };
     } else {
       const { timing } = await timingFor({ admin, readingId, birth: reading.data.birth_input as PublicBirthInput, items, referenceDate });
       const initialAnalysis = isPlanV2(plan) ? await loadAnalysis<QuestionAnalysis>(admin, readingId, INITIAL_QUESTION_KEY) : null;

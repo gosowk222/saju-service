@@ -17,19 +17,31 @@ function baseContext(plan: AnyReadingPlan): UserContextStatement[] {
   return plan.userContext.filter((item) => item.source !== "concern");
 }
 
+/** 질문 없이 반응(칭찬·놀림·의심)만 보낸 메시지인지. 저장된 분석 기록(followups.analysis)에도 쓴다. */
+export function isReactionOnly(analysis: { readonly reaction?: string; readonly items: readonly unknown[] } | null | undefined): boolean {
+  return Boolean(analysis && analysis.reaction && analysis.reaction !== "none" && analysis.items.length === 0);
+}
+
 /**
- * 질문이 범위 안 질문을 하나도 갖지 않을 때의 처리. 둘 다 횟수를 차감하지 않는다.
- * 모델 없이 보내는 문장이라 풀이를 맡은 캐릭터의 고정 문장(persona.lines)을 쓴다.
+ * 질문이 범위 안 질문을 하나도 갖지 않을 때의 처리. 모델 없이 보내는 문장이라 풀이를 맡은 캐릭터의 고정 문장(persona.lines)을 쓴다.
+ * 범위 밖 안내와 되묻기는 차감하지 않는다. 반응만 보낸 메시지는 상품의 무료 횟수(earlierReactions가 그보다 적을 때)까지만
+ * 차감하지 않고, 넘으면 같은 반응 문장으로 답하되 질문 1회로 센다 (answered).
  */
 export function routeWithoutItems(
   product: ProductDefinition,
   persona: Persona,
   analysis: QuestionAnalysis,
   question = "",
+  earlierReactions = 0,
 ): { status: FollowupStatus; answer: string } {
-  // 질문 없이 칭찬·놀림·의심만 보낸 메시지는 캐릭터가 받아친다. 답을 만든 게 아니라 차감하지 않는다.
   const reaction = reactionOf(analysis);
-  if (reaction !== "none" && !excludedItems(analysis).length) return { status: "clarify", answer: persona.lines.reaction(reaction, question) };
+  if (reaction !== "none" && isReactionOnly(analysis)) {
+    const charged = earlierReactions >= product.freeReactions;
+    const line = persona.lines.reaction(reaction, question);
+    return charged
+      ? { status: "answered", answer: `${line}\n\n${persona.lines.reactionCharged}` }
+      : { status: "clarify", answer: `${line}\n\n${persona.lines.reactionFree}` };
+  }
   const clarify = analysis.needsClarification && !excludedItems(analysis).length;
   return clarify
     ? { status: "clarify", answer: persona.lines.clarify }

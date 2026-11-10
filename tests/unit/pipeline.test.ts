@@ -12,7 +12,7 @@ import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
 import { CURRENT_READING_PROMPT, isPlanV2Prompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
-import { answerAnalyzedFollowup, routeWithoutItems } from "@/server/readings/followup-core";
+import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
 
 /**
@@ -322,14 +322,23 @@ describe("후속 질문 답변 조립", () => {
     expect(routeWithoutItems(FIRST_OVERVIEW, persona, vague).status).toBe("clarify");
   });
 
-  it("질문 없이 칭찬이나 허세 지적만 보내면 캐릭터가 받아치고 차감하지 않는다", () => {
+  it("질문 없이 반응만 보내면 캐릭터가 받아치고, 풀이마다 처음 한 번만 차감하지 않는다", () => {
+    expect(FIRST_OVERVIEW.freeReactions).toBe(1);
     const praise = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: false, reaction: "praise" });
-    expect(routeWithoutItems(FIRST_OVERVIEW, persona, praise, "소름 돋게 맞췄네")).toEqual({
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, praise, "소름 돋게 맞췄네", 0)).toEqual({
       status: "clarify",
-      answer: persona.lines.reaction("praise", "소름 돋게 맞췄네"),
+      answer: `${persona.lines.reaction("praise", "소름 돋게 맞췄네")}\n\n${persona.lines.reactionFree}`,
     });
+    // 두 번째부터는 같은 반응 문장으로 답하되 질문 1회로 센다 (answered는 complete_followup에서 차감된다).
     const tease = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: true, reaction: "tease" });
-    expect(routeWithoutItems(FIRST_OVERVIEW, persona, tease, "허세 좀 그만 부려").answer).toBe(persona.lines.reaction("tease", "허세 좀 그만 부려"));
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, tease, "허세 좀 그만 부려", 1)).toEqual({
+      status: "answered",
+      answer: `${persona.lines.reaction("tease", "허세 좀 그만 부려")}\n\n${persona.lines.reactionCharged}`,
+    });
+    // 저장된 분석 기록으로 앞선 반응을 센다. 반응과 질문이 함께 있던 메시지는 세지 않는다.
+    expect(isReactionOnly({ reaction: "praise", items: [] })).toBe(true);
+    expect(isReactionOnly({ reaction: "praise", items: [{ id: "q1" }] })).toBe(false);
+    expect(isReactionOnly({ items: [] } as never)).toBe(false);
     // 이전에 저장한 분석(반응 칸 없음)은 예전처럼 되묻는다.
     const old = { ...tease, reaction: undefined };
     expect(routeWithoutItems(FIRST_OVERVIEW, persona, old).answer).toBe(persona.lines.clarify);
