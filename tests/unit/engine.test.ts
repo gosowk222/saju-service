@@ -113,7 +113,7 @@ describe("작성 재료", () => {
     const { plan, trace } = analyze();
     const adopted = plan.topics.filter((topic) => topic.status === "adopted");
     expect(adopted.length).toBeGreaterThan(0);
-    expect(adopted[0]!.statements[0]!.ruleId).toBe("first-overview.dominant-family-lens");
+    expect(adopted[0]!.statements[0]!.ruleId).toBe("first-overview.temperament");
     expect(trace[0]!.conclusions.some((conclusion) => conclusion.adopted)).toBe(true);
   });
 
