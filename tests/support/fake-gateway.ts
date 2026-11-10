@@ -104,6 +104,45 @@ function fixtureNarration(input: { nickname: string; topics: { topicId: string; 
   };
 }
 
+/** 질문 정리 테스트 응답. 날씨·코드 질문은 범위 밖, 나머지는 원문을 그대로 요약으로 쓴다. */
+function fixtureQuestion(input: { text: string }) {
+  const outside = /날씨|코드/.test(input.text);
+  return {
+    items: [{ summary: input.text, domain: outside ? "non-saju" : "general", intent: "general", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] }],
+    userFacts: [],
+    needsClarification: false,
+  };
+}
+
+type NarrationV2Input = {
+  nickname: string;
+  facts: { ref: string }[];
+  questions: { ref: string; summary: string; timingId: string | null }[];
+  timing: { id: string; months: { ref: string }[] }[];
+  topics: { topicId: string; target: number; statements: { ref: string }[] }[];
+};
+
+/** 2.0.0 풀이 테스트 응답. 질문마다 답을 두고 주제마다 3개 이상 설명을 둔다. */
+function fixtureNarrationV2(input: NarrationV2Input) {
+  const firstRef = input.topics.find((topic) => topic.statements.length)?.statements[0]?.ref ?? input.facts[0]!.ref;
+  return {
+    opening: `[테스트 응답] 안녕하세요, ${input.nickname} 님.`,
+    focus: input.questions.flatMap((question) => {
+      const ref = input.timing.find((entry) => entry.id === question.timingId)?.months[0]?.ref ?? firstRef;
+      return [1, 2].map((index) => ({ kind: "explanation", refs: [question.ref, ref], text: `[테스트 응답] "${question.summary}"에 대한 ${index}번째 답이에요.` }));
+    }),
+    topics: input.topics.map((topic) => ({
+      topicId: topic.topicId,
+      bubbles: Array.from({ length: Math.max(topic.target, 3) }, (_, index) => ({
+        kind: "explanation",
+        refs: [topic.statements[index % Math.max(topic.statements.length, 1)]?.ref ?? input.facts[0]!.ref],
+        text: `[테스트 응답] ${topic.topicId} 주제의 ${index + 1}번째 설명이에요. 긴 문장이 자연스럽게 줄바꿈되는지 확인하기 위한 문구도 함께 들어 있어요.`,
+      })),
+    })),
+    closing: "[테스트 응답] 궁금한 점은 편하게 물어봐 주세요.",
+  };
+}
+
 function openaiResponse(text: string, model: string) {
   return {
     id: `resp_${randomUUID()}`,
@@ -115,7 +154,7 @@ function openaiResponse(text: string, model: string) {
   };
 }
 
-function handleOpenai(body: { model: string; input: string }, res: ServerResponse) {
+function handleOpenai(body: { model: string; input: string; text: { format: { name: string } } }, res: ServerResponse) {
   stats.openaiCalls += 1;
   stats.lastOpenaiBody = body;
   stats.openaiModels.push(body.model);
@@ -127,6 +166,27 @@ function handleOpenai(body: { model: string; input: string }, res: ServerRespons
   if (mode === "error") return send(res, 400, { error: { message: "fail" } });
 
   const input = JSON.parse(body.input) as Record<string, unknown>;
+  const schema = body.text.format.name;
+  if (schema === "saju_question_analysis") {
+    if (mode === "followup-error" && input.mode === "followup") return send(res, 400, { error: { message: "fail" } });
+    return send(res, 200, openaiResponse(JSON.stringify(fixtureQuestion(input as { text: string })), body.model));
+  }
+  if (schema === "saju_narration_v2") {
+    return send(res, 200, openaiResponse(JSON.stringify(fixtureNarrationV2(input as unknown as NarrationV2Input)), body.model));
+  }
+  if (schema === "saju_followup_v2") {
+    if (mode === "followup-error") return send(res, 400, { error: { message: "fail" } });
+    const questions = input.questions as { ref: string; summary: string }[];
+    return send(
+      res,
+      200,
+      openaiResponse(
+        JSON.stringify({ mode: "answer", clarifyQuestion: "", sections: questions.map((question) => ({ questionRef: question.ref, text: `[테스트 응답] "${question.summary}"에 대한 답변이에요.`, refs: [] })) }),
+        body.model,
+      ),
+    );
+  }
+  // 이전 형식(1.0.0) 응답. 이전 계획으로 시작된 작업을 확인할 때 쓴다.
   if ("question" in input) {
     const question = String(input.question);
     if (mode === "followup-error") return send(res, 400, { error: { message: "fail" } });
