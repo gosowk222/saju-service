@@ -60,6 +60,10 @@
 | 실제 모델 확인 (`gpt-5.6-luna`, 가상 사례 2개) | 실행. `docs/READING_QUALITY.md` 14절 |
 | `gpt-6-luna` 비교 | LIVE_NOT_RUN |
 
+### 주제별로 먼저 보여 주기 (2026-11-11)
+
+풀이를 스트리밍으로 받아 인사·답변·주제가 완성될 때마다 검사하고 저장해 먼저 보여 준다. 호출 수는 같고, 검사에 걸리면 보낸 부분은 두고 나머지만 이어 쓴다. 입력 중 표시에 움직임을 넣었다. 프롬프트 reading-2.4.0. 자세한 내용은 `docs/LLM_OPERATIONS.md` "주제별로 먼저 보여 주기"와 `docs/READING_QUALITY.md` 17절.
+
 ### 상품 3.1.0: 명리 설명, 알아맞히는 말투, 사주표 사진, 직업 (2026-11-11)
 
 자세한 내용은 `docs/READING_QUALITY.md` 16절과 `docs/rules/first-overview.md` 규칙 13·명리 설명 재료.
