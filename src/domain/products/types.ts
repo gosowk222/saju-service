@@ -1,7 +1,7 @@
 /** 앱이 정하는 상품 정의. 판매 정보, 주제 구성, 입력 항목, 답변 범위를 한 파일에 모은다. */
 
 /** 상품 주제로 쓸 수 있는 엔진 질문 분야. */
-export type InquiryDomain = "temperament" | "strengths" | "career" | "wealth" | "romance" | "social";
+export type InquiryDomain = "temperament" | "strengths" | "career" | "wealth" | "romance" | "social" | "family" | "friends" | "place";
 
 /**
  * 질문 분류에 쓰는 전체 분야. 분류는 상품과 무관하게 "무엇에 대한 답을 원하는가"로 정하고,
@@ -48,9 +48,12 @@ export interface SampleBubble {
 
 /** 상품이 답할 수 있는 범위. 질문의 관련성은 직전 대화 주제가 아니라 이 값으로 판단한다. */
 export interface ProductScope {
-  readonly domains: readonly InquiryDomain[];
-  /** 분류기가 분야를 고를 때 참고하는 각 주제의 설명. */
-  readonly domainGuide: Partial<Readonly<Record<InquiryDomain, string>>>;
+  /** 답하는 질문 분야. 상품 주제가 아닌 분야(건강, 투자)는 routes로 답할 주제를 정한다. */
+  readonly domains: readonly QuestionDomain[];
+  /** 분류기가 분야를 고를 때 참고하는 각 분야의 설명. */
+  readonly domainGuide: Partial<Readonly<Record<QuestionDomain, string>>>;
+  /** 상품 주제가 아닌 질문 분야를 답할 주제로 잇는다 (예: 건강→기본 성향, 투자→돈). */
+  readonly routes?: Partial<Readonly<Record<QuestionDomain, InquiryDomain>>>;
   readonly intents: readonly QuestionIntent[];
   /** 입력 화면과 후속 질문 안내에 쓰는 한 줄 설명. */
   readonly summary: string;

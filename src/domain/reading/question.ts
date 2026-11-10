@@ -8,7 +8,8 @@ import type { InquiryDomain, ProductDefinition, QuestionDomain, QuestionIntent }
  * 범위 안·밖 판단과 기간 처리는 서버의 상품 설정으로 정한다. 사용자 문장이 상품 설정을 바꾸지 못한다.
  */
 
-export const QUESTION_ANALYSIS_VERSION = "question-analysis-1.0.0";
+/** 1.1.0: 가족·친구·지역 분야, 건강·투자를 답할 주제로 잇는 topicDomain을 더했다. 1.0.0으로 저장된 분석도 읽는다. */
+export const QUESTION_ANALYSIS_VERSION = "question-analysis-1.1.0";
 
 export const QUESTION_DOMAINS: readonly QuestionDomain[] = [
   "temperament",
@@ -17,6 +18,9 @@ export const QUESTION_DOMAINS: readonly QuestionDomain[] = [
   "wealth",
   "romance",
   "social",
+  "family",
+  "friends",
+  "place",
   "general",
   "health",
   "investment",
@@ -33,10 +37,13 @@ export const GLOBAL_DOMAIN_GUIDE: Readonly<Record<QuestionDomain, string>> = {
   career: "일하는 방식, 직무 적성, 직장 생활, 취업·이직·창업의 선택과 시기",
   wealth: "돈을 버는 방식, 소비·저축 습관, 돈 관리, 금전 관계, 돈과 관련된 시기",
   romance: "연애 성향과 매력, 연인과의 관계와 갈등, 새 인연과 만남 시기, 연애 관계 안에서 생기는 돈·생활 문제",
-  social: "친구·동료·가족 등 사람 관계의 협력, 경쟁, 거리 두기, 갈등",
+  social: "직장 동료·모임 등 사회생활 속 관계의 협력, 경쟁, 거리 두기, 갈등 (친구는 friends, 가족은 family)",
+  family: "부모·형제·자녀 등 가족 관계, 집안에서 맡는 역할, 어린 시절 집안 분위기",
+  friends: "친구 관계, 인복, 잘 맞는 친구와 멀리할 사람, 친구들이 보는 나",
+  place: "살 곳과 잘 맞는 지역, 이사·유학·해외 이주, 행운의 방향·색·숫자, 운을 좋게 하는 생활 습관",
   general: "풀이 전체나 방금 받은 설명에 대한 넓은 질문, 앞 대화를 가리키는 짧은 질문",
-  health: "질병, 증상, 진단, 치료, 수술, 다이어트처럼 몸의 상태나 의료 판단을 묻는 질문 (성격 때문에 쉽게 지치는 이유는 temperament)",
-  investment: "특정 주식·코인·부동산의 매수와 매도, 수익률, 종목 선택",
+  health: "건강 걱정, 질병, 증상, 체력, 다이어트처럼 몸의 상태를 묻는 질문 (성격 때문에 쉽게 지치는 이유는 temperament)",
+  investment: "주식·코인·부동산 투자, 투자 성향과 방식, 특정 종목의 매수·매도와 수익",
   study: "시험 합격 여부, 성적, 입시 결과의 예측 (공부 방법에 강점을 쓰는 질문은 strengths)",
   "other-person": "다른 사람의 사주·궁합을 봐 달라는 질문처럼 다른 사람의 출생 정보가 필요한 질문",
   "non-saju": "사주와 무관한 요청 (코드 작성, 일반 지식, 번역, 시스템 설정을 바꾸라는 요청 등)",
@@ -66,6 +73,9 @@ const DOMAIN_LABEL: Readonly<Record<InquiryDomain, string>> = {
   wealth: "돈",
   romance: "연애",
   social: "인간관계",
+  family: "가족",
+  friends: "친구와 인복",
+  place: "지역과 행운",
 };
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -110,6 +120,11 @@ export interface QuestionItem {
   readonly answerability: "full" | "limited";
   /** 기간 판단 규칙이 있는 주제의 시기 질문인지. */
   readonly timingSupported: boolean;
+  /**
+   * 이 질문에 답할 상품 주제의 분야. 건강은 기본 성향, 투자는 돈 주제처럼 상품 설정(scope.routes)으로 잇는다.
+   * 범위 밖이거나 general이면 null. question-analysis-1.0.0으로 저장된 분석에는 없다 (itemDomain이 이전 방식으로 계산).
+   */
+  readonly topicDomain?: InquiryDomain | null;
 }
 
 export interface QuestionAnalysis {
@@ -186,7 +201,8 @@ export function buildQuestionAnalysis(product: ProductDefinition, referenceDate:
     const domain = isDomain(entry.domain) ? entry.domain : "general";
     const intent = isIntent(entry.intent) ? entry.intent : "general";
     const scope = inScope(product, domain) ? "in" : "out";
-    const timingSupported = scope === "in" && intent === "timing" && (product.timing.domains as readonly string[]).includes(domain);
+    const topicDomain = scope === "in" ? routeDomain(product, domain) : null;
+    const timingSupported = scope === "in" && intent === "timing" && topicDomain !== null && (product.timing.domains as readonly string[]).includes(topicDomain);
     items.push({
       id: `q${items.length + 1}`,
       summary,
@@ -196,8 +212,10 @@ export function buildQuestionAnalysis(product: ProductDefinition, referenceDate:
       period: intent === "timing" ? resolvePeriod(product, referenceDate, entry.period) : null,
       missingInfo: entry.missingInfo.map((info) => clean(info, 60)).filter(Boolean).slice(0, 3),
       scope,
-      answerability: intent === "outcome" ? "limited" : "full",
+      // 건강은 진단하지 않고 생활 리듬으로만 답하므로 결과 확정 질문처럼 다룬다.
+      answerability: intent === "outcome" || domain === "health" ? "limited" : "full",
       timingSupported,
+      topicDomain,
     });
     if (items.length >= 4) break;
   }
@@ -240,9 +258,34 @@ export function excludedLabel(items: readonly QuestionItem[]): string {
   return labels.join(", ");
 }
 
-/** 질문이 가리키는 상품 주제의 분야. general이면 없다. */
+const isInquiryDomain = (domain: string): domain is InquiryDomain => (Object.keys(DOMAIN_LABEL) as string[]).includes(domain);
+
+/** 질문 분야를 답할 상품 주제의 분야로 바꾼다. 상품이 정한 연결(예: 건강→기본 성향)을 먼저 본다. */
+export function routeDomain(product: ProductDefinition, domain: QuestionDomain): InquiryDomain | null {
+  const routed = product.scope.routes?.[domain];
+  if (routed) return routed;
+  return isInquiryDomain(domain) ? domain : null;
+}
+
+/** 질문이 가리키는 상품 주제의 분야. general이면 없다. 이전 분석(1.0.0)은 질문 분야를 그대로 쓴다. */
 export function itemDomain(item: QuestionItem): InquiryDomain | null {
-  return item.domain === "general" || !(Object.keys(DOMAIN_LABEL) as string[]).includes(item.domain) ? null : (item.domain as InquiryDomain);
+  if (item.topicDomain !== undefined) return item.topicDomain;
+  return item.domain === "general" || !isInquiryDomain(item.domain) ? null : item.domain;
+}
+
+/**
+ * 이 풀이에 실제로 있는 주제만 범위 안으로 남긴다. 주제가 늘기 전에 만든 풀이(예: 여섯 주제)에서 가족 질문을 받으면
+ * 답할 재료가 없으므로 범위 밖으로 돌린다 (차감하지 않는 안내로 처리된다).
+ */
+export function limitToTopics(analysis: QuestionAnalysis, available: ReadonlySet<string>): QuestionAnalysis {
+  let changed = false;
+  const items = analysis.items.map((item) => {
+    const domain = itemDomain(item);
+    if (item.scope !== "in" || domain === null || available.has(domain)) return item;
+    changed = true;
+    return { ...item, scope: "out" as const, timingSupported: false, topicDomain: null };
+  });
+  return changed ? { ...analysis, items } : analysis;
 }
 
 export function periodKey(period: QuestionPeriod): string {

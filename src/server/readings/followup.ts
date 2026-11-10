@@ -2,7 +2,8 @@ import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
-import { inScopeItems, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
+import { focusTopicsOf } from "@/domain/reading/focus";
+import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
@@ -118,7 +119,8 @@ export async function askFollowup(input: {
     const referenceDate = seoulDate();
 
     const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: question, lastTurn, modelId, deadlineAt });
-    const analysis = classified.analysis;
+    // 이 풀이에 있는 주제만 답한다. 주제가 늘기 전에 만든 풀이에서 새 주제를 물으면 차감 없이 안내한다.
+    const analysis = limitToTopics(classified.analysis, new Set(focusTopicsOf(plan, product).map((topic) => topic.inquiryDomain)));
     let usage: LlmUsage = classified.meta.usage;
     let llmCalls = classified.meta.llmCalls;
     let actualModel = classified.meta.actualModel;

@@ -10,6 +10,7 @@ import {
   excludedItems,
   inScopeItems,
   itemDomain,
+  limitToTopics,
   seoulDate,
   type QuestionAnalysis,
   type QuestionItem,
@@ -148,6 +149,8 @@ export async function prepareNarration(input: {
     }
     analysis = await saveAnalysis(admin, readingId, INITIAL_QUESTION_KEY, "question", QUESTION_ANALYSIS_VERSION, analysis);
   }
+  // 저장된 원국 재료에 없는 주제(예: 주제가 늘기 전에 만든 풀이의 가족 질문)는 범위 밖으로 돌린다.
+  analysis = limitToTopics(analysis, new Set(base.topics.map((topic) => topic.inquiryDomain)));
 
   const { timing, computed } = await timingFor({ admin, readingId, birth, items: inScopeItems(analysis), referenceDate: analysis.referenceDate });
   const plan = buildNarrationPlan({ base, product, analysis, timing });
