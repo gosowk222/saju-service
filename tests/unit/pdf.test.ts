@@ -34,7 +34,7 @@ function input(count: number, overrides: Partial<PdfInput> = {}): PdfInput {
     productName: "나를 읽는 짧은 사주",
     nickname: "달빛",
     createdAt: "2026년 11월 9일",
-    personaName: "여울",
+    personaName: "묘묘",
     chart: buildChartView(facts, null),
     topicTitles: Object.fromEntries(messages.map((message) => [message.topicId!, `주제 ${message.topicId}`])),
     messages,

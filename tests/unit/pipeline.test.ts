@@ -154,7 +154,7 @@ const birth = toPublicBirthInput({
   birthPlace: { timezoneId: "Asia/Seoul", longitudeDeg: 126.9784, latitudeDeg: 37.566, label: "서울특별시", source: "geonames:1835848" },
 });
 const base = analyzeBirth({ birth, product: FIRST_OVERVIEW, nickname: "가람", situationId: "job-seeking" });
-const persona = findPersona("yeoul")!;
+const persona = findPersona("myomyo")!;
 // 새 작업이 실제로 고정하는 값(계획 2.0.0의 현재 프롬프트와 출력 형식)으로 확인한다.
 const config = { modelId: "gpt-5.6-luna", promptVersion: PROMPTS_FOR_PLAN["2.0.0"]!.prompt, schemaVersion: PROMPTS_FOR_PLAN["2.0.0"]!.schema, reasoningEffort: "low" };
 
@@ -306,7 +306,7 @@ describe("후속 질문 답변 조립", () => {
     const result = await answerAnalyzedFollowup({ plan: base.plan, product: FIRST_OVERVIEW, persona, chart: base.chart, analysis, initialAnalysis: null, timing: [], messages: [], lastTurn: null, modelId: "gpt-5.6-luna" });
     expect(result.status).toBe("answered");
     expect(result.answer.indexOf("q1의 답")).toBeLessThan(result.answer.indexOf("q2의 답"));
-    expect(result.answer).toContain("시험·학업 결과 이야기는 이 풀이에서 다루지 않아");
+    expect(result.answer).toContain(persona.lines.partialScope("시험·학업 결과"));
     const sent = requests.find((item) => item.schema === "saju_followup_v2")!.input as Input;
     expect(JSON.stringify(sent)).not.toContain("시험에 붙을지");
   });
@@ -317,8 +317,8 @@ describe("후속 질문 답변 조립", () => {
       userFacts: [],
       needsClarification: false,
     });
-    expect(routeWithoutItems(FIRST_OVERVIEW, outside)).toEqual({ status: "off_topic", answer: FIRST_OVERVIEW.scope.outOfScopeReply });
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, outside)).toEqual({ status: "off_topic", answer: persona.lines.outOfScope(FIRST_OVERVIEW.scope.topicsLabel) });
     const vague = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: true });
-    expect(routeWithoutItems(FIRST_OVERVIEW, vague).status).toBe("clarify");
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, vague).status).toBe("clarify");
   });
 });

@@ -38,7 +38,7 @@ function planFor(input: AnalyzeInput, situationId: string | null, analysis: Ques
   return buildNarrationPlan({ base: base.plan, product, analysis, timing: requests.map((entry, index) => ({ requestKey: requestedTimingKey(entry)!, analysis: timing[index]! })) });
 }
 
-const promptInput = (plan: ReturnType<typeof planFor>) => getReadingPrompt("reading-2.0.0")({ plan, persona: findPersona("yeoul")!, previousIssues: [] }).input;
+const promptInput = (plan: ReturnType<typeof planFor>) => getReadingPrompt("reading-2.0.0")({ plan, persona: findPersona("myomyo")!, previousIssues: [] }).input;
 const shape = (plan: ReturnType<typeof planFor>) => plan.topics.map((topic) => `${topic.topicId}:${topic.weight}`);
 
 describe("질문과 상황에 따른 작성 계획", () => {

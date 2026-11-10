@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { YEOUL } from "@/domain/personas";
+import { MYOMYO } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { buildNarrationPlan } from "@/domain/reading/focus";
 import { emptyAnalysis } from "@/domain/reading/question";
@@ -78,7 +78,7 @@ async function run(outputs: readonly NarrationOutputV2[], sent: SentParts = { op
     plan,
     excluded: [],
     chart,
-    persona: YEOUL,
+    persona: MYOMYO,
     config,
     sent,
     commit: async (messages) => {

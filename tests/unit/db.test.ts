@@ -23,7 +23,7 @@ async function createReading(user: string): Promise<string> {
     place_snapshot: { latitudeDeg: 37.5 },
     chart: {},
     preview: {},
-    persona_id: "yeoul",
+    persona_id: "myomyo",
     persona_version: "1.0.0",
     ruleset_id: "first-overview",
     ruleset_version: "1.0.0",

@@ -131,7 +131,7 @@ describe("작성 재료", () => {
 
   it("캐릭터는 계산과 판단 재료를 바꾸지 않는다", () => {
     const { plan } = analyze();
-    expect(plan.topics[0]!.statements[0]!.text).not.toContain("여울");
+    expect(plan.topics[0]!.statements[0]!.text).not.toContain("묘묘");
   });
 
   it("판단마다 상품 항목, 이유, 근거가 있는 약점을 함께 남긴다", () => {
