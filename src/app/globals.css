@@ -188,6 +188,39 @@
   animation: bubble-in var(--duration-slow) var(--ease-standard) both;
 }
 
+/* 입력 중 표시. 세 점이 차례로 떠올라 화면이 멈추지 않았다는 것을 알린다. 반복 효과라 길이 토큰과 따로 둔다. */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(calc(var(--space-2) * -1));
+  }
+}
+@keyframes typing-dot-fade {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@utility animate-typing-dot {
+  animation: typing-dot 1.2s var(--ease-standard) infinite;
+}
+/* 움직임을 줄이는 설정에서는 위아래 움직임 없이 밝기만 바꾼다. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-typing-dot {
+    animation-name: typing-dot-fade;
+  }
+}
+
 /* Google 공식 버튼 표기 값. 카카오처럼 브랜드 지침의 고정 값이며 다른 곳에 쓰지 않는다. */
 .google-login {
   border: 1px solid #747775;

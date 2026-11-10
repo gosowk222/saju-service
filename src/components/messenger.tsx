@@ -11,7 +11,8 @@ import { Button, buttonClass } from "@/components/ui/button";
 import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
 
 const REVEAL_INTERVAL_MS = 700;
-const POLL_INTERVAL_MS = 3000;
+/** 생성 중에는 주제가 완성될 때마다 저장되므로 자주 확인한다. */
+const POLL_INTERVAL_MS = 2000;
 const NEAR_BOTTOM_PX = 120;
 
 interface Props {
@@ -109,20 +110,26 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
   const stickToBottom = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
+  const startingRef = useRef(false);
 
   const animating = animateReveal && !skipReveal && revealed < state.messages.length;
 
   const startGeneration = useCallback(
     async (retry: boolean) => {
       setStarting(true);
+      startingRef.current = true;
       setNotice(null);
+      // 다시 시도할 때도 쓰는 중으로 보여 주고, 완성된 주제를 주기 확인으로 받는다.
+      if (retry) setState((current) => ({ ...current, status: "running", canRetry: false }));
       try {
+        // 생성이 끝날 때까지 응답이 오지 않는다. 그동안 완성된 주제는 아래 주기 확인으로 받는다.
         const next = await apiFetch<ReadingStateView>(`/api/readings/${readingId}/generate`, { method: "POST", json: { retry } });
         setState(next);
       } catch (failure) {
         setNotice(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");
       } finally {
         setStarting(false);
+        startingRef.current = false;
       }
     },
     [readingId],
@@ -136,19 +143,21 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
     }
   }, [state.status, startGeneration]);
 
-  // 다른 탭이나 요청에서 생성 중이면 저장 상태를 주기적으로 확인한다.
+  // 생성 중에는 저장 상태를 주기적으로 확인해, 완성된 주제의 말풍선을 먼저 보여 준다.
   useEffect(() => {
-    if (state.status !== "running" && !(state.status === "queued" && !starting)) return;
+    if (state.status !== "running" && state.status !== "queued") return;
     const timer = setInterval(() => {
       apiFetch<ReadingStateView>(`/api/readings/${readingId}/state`)
         .then((next) => {
-          if (next.status === "queued") started.current = false;
-          setState(next);
+          // 이 화면이 시작 요청을 기다리는 중이 아닐 때만 끊긴 작업을 다시 시작한다.
+          if (next.status === "queued" && !startingRef.current) started.current = false;
+          // 늦게 도착한 이전 확인 결과가 완료 상태를 덮어쓰지 않게 한다.
+          setState((current) => (current.status === "completed" ? current : next));
         })
         .catch(() => undefined);
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [state.status, starting, readingId]);
+  }, [state.status, readingId]);
 
   useEffect(() => {
     if (!animating) return;
@@ -179,6 +188,7 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
     [animateReveal, skipReveal, state.messages, revealed],
   );
   const remaining = Math.max(state.questionLimit - state.questionsUsed, 0);
+  const generating = state.status === "queued" || state.status === "running";
   const isDone = state.status === "completed" && !animating;
 
   async function ask() {
@@ -231,23 +241,24 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
           );
         })}
 
-        {state.status === "queued" || state.status === "running" ? (
+        {/* 쓰는 중이거나 받은 말풍선을 차례로 보여 주는 중에는 입력 중 표시를 하나만 둔다. */}
+        {generating || animating ? (
           <div aria-live="polite" className="flex flex-col gap-3">
-            <Bubble glyph={personaGlyph} name={personaName}>
+            <Bubble glyph={personaGlyph} name={personaName} continued={visible.length > 0}>
               <TypingDots />
+              <span className="sr-only">{personaName}이 입력하고 있어요</span>
             </Bubble>
-            <p className="self-center type-caption text-gray-600">{personaName}이 풀이를 쓰고 있어요. 1~2분 정도 걸려요.</p>
-          </div>
-        ) : null}
-
-        {animating ? (
-          <div className="flex flex-col gap-3">
-            <Bubble glyph={personaGlyph} name={personaName}>
-              <TypingDots />
-            </Bubble>
-            <button type="button" onClick={() => setSkipReveal(true)} className="self-center type-label text-primary-600">
-              전체 바로 보기
-            </button>
+            {animating ? (
+              <button type="button" onClick={() => setSkipReveal(true)} className="self-center type-label text-primary-600">
+                전체 바로 보기
+              </button>
+            ) : (
+              <p className="self-center type-caption text-gray-600">
+                {visible.length
+                  ? `${personaName}이 다음 이야기를 쓰고 있어요.`
+                  : `${personaName}이 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
+              </p>
+            )}
           </div>
         ) : null}
 

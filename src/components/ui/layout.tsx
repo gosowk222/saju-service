@@ -67,12 +67,13 @@ export function LoadingScreen({ label = "불러오는 중이에요" }: { label?:
   );
 }
 
+/** 입력 중 표시. 세 점이 차례로 떠오른다 (globals.css의 typing-dot). */
 export function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-2" aria-hidden>
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
+    <span className="inline-flex h-5 items-center gap-2" aria-hidden>
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500" />
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500 [animation-delay:160ms]" />
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500 [animation-delay:320ms]" />
     </span>
   );
 }
