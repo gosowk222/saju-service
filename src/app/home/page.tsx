@@ -6,6 +6,7 @@ import { LinkButton } from "@/components/ui/button";
 import { Card, Screen } from "@/components/ui/layout";
 import { DEFAULT_PRODUCT_ID, findProduct, PRODUCTS } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReadingAccess } from "@/server/access";
 import { getVerifiedMember } from "@/server/auth";
 import { loadFreeTicket } from "@/server/tickets/free-ticket";
 
@@ -37,7 +38,8 @@ async function FreeTicketSection() {
   const user = await getVerifiedMember();
   if (!user) return null;
   const supabase = await createSupabaseServerClient();
-  return <FreeTicketCard ticket={await loadFreeTicket(supabase, user.id)} />;
+  const [ticket, access] = await Promise.all([loadFreeTicket(supabase, user.id), getReadingAccess(user.id)]);
+  return <FreeTicketCard ticket={ticket} allowed={access.allowed} />;
 }
 
 export default function HomePage() {

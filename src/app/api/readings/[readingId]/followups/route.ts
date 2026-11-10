@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ApiError, ok, readJson, requireApiUser, route } from "@/server/api";
+import { ApiError, ok, readJson, route } from "@/server/api";
+import { requireReadingAccess } from "@/server/access";
 import { askFollowup } from "@/server/readings/followup";
 import { getEntitlement } from "@/server/readings/store";
 
@@ -15,7 +16,7 @@ const BodySchema = z.object({
 });
 
 export const POST = route<{ readingId: string }>(async (request, { readingId }) => {
-  const { user, supabase } = await requireApiUser();
+  const { user, supabase } = await requireReadingAccess();
   const body = BodySchema.safeParse(await readJson(request));
   if (!body.success) throw new ApiError(422, "invalid_question", body.error.issues[0]?.message ?? "질문을 확인해 주세요.");
 

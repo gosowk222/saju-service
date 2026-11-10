@@ -7,15 +7,25 @@ import { checkoutMode, FREE_TRIAL, grantsOpen, type CheckoutMode } from "@/serve
 import { getReading, USER_RETRY_LIMIT, type JobRow } from "@/server/readings/store";
 
 /**
- * 무료 이용권 (회원당 한 장, 캠페인 free-trial-2026-11).
+ * 무료 이용권.
+ * - 캠페인 이용권: 카카오 회원당 한 장 (free-trial-2026-11, 무료 테스트 모드에서 지급)
+ * - 관리자 지급 이용권: 관리자 화면에서 고른 회원에게 한 장씩 더 준다
  * 지급·사용·완료·반환은 모두 supabase/migrations의 서버 전용 함수가 한 트랜잭션으로 처리한다.
  * 회원 판정도 DB 함수(is_kakao_member)가 Supabase Auth의 실제 연결 정보로 다시 한다.
  */
 
 export type GrantOutcome = "granted" | "exists" | "not_eligible" | "closed" | "error";
 
+interface TicketRow {
+  readonly id: string;
+  readonly status: "available" | "redeemed" | "completed";
+  readonly reading_id: string | null;
+  readonly source: "campaign" | "admin";
+  readonly redeemed_at: string | null;
+}
+
 /**
- * 지급이 열려 있으면(무료 테스트 모드) 한 장을 보장한다. 이미 있으면 그대로 둔다.
+ * 지급이 열려 있으면(무료 테스트 모드) 캠페인 이용권 한 장을 보장한다. 이미 있으면 그대로 둔다.
  * 신규 가입(콜백), 로그인 후 누락 복구(이용권 조회), 사용 직전에 같은 함수를 쓴다.
  * 오류는 던지지 않고 결과로 돌려준다. 지급 오류가 로그인을 망가뜨리지 않게 하고, 다음 조회에서 다시 시도한다.
  */
@@ -52,9 +62,9 @@ export interface RedeemResult {
 }
 
 /**
- * 맛보기에서 "무료 이용권 1장으로 풀이받기"를 눌렀을 때. 이용권 한 장을 이 풀이 한 건에 연결하고
- * 이용 권한과 생성 작업을 한 트랜잭션으로 만든다. 같은 요청이 다시 오거나 이미 권한이 있으면 추가로 쓰지 않는다.
- * 결제 기록이나 결제 승인 번호는 만들지 않는다.
+ * 맛보기에서 "무료 이용권 1장으로 풀이받기"를 눌렀을 때. 사용 가능한 이용권 한 장(캠페인 → 먼저 받은 순)을
+ * 이 풀이 한 건에 연결하고 이용 권한과 생성 작업을 한 트랜잭션으로 만든다.
+ * 같은 요청이 다시 오거나 이미 권한이 있으면 추가로 쓰지 않는다. 결제 기록이나 결제 승인 번호는 만들지 않는다.
  */
 export async function redeemFreeTicket(input: {
   readonly supabase: SupabaseClient;
@@ -77,7 +87,6 @@ export async function redeemFreeTicket(input: {
     p_user_id: input.userId,
     p_reading_id: reading.id,
     p_request_id: input.requestId,
-    p_campaign_id: FREE_TRIAL.campaignId,
     p_product_id: product.id,
     p_product_version: product.version,
     p_question_limit: product.followupLimit,
@@ -110,57 +119,93 @@ export async function redeemFreeTicket(input: {
   return { outcome: result.outcome, readingId: result.readingId };
 }
 
-interface TicketRow {
-  readonly id: string;
-  readonly status: "available" | "redeemed" | "completed";
-  readonly reading_id: string | null;
-}
-
-/** 화면에 보여 줄 이용권 상태. 이용권 코드나 결제 정보는 없다. */
-export type FreeTicketView =
-  | { readonly state: "none"; readonly reason: "closed" | "not_eligible" | "error" }
-  | { readonly state: "available" }
+/** 이용권으로 진행 중이거나 실패했거나 완료한 풀이. */
+export type TicketUse =
   | { readonly state: "generating"; readonly readingId: string }
   | { readonly state: "failed"; readonly readingId: string; readonly canRetry: boolean }
   | { readonly state: "completed"; readonly readingId: string };
 
-async function readTicket(supabase: SupabaseClient): Promise<TicketRow | null> {
+/** 화면에 보여 줄 이용권 상태. 이용권 코드나 결제 정보는 없다. */
+export type FreeTicketView =
+  | { readonly state: "none"; readonly reason: "closed" | "not_eligible" | "error" }
+  | {
+      readonly state: "ready";
+      /** 사용 가능한 이용권 수 */
+      readonly available: number;
+      /** 손이 필요한 풀이(생성 중·실패)를 먼저, 없으면 가장 최근에 완료한 풀이 */
+      readonly current: TicketUse | null;
+    };
+
+async function readTickets(supabase: SupabaseClient): Promise<TicketRow[]> {
   // 본인 이용권만 RLS로 읽힌다.
   const { data } = await supabase
     .from("free_tickets")
-    .select("id, status, reading_id")
-    .eq("campaign_id", FREE_TRIAL.campaignId)
-    .maybeSingle();
-  return (data as TicketRow | null) ?? null;
+    .select("id, status, reading_id, source, redeemed_at")
+    .order("granted_at", { ascending: true });
+  return (data ?? []) as TicketRow[];
 }
 
 /**
- * 로그인한 회원의 이용권 상태. 지급이 열려 있는데 이용권이 없으면 이때 지급한다 (가입 때 일시적으로 실패한 경우의 복구).
+ * 로그인한 회원의 이용권 상태. 지급이 열려 있는데 캠페인 이용권이 없으면 이때 지급한다 (가입 때 일시적으로 실패한 경우의 복구).
  * supabase는 로그인한 사용자 권한의 클라이언트, userId는 서버가 검증한 사용자 ID다.
  */
 export async function loadFreeTicket(supabase: SupabaseClient, userId: string): Promise<FreeTicketView> {
   const mode = checkoutMode();
-  let ticket = await readTicket(supabase);
-  if (!ticket) {
-    // 같은 렌더링 안에서 같은 조회를 다시 보내면 Next가 앞의 결과(없음)를 재사용하므로, 지급 함수가 돌려준 행을 쓴다.
+  let tickets = await readTickets(supabase);
+  if (!tickets.some((ticket) => ticket.source === "campaign")) {
+    // 같은 렌더링 안에서 같은 조회를 다시 보내면 Next가 앞의 결과를 재사용하므로, 지급 함수가 돌려준 행을 쓴다.
     const granted = await grantFreeTicket(userId, mode);
-    ticket = granted.ticket;
-    if (!ticket) {
+    if (granted.ticket) tickets = [...tickets, { ...granted.ticket, source: "campaign" }];
+    else if (tickets.length === 0) {
       const reason = granted.outcome === "not_eligible" ? "not_eligible" : granted.outcome === "closed" ? "closed" : "error";
       return { state: "none", reason };
     }
   }
-  if (ticket.status === "available" || !ticket.reading_id) return { state: "available" };
-  if (ticket.status === "completed") return { state: "completed", readingId: ticket.reading_id };
+
+  const available = tickets.filter((ticket) => ticket.status === "available").length;
+  const used = tickets
+    .filter((ticket): ticket is TicketRow & { reading_id: string } => ticket.status !== "available" && Boolean(ticket.reading_id))
+    .sort((a, b) => (b.redeemed_at ?? "").localeCompare(a.redeemed_at ?? ""));
+  if (used.length === 0) return { state: "ready", available, current: null };
 
   const { data } = await supabase
     .from("generation_jobs")
-    .select("status, attempts")
-    .eq("reading_id", ticket.reading_id)
-    .maybeSingle();
-  const job = data as Pick<JobRow, "status" | "attempts"> | null;
-  if (job?.status === "completed") return { state: "completed", readingId: ticket.reading_id };
-  if (job?.status === "failed") return { state: "failed", readingId: ticket.reading_id, canRetry: job.attempts < USER_RETRY_LIMIT };
-  // 대기·생성 중, 또는 점유 시간이 지나 다시 시작을 기다리는 작업. 풀이 화면에 들어가면 이어서 만든다.
-  return { state: "generating", readingId: ticket.reading_id };
+    .select("reading_id, status, attempts")
+    .in("reading_id", used.map((ticket) => ticket.reading_id));
+  const jobs = new Map(((data ?? []) as Pick<JobRow, "reading_id" | "status" | "attempts">[]).map((job) => [job.reading_id, job]));
+
+  const uses: TicketUse[] = used.map((ticket) => {
+    const job = jobs.get(ticket.reading_id);
+    if (ticket.status === "completed" || job?.status === "completed") return { state: "completed", readingId: ticket.reading_id };
+    if (job?.status === "failed") return { state: "failed", readingId: ticket.reading_id, canRetry: job.attempts < USER_RETRY_LIMIT };
+    // 대기·생성 중, 또는 점유 시간이 지나 다시 시작을 기다리는 작업. 풀이 화면에 들어가면 이어서 만든다.
+    return { state: "generating", readingId: ticket.reading_id };
+  });
+  const current = uses.find((use) => use.state !== "completed") ?? uses[0] ?? null;
+  return { state: "ready", available, current };
+}
+
+export type AdminGrantOutcome = "granted" | "exists" | "not_eligible";
+
+/** 관리자가 고른 회원에게 무료 이용권 한 장을 준다. 같은 요청 ID는 한 번만 반영된다. */
+export async function adminGrantFreeTicket(input: {
+  readonly adminId: string;
+  readonly userId: string;
+  readonly requestId: string;
+  readonly note?: string;
+}): Promise<AdminGrantOutcome> {
+  const { data, error } = await createSupabaseAdminClient().rpc("admin_grant_free_ticket", {
+    p_admin_id: input.adminId,
+    p_user_id: input.userId,
+    p_request_id: input.requestId,
+    p_note: input.note ?? null,
+  });
+  if (error) {
+    const message = error.message ?? "";
+    if (message.includes("not_admin")) throw new ApiError(404, "not_found", "찾을 수 없어요.");
+    if (message.includes("request_conflict")) throw new ApiError(409, "request_conflict", "같은 요청이 다른 회원에게 이미 쓰였어요. 화면을 새로고침해 주세요.");
+    if (message.includes("foreign key")) throw new ApiError(404, "member_not_found", "회원을 찾을 수 없어요.");
+    throw new ApiError(500, "grant_failed", "이용권을 주지 못했어요. 잠시 후 다시 시도해 주세요.");
+  }
+  return (data as { outcome: AdminGrantOutcome }).outcome;
 }

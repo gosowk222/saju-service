@@ -17,6 +17,7 @@ const RESULT_MESSAGES: Readonly<Record<string, { text: string; tone: "danger" | 
   pending: { text: "결제 확인이 지연되고 있어요. 잠시 후 이 화면을 새로고침해 주세요.", tone: "warning" },
   config: { text: "결제 설정을 확인해야 해요. 잠시 후 다시 시도해 주세요.", tone: "danger" },
   disabled: { text: "지금은 결제를 받지 않아요. 결제는 승인되지 않았고 청구되지 않아요.", tone: "warning" },
+  closed: { text: "지금은 운영자가 허용한 계정만 풀이를 이용할 수 있어요. 결제는 승인되지 않았고 청구되지 않아요.", tone: "warning" },
 };
 
 function resolveClientKey(): string | null {

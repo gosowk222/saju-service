@@ -1,9 +1,10 @@
 import { CreateReadingSchema } from "@/domain/birth/input";
-import { ApiError, ok, readJson, requireApiUser, route } from "@/server/api";
+import { ApiError, ok, readJson, route } from "@/server/api";
+import { requireReadingAccess } from "@/server/access";
 import { createReading } from "@/server/readings/create";
 
 export const POST = route(async (request) => {
-  const { user, supabase } = await requireApiUser();
+  const { user, supabase } = await requireReadingAccess();
   const parsed = CreateReadingSchema.safeParse(await readJson(request));
   if (!parsed.success) {
     const message = parsed.error.issues[0]?.message ?? "입력을 다시 확인해 주세요.";

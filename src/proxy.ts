@@ -10,7 +10,7 @@ import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/env";
  * 로그인하지 않은 채 이 화면을 열면(보관함, 마이, 사주 입력 등) 로그인 화면으로 보내고, 로그인 뒤 그 화면으로 돌아온다.
  * API는 각 라우트에서 직접 확인해 401을 돌려준다.
  */
-const PROTECTED_PREFIXES = ["/readings", "/checkout", "/library", "/my"];
+const PROTECTED_PREFIXES = ["/readings", "/checkout", "/library", "/my", "/admin"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

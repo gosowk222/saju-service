@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { FreeTicketCard } from "@/components/free-ticket-card";
 import { BottomNav } from "@/components/ui/bottom-nav";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Card, LoadingScreen, PageHeader } from "@/components/ui/layout";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReadingAccess } from "@/server/access";
 import { requirePageUser } from "@/server/auth";
 import { loadFreeTicket } from "@/server/tickets/free-ticket";
 
@@ -11,14 +12,19 @@ import { loadFreeTicket } from "@/server/tickets/free-ticket";
 async function Account() {
   const user = await requirePageUser("/my");
   const supabase = await createSupabaseServerClient();
-  const ticket = await loadFreeTicket(supabase, user.id);
+  const [ticket, access] = await Promise.all([loadFreeTicket(supabase, user.id), getReadingAccess(user.id)]);
   return (
     <>
       <Card>
         <p className="type-label font-normal text-gray-600">로그인 방식</p>
         <p className="mt-1 type-title">카카오 계정</p>
       </Card>
-      <FreeTicketCard ticket={ticket} />
+      <FreeTicketCard ticket={ticket} allowed={access.allowed} />
+      {access.role === "admin" ? (
+        <LinkButton href="/admin" variant="secondary" size="lg">
+          관리자 화면
+        </LinkButton>
+      ) : null}
     </>
   );
 }

@@ -11,6 +11,7 @@ import { parseIsoDate, formatKoreanDate } from "@/domain/birth/date";
 import { findPersona } from "@/domain/personas";
 import { findProduct, formatPrice } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReadingAccess, READINGS_CLOSED_MESSAGE } from "@/server/access";
 import { requirePageUser } from "@/server/auth";
 import { checkoutMode, FREE_TRIAL, paymentsOpen, type CheckoutMode } from "@/server/checkout/mode";
 import { getEntitlement, getJob, getReading, type ReadingRow } from "@/server/readings/store";
@@ -43,7 +44,7 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
   const persona = findPersona(reading.persona_id);
   if (!product || !persona) notFound();
   const mode = checkoutMode();
-  const ticket = await loadFreeTicket(supabase, user.id);
+  const [ticket, access] = await Promise.all([loadFreeTicket(supabase, user.id), getReadingAccess(user.id)]);
 
   return (
     <>
@@ -105,6 +106,7 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
           ticket={ticket}
           closed={job?.status === "cancelled"}
           mode={mode}
+          allowed={access.allowed}
         />
       </div>
     </>
@@ -129,6 +131,7 @@ function PreviewAction({
   ticket,
   closed,
   mode,
+  allowed,
 }: {
   readingId: string;
   productId: string;
@@ -137,6 +140,8 @@ function PreviewAction({
   ticket: FreeTicketView;
   closed: boolean;
   mode: CheckoutMode;
+  /** 풀이 상품 이용 범위(관리자만 / 모든 회원) 안에 있는가 */
+  allowed: boolean;
 }) {
   if (closed) {
     return (
@@ -159,12 +164,14 @@ function PreviewAction({
     </>
   ) : null;
 
-  if (ticket.state === "available" && FREE_TRIAL.productIds.includes(productId)) {
+  if (!allowed) return <Notice tone="warning">{READINGS_CLOSED_MESSAGE}</Notice>;
+
+  if (ticket.state === "ready" && ticket.available > 0 && FREE_TRIAL.productIds.includes(productId)) {
     return (
       <>
         <div className="flex items-center justify-between gap-3">
           <span className="type-label font-normal text-gray-600">{productName}</span>
-          <Badge tone="success">무료 이용권 1장</Badge>
+          <Badge tone="success">무료 이용권 {ticket.available}장</Badge>
         </div>
         <RedeemButton readingId={readingId} />
         <p className="type-caption text-gray-600">결제 수단은 필요 없어요. 풀이를 만들다 실패해도 추가로 차감하지 않고 다시 시도할 수 있어요.</p>
@@ -172,13 +179,14 @@ function PreviewAction({
     );
   }
 
-  if (ticket.state === "generating" || ticket.state === "failed" || ticket.state === "completed") {
+  if (ticket.state === "ready" && ticket.current) {
+    const used = ticket.current;
     return (
       <>
         <Notice>무료 이용권은 다른 풀이에 이미 썼어요. 받은 풀이는 보관함에서 다시 볼 수 있어요.</Notice>
         <div className="flex gap-3">
-          <LinkButton href={`/readings/${ticket.readingId}`} className="flex-1">
-            {USED_TICKET_LINK[ticket.state]}
+          <LinkButton href={`/readings/${used.readingId}`} className="flex-1">
+            {USED_TICKET_LINK[used.state]}
           </LinkButton>
           <LinkButton href="/library" variant="secondary">
             보관함
