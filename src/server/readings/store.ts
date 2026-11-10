@@ -83,7 +83,8 @@ export interface FollowupRow {
   readonly client_request_id: string;
   readonly question: string;
   readonly answer: string | null;
-  readonly status: "answering" | "answered" | "off_topic" | "failed";
+  /** clarify는 되묻기이며 질문 횟수를 차감하지 않는다. */
+  readonly status: "answering" | "answered" | "clarify" | "off_topic" | "failed";
   readonly created_at: string;
 }
 
@@ -158,8 +159,9 @@ export async function loadReadingState(supabase: Db, readingId: string): Promise
   const leaseExpired = job.status === "running" && (!job.lease_until || new Date(job.lease_until) < new Date());
   const status: GenerationStatus = leaseExpired ? "queued" : job.status;
 
+  // 생성 중에도 이미 완성된 주제의 메시지를 보낸다 (주제가 완성될 때마다 먼저 보여 준다).
   const [messages, followups, questionsUsed] = await Promise.all([
-    status === "completed" ? getMessages(supabase, readingId) : Promise.resolve([]),
+    getMessages(supabase, readingId),
     status === "completed" ? getFollowups(supabase, readingId) : Promise.resolve([]),
     countQuestionsUsed(supabase, readingId),
   ]);

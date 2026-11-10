@@ -22,7 +22,7 @@ const STEP_TITLES = ["별명", "성별", "생년월일", "출생지역", "출생
 const REVIEW_STEP = STEP_TITLES.length;
 
 const INPUT =
-  "motion-fast h-input w-full rounded-lg border border-gray-300 bg-gray-50 px-5 type-body-lg text-gray-900 outline-none focus:border-primary-600 focus:shadow-[var(--focus-ring)]";
+  "motion-fast h-input w-full rounded-lg border border-gray-300 bg-gray-50 px-5 type-body-lg text-gray-900 outline-none focus:border-primary-600 focus:shadow-(--focus-ring)";
 
 function ChoiceCard({
   selected,
@@ -41,7 +41,7 @@ function ChoiceCard({
       aria-pressed={selected}
       onClick={onClick}
       className={`motion-fast pressable flex min-h-button-lg w-full flex-col items-start justify-center gap-1 rounded-lg border px-5 py-3 text-left ${
-        selected ? "border-primary-600 bg-primary-50 outline outline-1 outline-primary-600" : "border-gray-200 bg-white hover:border-gray-300"
+        selected ? "border-primary-600 bg-primary-50 outline-1 outline-primary-600" : "border-gray-200 bg-white hover:border-gray-300"
       }`}
     >
       <span className="type-label font-semibold text-gray-900">{title}</span>
@@ -320,7 +320,7 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string; onE
     <div className="flex items-center justify-between gap-3 border-b border-gray-100 py-4 last:border-b-0">
       <div className="min-w-0">
         <p className="type-caption text-gray-600">{label}</p>
-        <p className="break-words type-label font-semibold text-gray-900">{value}</p>
+        <p className="wrap-break-word type-label font-semibold text-gray-900">{value}</p>
       </div>
       <Button variant="ghost" onClick={onEdit} aria-label={`${label} 수정`} className="shrink-0 px-4">
         수정
@@ -476,14 +476,14 @@ export function BirthWizard({ initialDraft, product }: { initialDraft: Draft; pr
             {step === 6 ? (
               <section className="flex flex-col gap-5">
                 <h1 className="type-h2">{product.concern.title}</h1>
-                <p className="type-body text-gray-600">없으면 건너뛰어도 돼요.</p>
+                <p className="type-body text-gray-600">{product.concern.hint}</p>
                 <textarea
                   value={draft.concern}
                   onChange={(event) => update({ concern: event.target.value.slice(0, CONCERN_MAX) })}
                   rows={4}
                   placeholder={product.concern.placeholder}
                   aria-label="궁금한 점"
-                  className="motion-fast w-full resize-none rounded-lg border border-gray-300 bg-gray-50 p-5 type-body text-gray-900 outline-none focus:border-primary-600 focus:shadow-[var(--focus-ring)]"
+                  className="motion-fast w-full resize-none rounded-lg border border-gray-300 bg-gray-50 p-5 type-body text-gray-900 outline-none focus:border-primary-600 focus:shadow-(--focus-ring)"
                 />
                 <p className="text-right type-caption text-gray-600">
                   {draft.concern.length} / {CONCERN_MAX}

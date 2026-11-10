@@ -66,6 +66,15 @@ export function buildChartView(
   };
 }
 
+/** 원국 글자(천간과 지지 본기)의 오행 개수. 시간을 모르면 여섯 글자만 센다. */
+export function elementCounts(chart: ChartView): Record<ChartElement, number> {
+  const counts: Record<ChartElement, number> = { 목: 0, 화: 0, 토: 0, 금: 0, 수: 0 };
+  for (const pillar of chart.pillars) {
+    for (const symbol of [pillar.stem, pillar.branch]) if (symbol) counts[symbol.element] += 1;
+  }
+  return counts;
+}
+
 export function chartLabel(chart: ChartView): string {
   return chart.pillars
     .filter((pillar) => pillar.stem && pillar.branch)

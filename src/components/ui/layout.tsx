@@ -1,6 +1,8 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SquareArt } from "@/components/ui/art";
+import type { PersonaFace } from "@/domain/personas";
 
 export function PageHeader({ title, backHref, right }: { title?: ReactNode; backHref?: string; right?: ReactNode }) {
   return (
@@ -67,12 +69,13 @@ export function LoadingScreen({ label = "불러오는 중이에요" }: { label?:
   );
 }
 
+/** 입력 중 표시. 세 점이 차례로 떠오른다 (globals.css의 typing-dot). */
 export function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-2" aria-hidden>
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
-      <span className="h-3 w-3 rounded-full bg-gray-400" />
+    <span className="inline-flex h-5 items-center gap-2" aria-hidden>
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500" />
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500 [animation-delay:160ms]" />
+      <span className="h-3 w-3 animate-typing-dot rounded-full bg-gray-500 [animation-delay:320ms]" />
     </span>
   );
 }
@@ -87,7 +90,24 @@ export function EmptyState({ title, description, action }: { title: string; desc
   );
 }
 
-export function PersonaAvatar({ glyph, large = false }: { glyph: string; large?: boolean }) {
+/** 아바타 칸의 한 변 (px). h-9는 space-9, h-tile은 size-tile 토큰이다. */
+const AVATAR_PX = { small: 40, large: 56 } as const;
+
+/** 캐릭터 아바타. 프로필 그림이 있으면 원 안에 그림을, 없으면 글자를 보여 준다. 옆에 이름이 있으므로 장식용이다. */
+export function PersonaAvatar({ persona, large = false }: { persona: PersonaFace; large?: boolean }) {
+  if (persona.avatar) {
+    return (
+      <SquareArt
+        image={persona.avatar}
+        displayPx={large ? AVATAR_PX.large : AVATAR_PX.small}
+        className={`rounded-full bg-primary-100 ${large ? "h-tile w-tile" : "h-9 w-9"}`}
+      />
+    );
+  }
+  return <GlyphAvatar glyph={persona.avatarGlyph} large={large} />;
+}
+
+export function GlyphAvatar({ glyph, large = false }: { glyph: string; large?: boolean }) {
   return (
     <span
       aria-hidden

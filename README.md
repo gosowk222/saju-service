@@ -31,8 +31,11 @@ Supabase 대시보드의 Authentication > URL Configuration에서 Redirect URL�
 
 마이그레이션은 `supabase/migrations/`에 있습니다.
 
+파일 이름 순서대로 적용합니다. 두 번째 파일(풀이 품질 고도화)은 앱을 배포하기 전에 적용해야 합니다.
+
 ```sh
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261109120000_first_product_mvp.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261110120000_reading_quality.sql
 ```
 
 ### 테스트 결제
@@ -47,9 +50,10 @@ npm run lint
 npm test             # 단위 테스트와 테스트용 Postgres로 권한 검증
 npm run build
 npm run test:e2e     # 브라우저 테스트
+npm run test:e2e:clean  # .env 없이 임시 복사본에서 브라우저 테스트 (Claude Code는 이것만 사용)
 ```
 
-`test:e2e`는 시스템의 Chrome을 사용하고, Supabase, OpenAI, 토스 API를 `tests/support/fake-gateway.ts`로 대신합니다. 실제 OAuth, 실제 결제, 실제 모델 품질을 검증하지 않습니다.
+`test:e2e`는 시스템의 Chrome을 사용하고, Supabase, OpenAI, 토스 API를 `tests/support/fake-gateway.ts`로 대신합니다. 실제 OAuth, 실제 결제, 실제 모델 품질을 검증하지 않습니다. Claude Code에서는 `.env`가 있는 폴더의 `test:e2e`가 거부되고, 실제 OpenAI 호출도 막힙니다 (CLAUDE.md).
 
 ## 자주 쓰는 명령
 
@@ -57,7 +61,7 @@ npm run test:e2e     # 브라우저 테스트
 | --- | --- |
 | `npm run places:import` | GeoNames 자료를 내려받아 지역 목록을 다시 만듭니다 |
 | `npm run llm:check -- gpt-6-luna` | 현재 키로 해당 모델을 쓸 수 있는지 확인합니다 |
-| `npm run llm:compare` | 가상 사례로 두 모델을 비교합니다 (실제 비용 발생) |
+| `npm run llm:compare` | 가상 사례로 두 모델을 비교합니다. 실제 호출은 개발 서버 안에서만 허용되어 지금은 `LIVE_NOT_RUN`으로 끝납니다 (`docs/LLM_OPERATIONS.md`) |
 
 ## 문서
 

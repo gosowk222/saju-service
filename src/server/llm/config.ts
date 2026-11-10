@@ -8,13 +8,28 @@ import "server-only";
 /** 개발 기본 모델. OPENAI_MODEL이 비어 있는 개발·테스트 환경에서만 쓴다. */
 const DEVELOPMENT_DEFAULT_MODEL = "gpt-5.6-luna";
 
+export type LlmTask = "classify" | "reading" | "followup";
+
+export interface LlmTaskSettings {
+  /** 추론 토큰을 포함한 출력 상한. 한국어 본문과 JSON 구조를 함께 담을 수 있게 잡는다. */
+  readonly maxOutputTokens: number;
+  readonly reasoningEffort: "low" | "medium";
+  /** 요청 한 번의 시간 제한. */
+  readonly timeoutMs: number;
+}
+
 export const LLM_SETTINGS = {
   /** 정해진 판단을 설명하는 작업이라 낮은 추론 설정에서 시작한다. */
   reasoningEffort: "low",
-  /** 추론 토큰을 포함한 출력 상한. */
-  maxOutputTokens: { reading: 9000, followup: 2500 },
-  requestTimeoutMs: 120_000,
-  /** 네트워크·일시 오류의 재시도 횟수 (처음 호출 제외). */
+  tasks: {
+    /** 질문 정리. 짧은 구조화 출력이다. */
+    classify: { maxOutputTokens: 2_000, reasoningEffort: "low", timeoutMs: 30_000 },
+    /** 최초 풀이 전체. 40~60개 말풍선과 JSON 구조를 한 번에 받는다. */
+    reading: { maxOutputTokens: 24_000, reasoningEffort: "low", timeoutMs: 200_000 },
+    /** 후속 질문 답변. 소질문 여러 개를 나눠 답한다. */
+    followup: { maxOutputTokens: 6_000, reasoningEffort: "low", timeoutMs: 90_000 },
+  } satisfies Record<LlmTask, LlmTaskSettings>,
+  /** 네트워크·일시 오류의 재시도 횟수 (처음 호출 제외). 남은 시간이 부족하면 재시도하지 않는다. */
   transportRetries: 2,
   /** 인스턴스당 동시 호출 수. */
   concurrency: 4,
@@ -22,11 +37,17 @@ export const LLM_SETTINGS = {
   validationRetries: 1,
   /** 한 풀이가 시도할 수 있는 실행 횟수. 비용 상한 역할도 한다. */
   generationMaxAttempts: 4,
-  /** 실행 중인 작업의 점유 시간. 지나면 다른 요청이 이어받는다. */
+  /** 실행 중인 작업의 점유 시간. 지나면 다른 요청이 이어받는다. route의 maxDuration(300초)과 맞춘다. */
   generationLeaseSeconds: 300,
-  followupLeaseSeconds: 90,
+  /** 생성 요청 안에서 쓸 수 있는 시간. 이 시간을 넘길 재시도는 하지 않는다. */
+  generationBudgetMs: 280_000,
+  followupLeaseSeconds: 180,
+  followupBudgetMs: 170_000,
   followupRatePerMinute: 6,
-  followupContextTurns: 3,
+  /** 짧은 후속 질문의 문맥을 이해하는 데 쓰는 직전 대화 수. 대화 전체를 보내지 않는다. */
+  followupContextTurns: 1,
+  /** 후속 질문에 함께 보내는 이전 풀이 말풍선 수의 상한 (질문 주제의 말풍선만 고른다). */
+  followupDeliveredMessages: 14,
 } as const;
 
 export class LlmConfigError extends Error {
@@ -44,6 +65,39 @@ export function resolveModelId(env: Readonly<Record<string, string | undefined>>
     throw new LlmConfigError("OPENAI_MODEL이 설정되지 않았습니다.");
   }
   return DEVELOPMENT_DEFAULT_MODEL;
+}
+
+function isOpenAiHost(url: string): boolean {
+  try {
+    return /(^|\.)openai\.com$/i.test(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+}
+
+/** Claude Code가 띄운 프로세스에 들어가는 환경 변수. 사용자가 직접 연 터미널에는 없다. */
+const AGENT_MARKERS = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"] as const;
+
+/**
+ * 실제 OpenAI 서버로 가는 호출을 막아야 하는 이유. 막지 않으면 null.
+ *
+ * 실제 호출은 사용자가 직접 연 Next 서버(개발 서버나 배포 서버) 안에서만 허용한다. 비용은 사용자가 내기 때문이다.
+ * - 개발 스크립트(llm:compare, llm:check)와 테스트는 Next 밖에서 실행되므로 OPENAI_BASE_URL로 가짜 서버를 가리킬 때만 호출한다.
+ * - Claude Code가 띄운 프로세스(스크립트, 빌드, 테스트 서버, 개발 서버)는 Next 서버라도 실제 OpenAI를 부르지 않는다.
+ * 환경 변수는 `env` 객체로 읽어 실행할 때의 값을 본다. Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을
+ * "nodejs"로 바꿔 넣으므로 이 표현을 그대로 둔다.
+ */
+export function liveCallBlockReason(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  runtime: string | undefined = process.env.NEXT_RUNTIME,
+): string | null {
+  const base = env.OPENAI_BASE_URL?.trim();
+  if (base && !isOpenAiHost(base)) return null;
+  if (AGENT_MARKERS.some((name) => env[name])) {
+    return "Claude Code가 실행한 프로세스에서는 실제 OpenAI를 호출하지 않습니다. 사용자가 직접 연 터미널의 개발 서버에서만 호출합니다.";
+  }
+  if (runtime) return null;
+  return "실제 OpenAI 호출은 직접 연 개발 서버(npm run dev)나 배포 서버 안에서만 할 수 있습니다.";
 }
 
 export function requireApiKey(env: Readonly<Record<string, string | undefined>> = process.env): string {

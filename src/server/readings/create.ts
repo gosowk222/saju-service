@@ -47,12 +47,12 @@ export async function createReading(userId: string, input: CreateReadingInput): 
 
   let analysis;
   try {
+    // 궁금한 점의 원문은 readings.concern에만 저장한다. 생성 단계에서 범위를 판정한 뒤 정리된 값만 쓴다.
     analysis = analyzeBirth({
       birth,
       product,
       nickname: input.nickname,
       situationId: situation?.id ?? null,
-      concern,
     });
   } catch {
     throw new ApiError(422, "calculation_failed", "이 정보로는 사주를 계산하지 못했어요. 입력을 확인해 주세요.");

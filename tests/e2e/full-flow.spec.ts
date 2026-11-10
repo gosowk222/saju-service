@@ -6,22 +6,26 @@ test.beforeEach(async ({ request }) => {
   await setControl(request, { openai: "ok", tossFail: null, loginError: null });
 });
 
-test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async ({ page, request }) => {
+test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 이용한다", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /나를 읽는 시간/ })).toBeVisible();
   await page.getByRole("link", { name: "시작하기" }).click();
-  await expect(page).toHaveURL(/\/login/);
-  await login(page, request);
+  await expect(page).toHaveURL(/\/home$/);
 
   await expect(page.getByRole("heading", { name: /나를 읽어 볼까요/ })).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).first().click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).first().click();
   await expect(page.getByText("실제 개인 풀이가 아닌 예시예요")).toBeVisible();
   await expect(page.getByText("990원").first()).toBeVisible();
   await expect(page.getByText("3회 포함")).toBeVisible();
   await expect(page.getByText(/후기|만족도|구매 \d/)).toHaveCount(0);
+  await expect(page.locator("strong", { hasText: "결론부터 들이미는 게 문제야" })).toBeVisible();
+  await expect(page.getByText("입은 얄밉고, 풀이는 집요한 자칭 천재 사주꾼.")).toBeVisible();
 
+  // 로그인하지 않았으면 로그인 화면을 거쳐 사주 입력 화면으로 이어진다.
   await page.getByRole("link", { name: "내 사주 입력하기" }).click();
-  await page.waitForURL("**/readings/new*");
+  await expect(page).toHaveURL(/\/login\?next=/);
+  await login(page, request, { next: "/readings/new?product=first-overview" });
+  await page.waitForURL("**/readings/new?product=first-overview");
   await fillWizard(page, { concern: "이직이 고민이에요" });
   await expect(page.getByText("1998년 9월 19일")).toBeVisible();
   await page.getByRole("button", { name: "내 사주 보기" }).click();
@@ -37,18 +41,21 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await waitForCompletedReading(page);
   const bubbles = page.getByText(/\[테스트 응답\]/);
   expect(await bubbles.count()).toBeGreaterThanOrEqual(20);
+  await expect(page.locator("strong", { hasText: "강조 확인 문구" }).first()).toBeVisible();
+  expect(await page.locator("main").innerText()).not.toContain("**");
   await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
 
   await page.getByRole("textbox", { name: "후속 질문" }).fill("강점을 일할 때는 어떻게 써?");
   await page.getByRole("button", { name: "보내기" }).click();
   await expect(page.getByText(/강점을 일할 때는 어떻게 써\?"에 대한 답변/)).toBeVisible();
+  await expect(page.locator("strong", { hasText: "두 번째 문단" })).toBeVisible();
   await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
 
   const readingUrl = page.url();
   await page.goto("/library");
   await expect(page.getByText("완료")).toBeVisible();
   await expect(page.getByText(/달빛 님/)).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).click();
   await expect(page).toHaveURL(readingUrl);
   await expect(page.getByText("풀이 완료")).toBeVisible();
   expect(await page.getByText(/\[테스트 응답\]/).count()).toBeGreaterThanOrEqual(21);

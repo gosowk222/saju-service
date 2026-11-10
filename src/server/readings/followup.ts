@@ -1,17 +1,24 @@
 import "server-only";
+import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
-import type { ChartView, ReadingPlan, StoredMessage } from "@/domain/reading/types";
+import { findProduct } from "@/domain/products";
+import { focusTopicsOf } from "@/domain/reading/focus";
+import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
+import { isPlanV2, type AnyReadingPlan, type ChartView } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
-import { LlmError } from "@/server/llm/client";
+import { LlmError, type LlmUsage } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
-import { answerFollowup } from "@/server/llm/narrate";
-import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION } from "@/server/llm/prompts";
+import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
+import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { internalReason } from "@/server/log";
+import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
+import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems, type FollowupStatus } from "./followup-core";
 
-export const OFF_TOPIC_REPLY = "방금 받은 풀이에 대해 궁금한 점을 물어봐 주세요.";
+export type { FollowupStatus };
 
 export interface FollowupResponse {
-  readonly status: "answered" | "off_topic";
+  readonly status: FollowupStatus;
   readonly answer: string;
   readonly questionsUsed: number;
   readonly questionLimit: number;
@@ -25,9 +32,30 @@ interface BeginResult {
   readonly followup?: { readonly id: string; readonly status: string; readonly answer: string | null };
 }
 
+/** 시간이 지나 다른 요청이 이 질문을 실패로 정리했다. 더 저장하지 않는다. */
+class FollowupHandedOver extends Error {}
+
+const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+
+/** 분석 결과 중 남겨 둘 최소 기록. 질문 원문은 followups.question에 따로 있다. */
+function analysisRecord(analysis: QuestionAnalysis, llmCalls: number) {
+  return {
+    version: analysis.version,
+    promptVersion: QUESTION_PROMPT_VERSION,
+    referenceDate: analysis.referenceDate,
+    items: analysis.items.map(({ id, domain, intent, scope, answerability, timingSupported, period }) => ({ id, domain, intent, scope, answerability, timingSupported, period })),
+    needsClarification: analysis.needsClarification,
+    reaction: analysis.reaction ?? "none",
+    llmCalls,
+  };
+}
+
 /**
- * 후속 질문 처리. 답변이 정상 저장될 때만 한 번 차감한다.
- * 관련 없는 질문, 생성 실패, 저장 실패는 차감하지 않는다.
+ * 후속 질문 처리. 상품 범위 안에서 기존 풀이 설명, 상황 적용, 필요한 기간 분석까지 한다.
+ *
+ * - 정상 답변이 저장될 때만 한 번 차감한다. 한 메시지 안의 소질문 여러 개도 한 번이다.
+ * - 범위 밖 안내, 되묻기, 생성 실패, 저장 실패는 차감하지 않는다.
+ * - 원국 계산은 저장된 작성 재료를 다시 쓰고, 기간 재료는 필요한 기간만 계산해 저장해 둔다.
  */
 export async function askFollowup(input: {
   readonly userId: string;
@@ -59,88 +87,119 @@ export async function askFollowup(input: {
 
   if (begin.outcome === "duplicate") {
     const previous = begin.followup!;
-    if (previous.status === "answered" || previous.status === "off_topic") {
-      return {
-        status: previous.status,
-        answer: previous.status === "off_topic" ? OFF_TOPIC_REPLY : (previous.answer ?? ""),
-        questionsUsed: begin.used,
-        questionLimit: begin.limit,
-        replayed: true,
-      };
+    if (previous.status === "answered" || previous.status === "off_topic" || previous.status === "clarify") {
+      return { status: previous.status, answer: previous.answer ?? "", questionsUsed: begin.used, questionLimit: begin.limit, replayed: true };
     }
     throw new ApiError(409, "busy", "이전 질문을 처리하고 있어요. 잠시 후 다시 시도해 주세요.");
   }
 
   const followupId = begin.followup!.id;
-  const failFollowup = (code: string) =>
-    admin.rpc("fail_followup", { p_followup_id: followupId, p_user_id: userId, p_code: code });
+  const failFollowup = (code: string) => admin.rpc("fail_followup", { p_followup_id: followupId, p_user_id: userId, p_code: code });
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + LLM_SETTINGS.followupBudgetMs;
 
   try {
     const modelId = resolveModelId();
     const [internals, reading, messages, previous] = await Promise.all([
       admin.from("reading_internals").select("plan").eq("reading_id", readingId).single(),
-      admin.from("readings").select("chart, persona_id").eq("id", readingId).eq("user_id", userId).single(),
-      admin.from("reading_messages").select("seq, topic_id, kind, text, refs").eq("reading_id", readingId).order("seq", { ascending: true }),
+      admin.from("readings").select("chart, persona_id, product_id, birth_input").eq("id", readingId).eq("user_id", userId).single(),
+      admin.from("reading_messages").select("seq, topic_id, text").eq("reading_id", readingId).order("seq", { ascending: true }),
       admin
         .from("followups")
-        .select("question, answer, status, created_at")
+        .select("question, answer, created_at")
         .eq("reading_id", readingId)
-        .in("status", ["answered"])
+        .eq("status", "answered")
         .order("created_at", { ascending: false })
         .limit(LLM_SETTINGS.followupContextTurns),
     ]);
     if (internals.error || reading.error || messages.error || previous.error) throw new Error("load_failed");
 
     const persona = findPersona(reading.data.persona_id as string);
-    if (!persona) throw new Error("persona_unavailable");
+    const product = findProduct(reading.data.product_id as string);
+    if (!persona || !product) throw new Error("configuration_unavailable");
+    const plan = internals.data.plan as AnyReadingPlan;
+    const last = (previous.data ?? [])[0] as { question: string; answer: string | null } | undefined;
+    const lastTurn = last ? { question: last.question, answer: truncate(last.answer ?? "", 600) } : null;
+    const referenceDate = seoulDate();
 
-    const stored: StoredMessage[] = (messages.data as { seq: number; topic_id: string | null; kind: StoredMessage["kind"]; text: string; refs: string[] }[]).map(
-      (row) => ({ seq: row.seq, topicId: row.topic_id, kind: row.kind, text: row.text, refs: row.refs }),
-    );
-    const recentConversation = ((previous.data ?? []) as { question: string; answer: string | null }[])
-      .reverse()
-      .map((row) => ({ question: row.question, answer: row.answer ?? "" }));
+    const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: question, lastTurn, modelId, deadlineAt });
+    // 이 풀이에 있는 주제만 답한다. 주제가 늘기 전에 만든 풀이에서 새 주제를 물으면 차감 없이 안내한다.
+    const analysis = limitToTopics(classified.analysis, new Set(focusTopicsOf(plan, product).map((topic) => topic.inquiryDomain)));
+    let usage: LlmUsage = classified.meta.usage;
+    let llmCalls = classified.meta.llmCalls;
+    let actualModel = classified.meta.actualModel;
 
-    const { output, meta } = await answerFollowup({
-      plan: internals.data.plan as ReadingPlan,
-      chart: reading.data.chart as ChartView,
-      persona,
-      messages: stored,
-      recentConversation,
-      question,
-      modelId,
-    });
-
-    const status = output.relevance === "related" ? "answered" : "off_topic";
-    const answer = status === "answered" ? output.answer.trim() : OFF_TOPIC_REPLY;
+    let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
+    const items = inScopeItems(analysis);
+    if (!items.length) {
+      // 반응만 보낸 메시지는 이 풀이에서 앞서 몇 번 보냈는지 센다 (무료 횟수를 넘으면 차감).
+      let earlierReactions = 0;
+      if (isReactionOnly(analysis)) {
+        const { data: earlier } = await admin.from("followups").select("analysis").eq("reading_id", readingId).in("status", ["clarify", "answered"]);
+        earlierReactions = ((earlier ?? []) as { analysis: { reaction?: string; items: unknown[] } | null }[]).filter((row) => isReactionOnly(row.analysis)).length;
+      }
+      result = { ...routeWithoutItems(product, persona, analysis, question, earlierReactions), refs: [] };
+    } else {
+      const { timing } = await timingFor({ admin, readingId, birth: reading.data.birth_input as PublicBirthInput, items, referenceDate });
+      const initialAnalysis = isPlanV2(plan) ? await loadAnalysis<QuestionAnalysis>(admin, readingId, INITIAL_QUESTION_KEY) : null;
+      const answered = await answerAnalyzedFollowup({
+        plan,
+        product,
+        persona,
+        chart: reading.data.chart as ChartView,
+        analysis,
+        initialAnalysis,
+        timing,
+        messages: ((messages.data ?? []) as { topic_id: string | null; text: string }[]).map((row) => ({ topicId: row.topic_id, text: row.text })),
+        lastTurn,
+        modelId,
+        deadlineAt,
+        // 문단이 완성될 때마다 답을 먼저 저장해 화면에 보여 준다. 횟수 차감과 완료 상태는 complete_followup에서 한 번에 바꾼다.
+        publish: async (partial) => {
+          const { data: updated, error: updateError } = await admin
+            .from("followups")
+            .update({ answer: partial })
+            .eq("id", followupId)
+            .eq("status", "answering")
+            .select("id");
+          if (updateError || !updated?.length) throw new FollowupHandedOver();
+        },
+      });
+      usage = mergeUsage(usage, answered.meta.usage);
+      llmCalls += answered.meta.llmCalls;
+      actualModel = answered.meta.actualModel;
+      result = answered;
+    }
 
     const { data: completed, error: completeError } = await admin.rpc("complete_followup", {
       p_followup_id: followupId,
       p_user_id: userId,
-      p_status: status,
-      p_answer: answer,
-      p_refs: status === "answered" ? output.refs : [],
+      p_status: result.status,
+      p_answer: result.answer,
+      p_refs: result.refs,
       p_meta: {
         modelId,
-        actualModel: meta.actualModel,
+        actualModel,
         promptVersion: CURRENT_FOLLOWUP_PROMPT,
         schemaVersion: FOLLOWUP_SCHEMA_VERSION,
-        usage: meta.usage,
-        durationMs: meta.durationMs,
+        usage,
+        durationMs: Date.now() - startedAt,
+        analysis: analysisRecord(analysis, llmCalls),
       },
     });
+    console.info("[followup] done", { readingId, status: result.status, calls: llmCalls, durationMs: Date.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
     if (completeError) {
       await failFollowup("save_failed");
       throw new ApiError(500, "save_failed", "답변을 저장하지 못했어요. 질문 횟수는 줄지 않았어요.");
     }
-    const result = completed as { saved: boolean; used: number; limit: number };
-    if (!result.saved) throw new ApiError(409, "exhausted", "질문을 모두 사용했어요.");
-
-    return { status, answer, questionsUsed: result.used, questionLimit: result.limit, replayed: false };
+    const saved = completed as { saved: boolean; used: number; limit: number };
+    if (!saved.saved) throw new ApiError(409, "exhausted", "질문을 모두 사용했어요.");
+    return { status: result.status, answer: result.answer, questionsUsed: saved.used, questionLimit: saved.limit, replayed: false };
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof FollowupHandedOver) throw new ApiError(409, "busy", "답변을 만드는 시간이 지나 처리를 멈췄어요. 질문 횟수는 줄지 않았어요.");
     const code = error instanceof LlmError ? error.code : "internal";
-    console.error("[followup] failed", { readingId, code });
+    console.error("[followup] failed", { readingId, code, ...(code === "internal" ? { reason: internalReason(error) } : {}) });
     await failFollowup(code);
     throw new ApiError(502, "generation_failed", "답변을 만들지 못했어요. 질문 횟수는 줄지 않았어요.");
   }

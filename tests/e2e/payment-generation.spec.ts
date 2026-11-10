@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { createPreview, gatewayStats, login, purchase, setControl, stubTossSdk, waitForCompletedReading } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
-  await setControl(request, { openai: "ok", tossFail: null, loginError: null });
+  await setControl(request, { openai: "ok", tossFail: null, loginError: null, streamDelayMs: 10 });
 });
 
 async function openCheckout(page: import("@playwright/test").Page) {
@@ -115,6 +115,19 @@ test("중복 콜백은 한 번만 처리되고 생성도 한 번만 일어난다
   expect(stats.openaiCalls).toBe(beforeLlm);
 });
 
+test("주제가 완성될 때마다 말풍선을 먼저 보여 주고, 첫 인사 다음에 사주표 사진을 보낸다", async ({ page, request }) => {
+  await login(page, request);
+  await createPreview(page);
+  // 응답을 천천히 흘려보내 생성이 끝나기 전에 앞 주제가 보이는지 확인한다.
+  await setControl(request, { streamDelayMs: 250 });
+  await purchase(page);
+  await expect(page.getByText("temperament 주제의 첫 설명", { exact: false })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("풀이 완료")).toHaveCount(0);
+  await expect(page.getByLabel("사주원국 표와 오행 비율")).toBeVisible();
+  await waitForCompletedReading(page);
+  await expect(page.getByText("궁금한 점은 편하게 물어봐 주세요", { exact: false })).toBeVisible();
+});
+
 test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", async ({ page, request }) => {
   await login(page, request);
   await createPreview(page);
@@ -125,7 +138,7 @@ test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", as
 
   await page.goto("/library");
   await expect(page.getByText("다시 시도 필요")).toBeVisible();
-  await page.getByRole("link", { name: /나를 읽는 짧은 사주/ }).click();
+  await page.getByRole("link", { name: /묘묘의 사주 참견/ }).click();
 
   await setControl(request, { openai: "ok" });
   await page.getByRole("button", { name: "다시 시도하기" }).click();
@@ -177,8 +190,38 @@ test.describe("후속 질문", () => {
     await completed(page, request);
     await page.getByRole("textbox", { name: "후속 질문" }).fill("내일 날씨 어때?");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText("방금 받은 풀이에 대해 궁금한 점을 물어봐 주세요.")).toBeVisible();
+    await expect(page.getByText(/여기서는 성향, 강점, 일, 돈, 연애, 인간관계, 친구, 가족, 지역과 행운/)).toBeVisible();
     await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
+  });
+
+  test("후속 답변은 문단이 완성될 때마다 먼저 보이고, 다 끝나면 한 번 차감한다", async ({ page, request }) => {
+    await completed(page, request);
+    // 답을 천천히 흘려보내 문단이 하나씩 보이는지 확인한다.
+    await setControl(request, { streamDelayMs: 2000 });
+    await page.getByRole("textbox", { name: "후속 질문" }).fill("일할 때 내 약점이 뭐야?");
+    await page.getByRole("button", { name: "보내기" }).click();
+    await expect(page.getByText('"일할 때 내 약점이 뭐야?"에 대한 답변이에요', { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("세 번째 문단까지 차례로 보여요")).toHaveCount(0);
+    await expect(page.getByText("묘묘가 입력하고 있어요").last()).toBeAttached();
+    await expect(page.getByText("세 번째 문단까지 차례로 보여요")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/남은 질문 2회/)).toBeVisible({ timeout: 10_000 });
+    // 문단은 한 번씩만 보인다.
+    await expect(page.getByText('"일할 때 내 약점이 뭐야?"에 대한 답변이에요', { exact: false })).toHaveCount(1);
+  });
+
+  test("질문 없이 반응만 보내면 묘묘가 받아치고, 처음 한 번만 차감하지 않는다", async ({ page, request }) => {
+    await completed(page, request);
+    await page.getByRole("textbox", { name: "후속 질문" }).fill("소름 돋게 맞췄네");
+    await page.getByRole("button", { name: "보내기" }).click();
+    await expect(page.getByText(/흐|어라|흐흥/).last()).toBeVisible();
+    await expect(page.getByText(/이번 건 봐줄게/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
+
+    await page.getByRole("textbox", { name: "후속 질문" }).fill("허세 좀 그만 부려");
+    await page.getByRole("button", { name: "보내기" }).click();
+    await expect(page.getByText(/허세.*(아니거든|라니)/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/질문 1회로 셌어/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
   });
 
   test("생성 실패는 차감하지 않고 안내한다", async ({ page, request }) => {

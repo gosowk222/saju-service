@@ -23,6 +23,44 @@ test("보호된 화면은 로그인 후 원래 주소로 돌아온다", async ({
   await expect(page).toHaveURL(/\/library$/);
 });
 
+test("로그인 없이 홈과 상품을 보고, 보관함·마이·사주 입력은 로그인 뒤 누르려던 화면으로 간다", async ({ page, request }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "시작하기" }).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole("link", { name: /묘묘의 사주 참견/ }).first()).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "주요 메뉴" });
+  await nav.getByRole("link", { name: "탐색" }).click();
+  await expect(page).toHaveURL(/\/products$/);
+
+  // 화면의 로그인 버튼을 그대로 눌러, 로그인 화면이 받은 복귀 주소로 돌아오는지 본다.
+  const loginHere = async () => {
+    await setControl(request, { loginUser: { id: randomUUID(), email: null, provider: "kakao" }, loginError: null });
+    await page.getByRole("button", { name: /카카오/ }).click();
+  };
+
+  await nav.getByRole("link", { name: "보관함" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Flibrary$/);
+  await loginHere();
+  await page.waitForURL("**/library");
+  await expect(page.getByText("아직 받은 풀이가 없어요")).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.goto("/home");
+  await nav.getByRole("link", { name: "마이" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Fmy$/);
+  await loginHere();
+  await page.waitForURL("**/my");
+  await expect(page.getByRole("button", { name: "로그아웃" })).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.goto("/products/first-overview");
+  await page.getByRole("link", { name: "내 사주 입력하기" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Freadings%2Fnew%3Fproduct%3Dfirst-overview$/);
+  await loginHere();
+  await page.waitForURL("**/readings/new?product=first-overview");
+  await expect(page.getByLabel("별명")).toBeVisible();
+});
+
 test("외부 주소로의 복귀를 막는다", async ({ page, request }) => {
   for (const next of ["https://evil.example", "//evil.example", "/\\evil.example"]) {
     await page.context().clearCookies();
@@ -75,7 +113,7 @@ test("인증이 만료되면 API는 401, 화면은 로그인으로 보낸다", a
   await page.context().clearCookies();
   const response = await page.request.get("/api/places/search?q=서울");
   expect(response.status()).toBe(401);
-  await page.goto("/home");
+  await page.goto("/library");
   await expect(page).toHaveURL(/\/login/);
 });
 

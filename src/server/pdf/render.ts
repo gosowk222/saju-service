@@ -1,6 +1,7 @@
 import "server-only";
 import path from "node:path";
 import PDFDocument from "pdfkit";
+import { splitEmphasis } from "@/domain/reading/emphasis";
 import type { ChartView, StoredMessage } from "@/domain/reading/types";
 
 const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
@@ -61,13 +62,16 @@ export function renderReadingPdf(input: PdfInput): Promise<Buffer> {
       }
       currentTopic = message.topicId;
       if (message.kind === "creative-scene") {
-        doc.font("bold").fontSize(9.5).fillColor(COLOR.muted).text("상상으로 그려 본 장면", { width: contentWidth });
+        // 장면은 제목 없이 왼쪽 선과 들여쓰기로만 구분한다.
+        const top = doc.y;
+        const page = doc.page;
+        writeRich(doc, message.text, { x: PAGE_MARGIN + 12, width: contentWidth - 12, color: COLOR.text });
+        // 쪽이 넘어가면 선 위치를 맞출 수 없으므로 같은 쪽에 끝난 장면에만 선을 긋는다.
+        if (doc.page === page && doc.y > top + 6) doc.save().rect(PAGE_MARGIN, top, 2.5, doc.y - top - 6).fill(COLOR.line).restore();
+        doc.x = PAGE_MARGIN;
+      } else {
+        writeRich(doc, message.text, { x: PAGE_MARGIN, width: contentWidth, color: COLOR.text });
       }
-      doc
-        .font("regular")
-        .fontSize(11.5)
-        .fillColor(COLOR.text)
-        .text(message.text, { width: contentWidth, lineGap: 4, paragraphGap: 6 });
     }
 
     if (input.followups.length) {
@@ -78,8 +82,8 @@ export function renderReadingPdf(input: PdfInput): Promise<Buffer> {
         ensureSpace(doc, 70);
         doc.font("bold").fontSize(11.5).fillColor(COLOR.text).text(`Q. ${item.question}`, { width: contentWidth, lineGap: 3 });
         doc.moveDown(0.2);
-        doc.font("regular").fontSize(11.5).fillColor(COLOR.text).text(item.answer, { width: contentWidth, lineGap: 4 });
-        doc.moveDown(0.8);
+        writeRich(doc, item.answer, { x: PAGE_MARGIN, width: contentWidth, color: COLOR.text });
+        doc.moveDown(0.6);
       }
     }
 
@@ -93,6 +97,34 @@ export function renderReadingPdf(input: PdfInput): Promise<Buffer> {
 
     doc.end();
   });
+}
+
+/**
+ * PDF 글꼴(Noto Sans KR)에 없는 그림 이모티콘(😏처럼 기본 문자 영역 밖의 것)은 빈 네모로 찍히므로 뺀다.
+ * ♡처럼 한국어 글꼴에 있는 기호는 남긴다. 화면에서는 그대로 보인다.
+ */
+export function withoutEmoji(text: string): string {
+  return text
+    .replace(/(?=\p{Extended_Pictographic})[\u{10000}-\u{10FFFF}]️?|️/gu, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.!?,~])/g, "$1")
+    .replace(/[ \t]+$/gm, "");
+}
+
+/** 문단 하나를 쓴다. **강조** 구절은 굵게 쓴다. 문단 사이 빈 줄은 문단 간격으로 바꾼다. */
+function writeRich(doc: PDFKit.PDFDocument, text: string, options: { x: number; width: number; color: string }): void {
+  for (const paragraph of withoutEmoji(text).split(/\n\s*\n/).filter((part) => part.trim())) {
+    const runs = splitEmphasis(paragraph.trim());
+    doc.fillColor(options.color).fontSize(11.5);
+    runs.forEach((run, index) => {
+      const last = index === runs.length - 1;
+      doc.font(run.strong ? "bold" : "regular");
+      const textOptions = { width: options.width, lineGap: 4, continued: !last, ...(last ? { paragraphGap: 6 } : {}) };
+      if (index === 0) doc.text(run.text, options.x, doc.y, textOptions);
+      else doc.text(run.text, textOptions);
+    });
+  }
+  doc.font("regular");
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, height: number): void {

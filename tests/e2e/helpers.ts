@@ -9,7 +9,14 @@ export async function setControl(request: APIRequestContext, data: Record<string
 
 export async function gatewayStats(request: APIRequestContext) {
   const response = await request.get(`${GATEWAY}/__state`);
-  return (await response.json()) as { openaiCalls: number; tossConfirms: number; openaiModels: string[]; lastOpenaiBody: Record<string, unknown> };
+  return (await response.json()) as {
+    openaiCalls: number;
+    narrationCalls: number;
+    lastNarrationInput: Record<string, unknown> | null;
+    tossConfirms: number;
+    openaiModels: string[];
+    lastOpenaiBody: Record<string, unknown>;
+  };
 }
 
 /** 토스 SDK 스크립트를 테스트용 대역으로 바꾼다. 실제 결제창이 아니다. */

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:clean": "node scripts/e2e-clean.mjs",
     "places:import": "tsx scripts/import-geonames.ts",
     "llm:check": "node --conditions=react-server --import tsx scripts/llm-check.ts",
     "llm:compare": "node --conditions=react-server --import tsx scripts/llm-compare.ts"
