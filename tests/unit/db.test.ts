@@ -387,6 +387,70 @@ describe("후속 질문 횟수", () => {
   });
 });
 
+describe("풀이 품질 고도화 (20261110 migration)", () => {
+  it("되묻기는 저장되지만 질문 횟수를 차감하지 않고, 같은 메시지의 소질문 여러 개도 한 번만 차감한다", async () => {
+    const { readingId } = await paidCompletedReading(userA);
+    const [{ r }] = await begin(userA, readingId, "clarify-1");
+    const [{ r: clarified }] = await complete(r.followup!.id, userA, "clarify");
+    expect(clarified).toMatchObject({ saved: true, used: 0 });
+    const [{ r: next }] = await begin(userA, readingId, "multi");
+    const [{ r: answered }] = await complete(next.followup!.id, userA, "answered");
+    expect(answered).toMatchObject({ saved: true, used: 1 });
+    const [usage] = await svc<{ count: number }>(`select count(*)::int as count from public.question_usage where reading_id = $1`, [readingId]);
+    expect(usage!.count).toBe(1);
+  });
+
+  it("후속 질문 분석 기록을 남기고, 정해진 상태 외에는 저장하지 않는다", async () => {
+    const { readingId } = await paidCompletedReading(userA);
+    const [{ r }] = await begin(userA, readingId, "meta");
+    await svc(`select complete_followup($1, $2, 'answered', '답', '[]'::jsonb, '{"modelId":"m","analysis":{"items":[{"id":"q1"}]}}'::jsonb)`, [r.followup!.id, userA]);
+    const [row] = await svc<{ analysis: { items: unknown[] } }>(`select analysis from public.followups where id = $1`, [r.followup!.id]);
+    expect(row!.analysis.items).toHaveLength(1);
+    const [{ r: other }] = await begin(userA, readingId, "bad-status");
+    await expect(complete(other.followup!.id, userA, "answering")).rejects.toThrow(/invalid_state/);
+  });
+
+  it("질문 분석과 기간 재료는 같은 키를 덮어쓰지 않고 처음 저장한 값을 돌려준다", async () => {
+    const readingId = await createReading(userA);
+    const save = (payload: object) =>
+      svc<{ r: { v: number } }>(`select save_reading_analysis($1, 'timing:career:2026-11..2027-10@2026-11-10', 'timing', 'timing-analysis-1.0.0', $2) as r`, [
+        readingId,
+        JSON.stringify(payload),
+      ]);
+    const [{ r: first }] = await save({ v: 1 });
+    const [{ r: second }] = await save({ v: 2 });
+    expect(first).toEqual({ v: 1 });
+    expect(second).toEqual({ v: 1 });
+  });
+
+  it("질문 분석과 기간 재료는 소유자도 브라우저 권한으로 읽거나 쓸 수 없다", async () => {
+    const readingId = await createReading(userA);
+    await svc(`select save_reading_analysis($1, 'question:initial', 'question', 'question-analysis-1.0.0', '{"items":[]}'::jsonb)`, [readingId]);
+    await expect(asUser(userA, `select * from public.reading_analyses where reading_id = $1`, [readingId])).rejects.toThrow(/permission denied/);
+    await expect(
+      asUser(userA, `select save_reading_analysis($1, 'x', 'question', 'v', '{}'::jsonb)`, [readingId]),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("생성 완료 시 쓰인 버전을 작업에 남긴다", async () => {
+    const readingId = await createReading(userA);
+    const order = await createOrder(userA, readingId);
+    await markPaid(order.id, userA, `pk-${order.id}`);
+    const [{ r }] = await claim(userA, readingId);
+    const meta = JSON.stringify({ actualModel: "m", usage: {}, durationMs: 1, llmCalls: 2, issueCount: 0, versions: { planVersion: "2.0.0", promptVersion: "reading-2.0.0" } });
+    await svc(`select complete_generation($1, $2, $3, $4)`, [readingId, r.job.attempts, MESSAGES, meta]);
+    const [job] = await svc<{ generation_meta: { planVersion: string }; llm_calls: number }>(`select generation_meta, llm_calls from public.generation_jobs where reading_id = $1`, [readingId]);
+    expect(job!.generation_meta.planVersion).toBe("2.0.0");
+    expect(job!.llm_calls).toBe(2);
+  });
+
+  it("이전 형식으로 완료된 풀이의 메시지는 그대로 읽힌다", async () => {
+    const { readingId } = await paidCompletedReading(userA);
+    const rows = await asUser<{ text: string; topic_id: string | null }>(userA, `select text, topic_id from public.reading_messages where reading_id = $1`, [readingId]);
+    expect(rows).toEqual([{ text: "안녕", topic_id: null }]);
+  });
+});
+
 describe("지역 값 보존", () => {
   it("풀이 기록의 좌표는 나중에 바뀌지 않는다", async () => {
     const readingId = await createReading(userA);
