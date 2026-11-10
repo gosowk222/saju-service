@@ -60,7 +60,7 @@ npm run test:e2e     # 브라우저 테스트
 | --- | --- |
 | `npm run places:import` | GeoNames 자료를 내려받아 지역 목록을 다시 만듭니다 |
 | `npm run llm:check -- gpt-6-luna` | 현재 키로 해당 모델을 쓸 수 있는지 확인합니다 |
-| `npm run llm:compare` | 가상 사례로 두 모델을 비교합니다 (실제 비용 발생) |
+| `npm run llm:compare` | 가상 사례로 두 모델을 비교합니다. 실제 호출은 개발 서버 안에서만 허용되어 지금은 `LIVE_NOT_RUN`으로 끝납니다 (`docs/LLM_OPERATIONS.md`) |
 
 ## 문서
 
