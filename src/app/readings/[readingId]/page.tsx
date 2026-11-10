@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Messenger } from "@/components/messenger";
 import { LoadingScreen, PageHeader, PersonaAvatar } from "@/components/ui/layout";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findProduct, topicTitlesOf } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
 import { getReading, loadReadingState } from "@/server/readings/store";
@@ -43,7 +43,8 @@ async function Reading({ params }: { params: Promise<{ readingId: string }> }) {
         readingId={readingId}
         personaName={persona.name}
         personaGlyph={persona.avatarGlyph}
-        topicTitles={Object.fromEntries((product?.topics ?? []).map((topic) => [topic.id, topic.title]))}
+        topicTitles={topicTitlesOf(product)}
+        scopeSummary={product ? `이 풀이에서는 ${product.scope.summary}` : "이 풀이에 대해 물어볼 수 있어요"}
         initialState={state}
       />
     </>

@@ -61,7 +61,7 @@ export function renderReadingPdf(input: PdfInput): Promise<Buffer> {
       }
       currentTopic = message.topicId;
       if (message.kind === "creative-scene") {
-        doc.font("bold").fontSize(9.5).fillColor(COLOR.muted).text("상상으로 그려 본 장면", { width: contentWidth });
+        doc.font("bold").fontSize(9.5).fillColor(COLOR.muted).text("예시 장면", { width: contentWidth });
       }
       doc
         .font("regular")

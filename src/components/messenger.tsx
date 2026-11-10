@@ -16,6 +16,8 @@ interface Props {
   readonly personaName: string;
   readonly personaGlyph: string;
   readonly topicTitles: Readonly<Record<string, string>>;
+  /** 후속 질문 입력 아래에 보여 줄 상품 범위 안내. */
+  readonly scopeSummary: string;
   readonly initialState: ReadingStateView;
 }
 
@@ -42,7 +44,7 @@ function Bubble({
             scene ? "border border-primary-200 bg-primary-50" : "bg-gray-100"
           }`}
         >
-          {scene ? <span className="mb-1 block type-caption-sm text-primary-600">상상으로 그려 본 장면</span> : null}
+          {scene ? <span className="mb-1 block type-caption-sm text-primary-600">예시 장면</span> : null}
           {children}
         </div>
       </div>
@@ -66,7 +68,7 @@ const ERROR_TEXT: Readonly<Record<string, string>> = {
   attempts_exhausted: "여러 번 시도했지만 풀이를 만들지 못했어요. 고객센터로 문의해 주세요.",
 };
 
-export function Messenger({ readingId, personaName, personaGlyph, topicTitles, initialState }: Props) {
+export function Messenger({ readingId, personaName, personaGlyph, topicTitles, scopeSummary, initialState }: Props) {
   const [state, setState] = useState(initialState);
   // 이 화면에서 생성을 지켜본 경우에만 전달 효과를 쓴다. 다시 열면 바로 보여 준다.
   const [animateReveal] = useState(initialState.status !== "completed");
@@ -196,7 +198,7 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, i
             <Bubble glyph={personaGlyph} name={personaName}>
               <TypingDots />
             </Bubble>
-            <p className="self-center type-caption text-gray-600">{personaName}이 풀이를 쓰고 있어요. 1분 안팎 걸려요.</p>
+            <p className="self-center type-caption text-gray-600">{personaName}이 풀이를 쓰고 있어요. 1~2분 정도 걸려요.</p>
           </div>
         ) : null}
 
@@ -289,7 +291,7 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, i
       {isDone ? (
         <div className="sticky bottom-0 flex flex-col gap-2 border-t border-gray-200 bg-white px-4 py-3 pb-safe">
           <p className="type-caption text-gray-600">
-            {remaining > 0 ? `남은 질문 ${remaining}회 · 이 풀이에 대해서만 물어볼 수 있어요` : "질문을 모두 사용했어요"}
+            {remaining > 0 ? `남은 질문 ${remaining}회 · ${scopeSummary}` : "질문을 모두 사용했어요"}
           </p>
           <form
             className="flex items-center gap-3"

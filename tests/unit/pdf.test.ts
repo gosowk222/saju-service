@@ -1,5 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { topicTitlesOf } from "@/domain/products";
+import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { buildChartView, type ChartFacts } from "@/domain/reading/chart";
 import type { StoredMessage } from "@/domain/reading/types";
 import { renderReadingPdf, type PdfInput } from "@/server/pdf/render";
@@ -58,5 +60,33 @@ describe("PDF", () => {
     expect(pageCount(without)).toBeGreaterThan(1);
     expect(pageCount(withFollowups)).toBeGreaterThan(pageCount(without));
     if (process.env.PDF_OUT) writeFileSync(process.env.PDF_OUT, withFollowups);
+  }, 30_000);
+
+  it("이전 형식(답변 영역 없음)과 새 형식(답변 영역 + 50여 개 말풍선)을 같은 함수로 만든다", async () => {
+    const titles = topicTitlesOf(FIRST_OVERVIEW);
+    const old: StoredMessage[] = [
+      { seq: 1, topicId: null, kind: "transition", text: "안녕하세요.", refs: [] },
+      ...FIRST_OVERVIEW.topics.flatMap((topic, index) =>
+        [0, 1, 2].map((offset) => ({ seq: index * 3 + offset + 2, topicId: topic.id, kind: "explanation" as const, text: LONG, refs: ["s1"] })),
+      ),
+    ];
+    const current: StoredMessage[] = [
+      { seq: 1, topicId: null, kind: "transition", text: "안녕하세요.", refs: [] },
+      ...[0, 1, 2, 3].map((offset) => ({ seq: offset + 2, topicId: "focus", kind: "explanation" as const, text: `${LONG}\n\n${LONG}`, refs: ["q1"] })),
+      ...FIRST_OVERVIEW.topics.flatMap((topic, index) =>
+        [0, 1, 2, 3, 4, 5, 6, 7].map((offset) => ({
+          seq: index * 8 + offset + 6,
+          topicId: topic.id,
+          kind: offset === 3 ? ("creative-scene" as const) : ("explanation" as const),
+          text: LONG.repeat(2),
+          refs: ["s1"],
+        })),
+      ),
+    ];
+    expect(titles.focus).toBe("궁금한 점에 대한 답");
+    const oldPdf = await renderReadingPdf(input(0, { messages: old, topicTitles: titles }));
+    const newPdf = await renderReadingPdf(input(0, { messages: current, topicTitles: titles }));
+    expect(oldPdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pageCount(newPdf)).toBeGreaterThan(pageCount(oldPdf));
   }, 30_000);
 });

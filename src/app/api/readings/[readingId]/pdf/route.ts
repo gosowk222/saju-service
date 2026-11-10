@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findProduct, topicTitlesOf } from "@/domain/products";
 import { ApiError, requireApiUser, route } from "@/server/api";
 import { renderReadingPdf } from "@/server/pdf/render";
 import { getEntitlement, getFollowups, getMessages, getJob, getReading } from "@/server/readings/store";
@@ -39,7 +39,7 @@ export const GET = route<{ readingId: string }>(async (request, { readingId }) =
     createdAt: formatDate(reading.created_at),
     personaName: findPersona(reading.persona_id)?.name ?? "",
     chart: reading.chart,
-    topicTitles: Object.fromEntries((product?.topics ?? []).map((topic) => [topic.id, topic.title])),
+    topicTitles: topicTitlesOf(product),
     messages,
     followups: followups
       .filter((item) => item.status === "answered" && item.answer)

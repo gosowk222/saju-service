@@ -476,7 +476,7 @@ export function BirthWizard({ initialDraft, product }: { initialDraft: Draft; pr
             {step === 6 ? (
               <section className="flex flex-col gap-5">
                 <h1 className="type-h2">{product.concern.title}</h1>
-                <p className="type-body text-gray-600">없으면 건너뛰어도 돼요.</p>
+                <p className="type-body text-gray-600">{product.concern.hint}</p>
                 <textarea
                   value={draft.concern}
                   onChange={(event) => update({ concern: event.target.value.slice(0, CONCERN_MAX) })}
