@@ -4,7 +4,8 @@ import { Suspense } from "react";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { LinkButton } from "@/components/ui/button";
 import { ProductThumb } from "@/components/product-card";
-import { Badge, EmptyState, GlyphAvatar, LoadingScreen, PageHeader } from "@/components/ui/layout";
+import { Badge, EmptyState, GlyphAvatar, PageHeader } from "@/components/ui/layout";
+import { SkeletonBlock, SkeletonScreen } from "@/components/ui/skeleton";
 import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -87,12 +88,30 @@ function StatusBadgeRow({ job, name }: { job: JobRow | undefined; name?: string 
   );
 }
 
+/** 목록 칸(썸네일, 상태, 이름, 날짜)과 같은 모양으로 자리를 잡아 둔다. */
+function LibrarySkeleton() {
+  return (
+    <SkeletonScreen className="flex flex-col gap-3">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center gap-4 rounded-lg border border-gray-200 p-4">
+          <SkeletonBlock className="h-tile w-tile shrink-0 rounded-md" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <SkeletonBlock className="h-7 w-1/4 rounded-sm" />
+            <SkeletonBlock className="h-5 w-2/3 rounded-sm" />
+            <SkeletonBlock className="h-4 w-1/2 rounded-sm" />
+          </div>
+        </div>
+      ))}
+    </SkeletonScreen>
+  );
+}
+
 export default function LibraryPage() {
   return (
     <>
       <PageHeader title="내 풀이 보관함" />
       <main className="flex flex-1 flex-col gap-4 px-5 py-6">
-        <Suspense fallback={<LoadingScreen />}>
+        <Suspense fallback={<LibrarySkeleton />}>
           <LibraryList />
         </Suspense>
       </main>

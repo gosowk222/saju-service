@@ -3,7 +3,8 @@ import { Suspense } from "react";
 import { ProductHero } from "@/components/product-card";
 import { RichText } from "@/components/rich-text";
 import { LinkButton } from "@/components/ui/button";
-import { Badge, Card, LoadingScreen, PageHeader, PersonaAvatar } from "@/components/ui/layout";
+import { Badge, Card, PageHeader, PersonaAvatar } from "@/components/ui/layout";
+import { SkeletonBlock, SkeletonScreen } from "@/components/ui/skeleton";
 import { findPersona } from "@/domain/personas";
 import { findProduct, formatPrice } from "@/domain/products";
 
@@ -103,9 +104,38 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
   );
 }
 
+/** 상세 화면과 같은 자리(머리글, 16:10 배너, 소개 글, 주제 목록)를 먼저 잡아 둔다. */
+function ProductDetailSkeleton() {
+  return (
+    <SkeletonScreen className="flex flex-1 flex-col">
+      <div className="flex h-header shrink-0 items-center border-b border-gray-100 px-5">
+        <SkeletonBlock className="h-6 w-1/3 rounded-sm" />
+      </div>
+      <span aria-hidden className="block aspect-16/10 w-full bg-primary-900" />
+      <div className="flex flex-col gap-7 px-5 py-6">
+        <div className="flex flex-col gap-3">
+          <SkeletonBlock className="h-6 w-1/3 rounded-sm" />
+          <SkeletonBlock className="h-5 w-full rounded-sm" />
+          <SkeletonBlock className="h-5 w-full rounded-sm" />
+          <SkeletonBlock className="h-5 w-2/3 rounded-sm" />
+        </div>
+        <div className="flex flex-col gap-4">
+          <SkeletonBlock className="h-6 w-1/4 rounded-sm" />
+          {[0, 1, 2, 3].map((row) => (
+            <div key={row} className="flex items-center gap-3">
+              <SkeletonBlock className="h-7 w-7 shrink-0 rounded-full" />
+              <SkeletonBlock className="h-5 w-1/2 rounded-sm" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </SkeletonScreen>
+  );
+}
+
 export default function ProductPage(props: { params: Promise<{ productId: string }> }) {
   return (
-    <Suspense fallback={<LoadingScreen />}>
+    <Suspense fallback={<ProductDetailSkeleton />}>
       <ProductDetail params={props.params} />
     </Suspense>
   );
