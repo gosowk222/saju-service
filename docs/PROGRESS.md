@@ -60,6 +60,10 @@
 | 실제 모델 확인 (`gpt-5.6-luna`, 가상 사례 2개) | 실행. `docs/READING_QUALITY.md` 14절 |
 | `gpt-6-luna` 비교 | LIVE_NOT_RUN |
 
+### 캐릭터 묘묘 (2026-11-11)
+
+기본 캐릭터를 여울에서 묘묘(자칭 천재 사주꾼, 반말)로 바꾸고 여울을 코드에서 지웠다. 설정은 `src/domain/personas/index.ts` 한곳, 설명은 `docs/personas/myomyo.md`. 버전: 캐릭터 myomyo 1.0.0, 상품 3.2.0, 프롬프트 reading-2.5.0·followup-2.4.0·question-1.2.0. 실제 모델 문장은 LIVE_NOT_RUN.
+
 ### 주제별로 먼저 보여 주기 (2026-11-11)
 
 풀이를 스트리밍으로 받아 인사·답변·주제가 완성될 때마다 검사하고 저장해 먼저 보여 준다. 호출 수는 같고, 검사에 걸리면 보낸 부분은 두고 나머지만 이어 쓴다. 입력 중 표시에 움직임을 넣었다. 프롬프트 reading-2.4.0. 자세한 내용은 `docs/LLM_OPERATIONS.md` "주제별로 먼저 보여 주기"와 `docs/READING_QUALITY.md` 17절.
