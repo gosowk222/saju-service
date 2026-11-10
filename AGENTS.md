@@ -8,10 +8,12 @@
 
 ## 확정된 결정
 
-- 인증과 저장: Supabase. 로그인은 카카오·구글만 지원한다. 이메일 가입, 비밀번호, 매직 링크, 애플 로그인은 만들지 않는다.
-- 사용자 기준은 Supabase `user.id`다. 이메일이나 `user_metadata`로 소유권과 구매 권한을 판단하지 않는다.
+- 인증과 저장: Supabase. 로그인은 카카오만 지원한다 (출시 버전까지 유지하는 제품 정책). 구글, 이메일 가입·비밀번호, 이메일 OTP·매직 링크, 애플 등 다른 로그인은 만들지 않는다. 결제 모드를 바꿔도 로그인 수단은 바뀌지 않는다. 다른 로그인 수단은 별도 요구사항이 있을 때만 검토한다. 카카오·구글 계정 연결 기능은 철회되었으므로 만들지 않는다. 지원 제공자 목록은 `src/domain/auth/providers.ts` 한곳에 있고, 로그인 시작은 `POST /auth/login`만 쓴다. 자세한 내용은 `docs/AUTH_POLICY.md`.
+- 사용자 기준은 Supabase `user.id`다. 이메일이나 `user_metadata`로 소유권과 구매 권한을 판단하지 않는다. 회원은 서버가 `getUser()`로 받은 실제 연결(identities)에 카카오가 있는 사용자다 (DB에서는 `is_kakao_member`). 카카오 연결이 없는 예전 세션은 화면·API에서 막는다.
 - LLM: OpenAI Responses API. 호출은 `src/server/llm/client.ts`에서만 한다. 개발 기본은 `gpt-5.6-luna`, 출시 전 검증 후 `gpt-6-luna`로 전환하며 모델은 `OPENAI_MODEL`로만 바꾼다. 절차는 `docs/LLM_OPERATIONS.md`에 있다.
-- 결제: 토스페이먼츠 테스트 키만 허용한다. 금액은 서버의 상품 설정(`src/domain/products/`)이 기준이다.
+- 이용 방식: 서버 설정 `CHECKOUT_MODE`로 정한다 (`src/server/checkout/mode.ts`). 현재는 `free_trial`(미설정 시 기본값)로, 카카오 회원에게 무료 이용권 한 장(캠페인 `free-trial-2026-11`, 고정)을 주고 이용권으로만 '묘묘의 사주 참견'을 받는다. 새 결제는 서버에서 막는다. `payment`로 바꾸면 기존 결제를 다시 열고 새 지급만 멈춘다. 이미 받은 이용권과 풀이 권한은 유지한다. 클라이언트가 보낸 `isFree`, `amount` 같은 값을 권한 근거로 쓰지 않는다. 지급·사용·반환은 DB 함수가 한 트랜잭션으로 하며, 무료 이용을 가짜 결제 성공으로 만들지 않는다. 정책과 운영 절차는 `docs/FREE_TRIAL.md`.
+- 역할과 관리자: 회원 역할은 `user`(기본)와 `admin` 두 가지이고 DB(`user_roles`, `set_user_role`)에서만 바꾼다. 관리자 화면(`/admin`)은 관리자에게만 열리고 다른 사람에게는 404다. 관리자 화면의 "풀이 상품 이용" 설정(`app_settings.readings_open_to_all`, 기본 관리자만)이 꺼져 있으면 관리자만 새 입력·이용권 사용·결제·생성·후속 질문을 할 수 있다. 풀이 상품을 쓰는 API는 `requireReadingAccess`(`src/server/access.ts`)로 막는다. 관리자는 고른 회원에게 무료 이용권을 한 장씩 줄 수 있다. 자세한 내용은 `docs/ADMIN.md`.
+- 결제(결제 모드): 토스페이먼츠 테스트 키만 허용한다. 금액은 서버의 상품 설정(`src/domain/products/`)이 기준이다. 모드를 바꾸는 것만으로 실결제가 되지 않는다 (`PAYMENTS_ALLOW_LIVE`).
 - 출생지역: GeoNames 가공 자료 (`docs/GEONAMES_DATA.md`). 실행 중에 GeoNames에 접속하지 않는다.
 - 모의 로그인, 모의 결제, 고정 응답은 앱 코드에 넣지 않는다. `tests/support/fake-gateway.ts`만 사용한다.
 - 쓰기는 `supabase/migrations/`의 서버 전용 함수로 한다. 스키마 변경은 새 migration으로 남기고 기존 데이터를 지우지 않는다.
@@ -75,9 +77,10 @@
 - 규칙에는 적용·비적용·반대 근거·부족한 입력 사례를 테스트한다. 화면에는 loading/error/partial 상태와 저장 결과 다시 보기를 확인한다.
 - 에이전트는 실제 OpenAI API를 절대 호출하지 않는다. `npm run llm:compare`, `npm run llm:check`, 실제 키로 띄운 앱에서의 풀이 생성·후속 질문이 모두 포함된다. 비용은 사용자가 내며, 실제 모델 확인은 사용자가 직접 실행하고 결과를 알려 준다. 에이전트는 실행할 명령과 확인할 항목만 안내하고, 보고에는 `LIVE_NOT_RUN`으로 쓴다. 고정 응답 통과를 문장 품질 검증이라고 쓰지 않는다. 사용자의 OpenAI 요청 수에는 사용자가 직접 만든 풀이와 후속 질문만 찍혀야 한다.
 - 에이전트는 사용자의 `.env`, `.env.local` 등 실제 환경 파일에 접근하지 않는다. 읽기, 고치기, 복사, `--env-file`로 불러오기를 모두 하지 않는다. Next가 이 파일을 자동으로 읽으므로 `npm run dev`, `npm run build`, `npm run start`, `next dev/build/start`도 직접 실행하지 않는다. 빌드 확인은 아래 `npm run test:e2e:clean` 안의 빌드로 한다.
-- 브라우저 테스트는 `npm run test:e2e:clean`으로만 실행한다. 프로젝트를 환경 파일 없이 임시 폴더로 복사해 테스트 설정으로 빌드하고 가짜 서버로 테스트한다. Claude Code에서 `npm run test:e2e`를 실행하면 `.env`가 있는 폴더이므로 시작 전에 거부된다.
-- 실제 OAuth와 실제 결제를 끝까지 확인하지 못했으면 `NOT_RUN`으로 보고한다. 가짜 서버 통과를 실제 연결 성공으로 쓰지 않는다.
-- 검사 명령: `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:e2e:clean`(빌드 포함). 사용자는 `npm run build`, `npm run test:e2e`를 직접 실행할 수 있다.
+- 브라우저 테스트는 `npm run test:e2e:clean`으로만 실행한다. 프로젝트를 환경 파일 없이 임시 폴더로 복사해 테스트 설정으로 빌드하고 가짜 서버로 테스트한다. 같은 빌드로 무료 테스트 모드 앱(3100)과 결제 모드 앱(3101)을 띄운다. Claude Code에서 `npm run test:e2e`를 실행하면 `.env`가 있는 폴더이므로 시작 전에 거부된다.
+- 이용권·결제의 동시 요청은 실제 Postgres로 확인한다: `TEST_PG_URL=<로컬 Postgres 슈퍼유저 주소> npm run test:db-concurrency`. 원격(Supabase) 주소는 테스트가 거부한다. PGlite 테스트는 연결이 하나라 동시성 검증으로 보고하지 않는다.
+- 실제 OAuth(카카오)와 실제 결제를 끝까지 확인하지 못했으면 `NOT_RUN`으로 보고한다. 가짜 서버 통과를 실제 연결 성공으로 쓰지 않는다.
+- 검사 명령: `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:db-concurrency`(로컬 Postgres가 있을 때), `npm run test:e2e:clean`(빌드 포함). 사용자는 `npm run build`, `npm run test:e2e`를 직접 실행할 수 있다.
 - API 키, 출생정보, 사용자 대화와 결과 원문을 공개 로그나 커밋에 남기지 않는다.
 
 ## 완료 보고

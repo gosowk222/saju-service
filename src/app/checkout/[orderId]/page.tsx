@@ -2,10 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { PurchaseButton } from "@/components/purchase-button";
 import { TossCheckout } from "@/components/toss-checkout";
+import { LinkButton } from "@/components/ui/button";
 import { Card, LoadingScreen, Notice, PageHeader } from "@/components/ui/layout";
 import { findProduct, formatPrice } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
+import { checkoutMode, paymentsOpen } from "@/server/checkout/mode";
 import { PaymentError, tossClientKey } from "@/server/payments/toss";
 import { getOrder } from "@/server/readings/store";
 
@@ -14,6 +16,8 @@ const RESULT_MESSAGES: Readonly<Record<string, { text: string; tone: "danger" | 
   cancelled: { text: "결제를 취소했어요. 원하시면 다시 결제할 수 있어요.", tone: "warning" },
   pending: { text: "결제 확인이 지연되고 있어요. 잠시 후 이 화면을 새로고침해 주세요.", tone: "warning" },
   config: { text: "결제 설정을 확인해야 해요. 잠시 후 다시 시도해 주세요.", tone: "danger" },
+  disabled: { text: "지금은 결제를 받지 않아요. 결제는 승인되지 않았고 청구되지 않아요.", tone: "warning" },
+  closed: { text: "지금은 운영자가 허용한 계정만 풀이를 이용할 수 있어요. 결제는 승인되지 않았고 청구되지 않아요.", tone: "warning" },
 };
 
 function resolveClientKey(): string | null {
@@ -41,6 +45,23 @@ async function Checkout({
 
   const product = findProduct(order.product_id);
   const result = typeof query.result === "string" ? RESULT_MESSAGES[query.result] : undefined;
+
+  // 무료 테스트 모드: 예전 결제 주소로 들어와도 결제창을 띄우지 않는다. 결제 키도 읽지 않는다.
+  if (!paymentsOpen(checkoutMode())) {
+    return (
+      <>
+        <PageHeader title="결제" backHref={`/readings/${order.reading_id}/preview`} />
+        <main className="flex flex-1 flex-col gap-5 px-5 py-6">
+          {result && query.result === "disabled" ? <Notice tone={result.tone}>{result.text}</Notice> : null}
+          <Notice tone="warning">지금은 무료 테스트 기간이라 결제를 받지 않아요. 무료 이용권으로 풀이를 받을 수 있어요.</Notice>
+          <LinkButton href={`/readings/${order.reading_id}/preview`} size="lg">
+            맛보기로 돌아가기
+          </LinkButton>
+        </main>
+      </>
+    );
+  }
+
   const clientKey = resolveClientKey();
 
   return (

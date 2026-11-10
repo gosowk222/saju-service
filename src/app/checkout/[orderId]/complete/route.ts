@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { findProduct } from "@/domain/products";
 import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseAdminClient, createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReadingAccess } from "@/server/access";
+import { isMember } from "@/server/auth";
+import { checkoutMode, paymentsOpen } from "@/server/checkout/mode";
 import { confirmTossPayment, PaymentError } from "@/server/payments/toss";
 import { getOrder } from "@/server/readings/store";
 
@@ -17,9 +20,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const supabase = await createSupabaseServerClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
+  const nextPath = encodeURIComponent(`${pathname}${search}`);
   if (authError || !auth.user) {
-    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`, origin));
+    return NextResponse.redirect(new URL(`/login?next=${nextPath}`, origin));
   }
+  if (!isMember(auth.user)) return NextResponse.redirect(new URL(`/login?error=kakao_required&next=${nextPath}`, origin));
   const userId = auth.user.id;
 
   const order = await getOrder(supabase, orderId);
@@ -32,6 +37,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const admin = createSupabaseAdminClient();
   const closeAsFailed = (code: string, message: string) =>
     admin.rpc("close_order", { p_order_id: orderId, p_user_id: userId, p_status: "failed", p_code: code, p_message: message });
+
+  // 무료 테스트 모드에서는 결제사에 승인을 요청하지 않는다. 승인하지 않은 결제는 청구되지 않는다.
+  if (!paymentsOpen(checkoutMode())) {
+    await admin.rpc("close_order", {
+      p_order_id: orderId,
+      p_user_id: userId,
+      p_status: "cancelled",
+      p_code: "PAYMENTS_DISABLED",
+      p_message: "무료 테스트 기간이라 결제를 받지 않습니다.",
+    });
+    return toCheckout("disabled");
+  }
+  // 풀이 상품 이용이 관리자만으로 막혀 있으면 승인하지 않는다.
+  if (!(await getReadingAccess(userId)).allowed) {
+    await admin.rpc("close_order", {
+      p_order_id: orderId,
+      p_user_id: userId,
+      p_status: "cancelled",
+      p_code: "READINGS_CLOSED",
+      p_message: "풀이 상품 이용이 제한되어 결제를 받지 않습니다.",
+    });
+    return toCheckout("closed");
+  }
 
   const paymentKey = searchParams.get("paymentKey");
   const reportedOrderId = searchParams.get("orderId");

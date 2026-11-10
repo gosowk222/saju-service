@@ -4,6 +4,7 @@ import { unstable_rethrow } from "next/navigation";
 import { NextResponse, type NextRequest } from "next/server";
 import { requestOrigin } from "@/lib/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isMember } from "@/server/auth";
 
 export class ApiError extends Error {
   constructor(
@@ -42,13 +43,21 @@ export interface AuthedContext {
   readonly supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
 }
 
-/** 서버에 다시 물어 토큰을 검증한다. 세션 쿠키 값만으로 판단하지 않는다. */
+/**
+ * 서버에 다시 물어 토큰을 검증하고, 카카오 로그인 회원인지 확인한다. 세션 쿠키 값만으로 판단하지 않는다.
+ * 구글만 연결된 예전 세션은 403으로 막는다. 사용자가 바꿀 수 있는 메타데이터나 요청 값은 보지 않는다.
+ */
 export async function requireApiUser(): Promise<AuthedContext> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new ApiError(401, "unauthenticated", "로그인이 필요해요.");
+  if (!isMember(data.user)) {
+    throw new ApiError(403, KAKAO_LOGIN_REQUIRED, "카카오로 로그인한 회원만 이용할 수 있어요. 카카오로 다시 로그인해 주세요.");
+  }
   return { user: data.user, supabase };
 }
+
+export const KAKAO_LOGIN_REQUIRED = "kakao_login_required";
 
 type Handler<P> = (request: NextRequest, context: { params: P }) => Promise<NextResponse>;
 

@@ -1,15 +1,18 @@
 import { Suspense } from "react";
+import { FreeTicketCard } from "@/components/free-ticket-card";
 import { ProductCard } from "@/components/product-card";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { LinkButton } from "@/components/ui/button";
 import { Card, Screen } from "@/components/ui/layout";
 import { DEFAULT_PRODUCT_ID, findProduct, PRODUCTS } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getVerifiedUser } from "@/server/auth";
+import { getReadingAccess } from "@/server/access";
+import { getVerifiedMember } from "@/server/auth";
+import { loadFreeTicket } from "@/server/tickets/free-ticket";
 
-/** 로그인한 사용자에게만 작성 중인 입력을 이어서 하도록 보여 준다. 홈은 로그인 없이 볼 수 있다. */
+/** 로그인한 회원에게만 작성 중인 입력을 이어서 하도록 보여 준다. 홈은 로그인 없이 볼 수 있다. */
 async function ContinueBanner() {
-  if (!(await getVerifiedUser())) return null;
+  if (!(await getVerifiedMember())) return null;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("reading_drafts")
@@ -30,6 +33,15 @@ async function ContinueBanner() {
   );
 }
 
+/** 로그인한 회원의 무료 이용권 상태와 다음 동선. 상품 카드 아래에 두어, 늦게 그려져도 상품 카드가 밀리지 않는다. */
+async function FreeTicketSection() {
+  const user = await getVerifiedMember();
+  if (!user) return null;
+  const supabase = await createSupabaseServerClient();
+  const [ticket, access] = await Promise.all([loadFreeTicket(supabase, user.id), getReadingAccess(user.id)]);
+  return <FreeTicketCard ticket={ticket} allowed={access.allowed} />;
+}
+
 export default function HomePage() {
   return (
     <>
@@ -47,6 +59,9 @@ export default function HomePage() {
             ))}
           </div>
         </section>
+        <Suspense fallback={null}>
+          <FreeTicketSection />
+        </Suspense>
       </Screen>
       <BottomNav />
     </>

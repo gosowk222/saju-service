@@ -223,9 +223,3 @@
     animation-name: typing-dot-fade;
   }
 }
-
-/* Google 공식 버튼 표기 값. 카카오처럼 브랜드 지침의 고정 값이며 다른 곳에 쓰지 않는다. */
-.google-login {
-  border: 1px solid #747775;
-  color: #1f1f1f;
-}

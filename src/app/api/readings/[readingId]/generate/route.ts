@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ApiError, ok, readJson, requireApiUser, route } from "@/server/api";
+import { ApiError, ok, readJson, route } from "@/server/api";
+import { requireReadingAccess } from "@/server/access";
 import { runGeneration } from "@/server/readings/generate";
 import { loadReadingState } from "@/server/readings/store";
 
@@ -9,7 +10,7 @@ export const maxDuration = 300;
 const BodySchema = z.object({ retry: z.boolean().default(false) });
 
 export const POST = route<{ readingId: string }>(async (request, { readingId }) => {
-  const { user, supabase } = await requireApiUser();
+  const { user, supabase } = await requireReadingAccess();
   const body = BodySchema.safeParse(await readJson(request));
   if (!body.success) throw new ApiError(400, "invalid_body", "요청 형식이 올바르지 않아요.");
 

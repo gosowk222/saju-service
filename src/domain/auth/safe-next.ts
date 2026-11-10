@@ -4,6 +4,9 @@
  */
 export const DEFAULT_AFTER_LOGIN = "/home";
 
+/** 로그인 시작(/auth/login)이 돌아올 주소를 잠시 담아 두는 쿠키. 콜백에서 다시 검증한 뒤 지운다. */
+export const AUTH_NEXT_COOKIE = "auth_next";
+
 export function safeNextPath(value: string | null | undefined): string {
   if (!value) return DEFAULT_AFTER_LOGIN;
   let decoded = value;

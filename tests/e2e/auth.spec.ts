@@ -1,19 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { GATEWAY, createPreview, login, purchase, setControl, waitForCompletedReading } from "./helpers";
+import { GATEWAY, createPreview, login, redeemFreeTicket, setControl, waitForCompletedReading } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await setControl(request, { openai: "ok", tossFail: null, loginError: null });
 });
 
-test("로그인 화면은 카카오와 구글만 제공한다", async ({ page }) => {
+test("로그인 화면은 카카오로 시작하기 하나만 제공한다", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: /카카오 로그인/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Google 계정으로 로그인/ })).toBeVisible();
-  await expect(page.getByRole("button")).toHaveCount(2);
-  await expect(page.locator('input[type="password"], input[type="email"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "카카오로 시작하기" })).toBeVisible();
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.locator('input[type="password"], input[type="email"], input[type="text"]')).toHaveCount(0);
   const text = await page.locator("body").innerText();
-  for (const word of ["이메일", "비밀번호", "Apple", "회원가입"]) expect(text).not.toContain(word);
+  for (const word of ["Google", "구글", "이메일", "비밀번호", "Apple", "회원가입", "계정 연결"]) expect(text).not.toContain(word);
 });
 
 test("보호된 화면은 로그인 후 원래 주소로 돌아온다", async ({ page, request }) => {
@@ -79,7 +78,7 @@ test("로그인 취소와 오류를 안내한다", async ({ page, request }) => 
   await expect(page.getByText(/로그인을 취소했어요/)).toBeVisible();
 
   await setControl(request, { loginError: "server_error" });
-  await page.getByRole("button", { name: /Google/ }).click();
+  await page.getByRole("button", { name: "카카오로 시작하기" }).click();
   await expect(page.getByText(/로그인을 완료하지 못했어요/)).toBeVisible();
 });
 
@@ -122,7 +121,7 @@ test("사용자 A의 기록을 사용자 B가 볼 수 없다", async ({ browser,
   const pageA = await contextA.newPage();
   await login(pageA, request);
   const readingId = await createPreview(pageA, { nickname: "에이" });
-  await purchase(pageA);
+  await redeemFreeTicket(pageA);
   await waitForCompletedReading(pageA);
 
   const contextB = await browser.newContext();
@@ -165,6 +164,23 @@ test("브라우저 권한으로 데이터베이스를 직접 조작할 수 없�
 
   const internals = await request.get(`${GATEWAY}/rest/v1/reading_internals?select=*`, { headers });
   expect(internals.status()).toBe(403);
+
+  // 이용권: 본인 것은 읽기만 되고, 지급·사용·반환 함수와 직접 변경은 막힌다.
+  const mine = await request.get(`${GATEWAY}/rest/v1/free_tickets?select=*`, { headers });
+  expect(mine.status()).toBe(200);
+  expect(((await mine.json()) as { user_id: string }[]).every((row) => row.user_id === userId)).toBe(true);
+  for (const [fn, data] of [
+    ["grant_free_ticket", { p_user_id: userId, p_campaign_id: "free-trial-2026-11" }],
+    ["restore_free_ticket", { p_ticket_id: randomUUID(), p_reason: "x" }],
+    [
+      "redeem_free_ticket",
+      { p_user_id: userId, p_reading_id: randomUUID(), p_request_id: randomUUID(), p_product_id: "first-overview", p_product_version: "1", p_question_limit: 99, p_binding: {} },
+    ],
+  ] as const) {
+    expect((await request.post(`${GATEWAY}/rest/v1/rpc/${fn}`, { headers, data })).status(), fn).toBe(403);
+  }
+  const patch = await request.patch(`${GATEWAY}/rest/v1/free_tickets?user_id=eq.${userId}`, { headers, data: { status: "available", reading_id: null } });
+  expect(patch.status()).toBe(403);
 });
 
 test("초안은 새로고침 후 복구되고 다른 사용자에게 보이지 않는다", async ({ page, request }) => {

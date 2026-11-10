@@ -13,7 +13,11 @@ if ((process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT) && realEnvFil
 }
 
 const GATEWAY = "http://127.0.0.1:54399";
+/** 무료 테스트 모드(CHECKOUT_MODE 미설정 = 기본값 free_trial)와 결제 모드 앱을 같은 빌드로 하나씩 띄운다. */
 const APP_PORT = 3100;
+const PAYMENT_APP_PORT = 3101;
+/** 결제 모드 앱에서 돌리는 테스트. 나머지는 무료 테스트 모드 앱에서 돌린다. */
+const PAYMENT_SPECS = /(payment-generation|payment-mode).spec.ts$/;
 
 /**
  * 브라우저 테스트. 외부 서비스는 tests/support/fake-gateway.ts가 대신한다.
@@ -40,12 +44,15 @@ export default defineConfig({
   timeout: 90_000,
   reporter: [["list"]],
   use: {
-    baseURL: `http://127.0.0.1:${APP_PORT}`,
     channel: "chrome",
     viewport: { width: 390, height: 844 },
     locale: "ko-KR",
     trace: "retain-on-failure",
   },
+  projects: [
+    { name: "free-trial", testIgnore: PAYMENT_SPECS, use: { baseURL: `http://127.0.0.1:${APP_PORT}` } },
+    { name: "payment", testMatch: PAYMENT_SPECS, use: { baseURL: `http://127.0.0.1:${PAYMENT_APP_PORT}` } },
+  ],
   webServer: [
     {
       command: "node --import tsx tests/support/fake-gateway.ts",
@@ -60,6 +67,14 @@ export default defineConfig({
       reuseExistingServer: Boolean(process.env.PW_REUSE),
       timeout: 280_000,
       env: appEnv,
+    },
+    {
+      // 위 서버가 빌드를 마친 뒤 같은 빌드로 띄운다 (Playwright는 webServer를 순서대로 시작한다).
+      command: `npx next start -p ${PAYMENT_APP_PORT}`,
+      url: `http://127.0.0.1:${PAYMENT_APP_PORT}/products`,
+      reuseExistingServer: Boolean(process.env.PW_REUSE),
+      timeout: 120_000,
+      env: { ...appEnv, CHECKOUT_MODE: "payment" },
     },
   ],
 });

@@ -10,6 +10,7 @@ export async function setControl(request: APIRequestContext, data: Record<string
 export async function gatewayStats(request: APIRequestContext) {
   const response = await request.get(`${GATEWAY}/__state`);
   return (await response.json()) as {
+    authorizeProviders: string[];
     openaiCalls: number;
     narrationCalls: number;
     lastNarrationInput: Record<string, unknown> | null;
@@ -54,14 +55,60 @@ export async function stubTossSdk(page: Page, mode: "success" | "fail" | "cancel
   );
 }
 
-/** 앱의 실제 로그인 버튼과 콜백을 지나가되, OAuth 제공자는 가짜 서버가 대신한다. */
-export async function login(page: Page, request: APIRequestContext, options: { id?: string; email?: string | null; provider?: "카카오" | "Google"; next?: string } = {}) {
+/**
+ * 앱의 실제 로그인 버튼(카카오로 시작하기)과 서버의 로그인 시작·콜백을 지나가되, OAuth 제공자는 가짜 서버가 대신한다.
+ * providers는 그 계정에 연결된 로그인 수단이다 (기본은 카카오 하나). 실제 카카오 로그인 검증이 아니다.
+ */
+export async function login(
+  page: Page,
+  request: APIRequestContext,
+  options: { id?: string; email?: string | null; providers?: string[]; next?: string } = {},
+) {
   const id = options.id ?? randomUUID();
-  await setControl(request, { loginUser: { id, email: options.email ?? null, provider: "kakao" }, loginError: null });
+  const providers = options.providers ?? ["kakao"];
+  await setControl(request, { loginUser: { id, email: options.email ?? null, provider: providers[0], providers }, loginError: null });
   await page.goto(options.next ? `/login?next=${encodeURIComponent(options.next)}` : "/login");
-  await page.getByRole("button", { name: options.provider === "Google" ? /Google/ : /카카오/ }).click();
+  await page.getByRole("button", { name: "카카오로 시작하기" }).click();
   await page.waitForURL(options.next ? `**${options.next.split("?")[0]}*` : "**/home");
   return id;
+}
+
+/** 테스트용 데이터베이스를 관리자 권한으로 조회하거나 준비한다. */
+export async function gatewaySql<T = Record<string, unknown>>(request: APIRequestContext, sql: string, params: unknown[] = []): Promise<T[]> {
+  const response = await request.post(`${GATEWAY}/__sql`, { data: { sql, params } });
+  const body = await response.json();
+  if (!response.ok()) throw new Error(`sql failed: ${JSON.stringify(body)}`);
+  return body as T[];
+}
+
+export async function freeTickets(request: APIRequestContext, userId: string) {
+  return gatewaySql<{ id: string; status: string; reading_id: string | null; restore_count: number }>(
+    request,
+    "select id, status, reading_id, restore_count from public.free_tickets where user_id = $1",
+    [userId],
+  );
+}
+
+/**
+ * 앱의 로그인 흐름을 거치지 않은, 이미 발급된 세션을 브라우저에 넣는다.
+ * 구글 제공자를 끄기 전에 만들어진 구글 세션처럼, 콜백 확인을 지나지 않은 세션을 흉내 낸다.
+ */
+export async function injectSession(page: Page, request: APIRequestContext, user: { id?: string; providers: string[]; email?: string | null }) {
+  const id = user.id ?? randomUUID();
+  const response = await request.post(`${GATEWAY}/__session`, {
+    data: { id, email: user.email ?? null, provider: user.providers[0], providers: user.providers },
+  });
+  const session = await response.json();
+  const value = `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`;
+  const baseURL = new URL(page.url().startsWith("http") ? page.url() : "http://127.0.0.1:3100");
+  await page.context().addCookies([{ name: "sb-127-auth-token", value, domain: baseURL.hostname, path: "/", sameSite: "Lax" }]);
+  return id;
+}
+
+/** 맛보기에서 무료 이용권으로 풀이를 받는다. 결제창을 거치지 않는다. */
+export async function redeemFreeTicket(page: Page) {
+  await page.getByRole("button", { name: "무료 이용권 1장으로 풀이받기" }).click();
+  await page.waitForURL(/\/readings\/[0-9a-f-]+$/);
 }
 
 export interface WizardInput {

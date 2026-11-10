@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BirthWizard } from "@/components/birth-wizard";
-import { LoadingScreen, PageHeader } from "@/components/ui/layout";
+import { LinkButton } from "@/components/ui/button";
+import { LoadingScreen, Notice, PageHeader } from "@/components/ui/layout";
 import { DraftSchema, emptyDraft, type Draft } from "@/domain/birth/input";
 import { DEFAULT_PRODUCT_ID, findProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReadingAccess, READINGS_CLOSED_MESSAGE } from "@/server/access";
 import { requirePageUser } from "@/server/auth";
 import { getReading, type ReadingRow } from "@/server/readings/store";
 
@@ -35,7 +37,21 @@ async function NewReading({ searchParams }: { searchParams: Promise<Record<strin
   if (!product) notFound();
 
   const search = new URLSearchParams({ product: product.id, ...(editId ? { edit: editId } : {}) });
-  await requirePageUser(`/readings/new?${search.toString()}`);
+  const user = await requirePageUser(`/readings/new?${search.toString()}`);
+  // 풀이 상품 이용이 관리자만으로 막혀 있으면 입력을 받지 않는다 (서버 API도 같은 기준으로 막는다).
+  if (!(await getReadingAccess(user.id)).allowed) {
+    return (
+      <>
+        <PageHeader title={product.name} backHref={`/products/${product.id}`} />
+        <main className="flex flex-1 flex-col gap-5 px-5 py-6">
+          <Notice tone="warning">{READINGS_CLOSED_MESSAGE}</Notice>
+          <LinkButton href="/home" size="lg" variant="secondary">
+            홈으로
+          </LinkButton>
+        </main>
+      </>
+    );
+  }
   const supabase = await createSupabaseServerClient();
 
   let draft: Draft = emptyDraft(product.id);
