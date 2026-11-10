@@ -1,4 +1,16 @@
+import { readdirSync } from "node:fs";
 import { defineConfig } from "@playwright/test";
+
+/**
+ * Next는 빌드와 실행 때 .env를 자동으로 읽는다. Claude Code는 사용자의 .env를 쓰지 않으므로, 실제 환경 파일이 있는
+ * 폴더에서는 테스트를 시작하지 않는다. 파일 이름만 보고 내용은 읽지 않는다. 대신 npm run test:e2e:clean을 쓴다.
+ */
+const realEnvFiles = readdirSync(process.cwd()).filter((name) => name.startsWith(".env") && name !== ".env.example");
+if ((process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT) && realEnvFiles.length > 0) {
+  throw new Error(
+    "Claude Code에서는 .env가 있는 폴더에서 브라우저 테스트를 돌리지 않습니다. npm run test:e2e:clean을 사용하세요.",
+  );
+}
 
 const GATEWAY = "http://127.0.0.1:54399";
 const APP_PORT = 3100;
