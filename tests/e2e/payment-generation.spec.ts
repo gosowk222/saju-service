@@ -209,15 +209,19 @@ test.describe("후속 질문", () => {
     await expect(page.getByText('"일할 때 내 약점이 뭐야?"에 대한 답변이에요', { exact: false })).toHaveCount(1);
   });
 
-  test("질문 없이 칭찬이나 허세 지적만 보내면 묘묘가 받아치고 차감하지 않는다", async ({ page, request }) => {
+  test("질문 없이 반응만 보내면 묘묘가 받아치고, 처음 한 번만 차감하지 않는다", async ({ page, request }) => {
     await completed(page, request);
     await page.getByRole("textbox", { name: "후속 질문" }).fill("소름 돋게 맞췄네");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/(흐|어라|흐흥).*횟수에서 안 뺐어/)).toBeVisible();
+    await expect(page.getByText(/흐|어라|흐흥/).last()).toBeVisible();
+    await expect(page.getByText(/이번 건 봐줄게/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
+
     await page.getByRole("textbox", { name: "후속 질문" }).fill("허세 좀 그만 부려");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/허세.*(아니거든|라니)/)).toBeVisible();
-    await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
+    await expect(page.getByText(/허세.*(아니거든|라니)/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/질문 1회로 셌어/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
   });
 
   test("생성 실패는 차감하지 않고 안내한다", async ({ page, request }) => {
