@@ -3,7 +3,8 @@ import { ApiError, ok, readJson, requireApiUser, route } from "@/server/api";
 import { askFollowup } from "@/server/readings/followup";
 import { getEntitlement } from "@/server/readings/store";
 
-export const maxDuration = 120;
+/** 질문 정리, 필요한 기간 계산, 답변 생성을 한 요청 안에서 끝낸다 (LLM_SETTINGS.followupBudgetMs). */
+export const maxDuration = 180;
 
 const BodySchema = z.object({
   clientRequestId: z.string().uuid(),

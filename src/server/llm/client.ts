@@ -75,6 +75,10 @@ export interface StructuredRequest<T> {
   readonly parser: z.ZodType<T>;
   readonly maxOutputTokens: number;
   readonly reasoningEffort: string;
+  /** 요청 한 번의 시간 제한. 없으면 기본값을 쓴다. */
+  readonly timeoutMs?: number;
+  /** 이 시각(epoch ms)을 넘길 재시도는 하지 않는다. */
+  readonly deadlineAt?: number;
 }
 
 let activeCalls = 0;
@@ -146,9 +150,11 @@ function extractOutputText(response: OpenAI.Responses.Response): string {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const DEFAULT_TIMEOUT_MS = 120_000;
+
 function createClient(): OpenAI {
   // SDK 자체 재시도는 끄고 아래에서 한 번만 관리한다.
-  return new OpenAI({ apiKey: requireApiKey(), maxRetries: 0, timeout: LLM_SETTINGS.requestTimeoutMs });
+  return new OpenAI({ apiKey: requireApiKey(), maxRetries: 0, timeout: DEFAULT_TIMEOUT_MS });
 }
 
 export async function callStructured<T>(request: StructuredRequest<T>): Promise<StructuredResult<T>> {
@@ -161,22 +167,26 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
     throw classifyProviderError(error);
   }
 
+  const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   for (let attempt = 0; ; attempt += 1) {
     try {
       calls += 1;
       // temperature 등 모델 문서에서 확인하지 않은 옵션은 보내지 않는다.
       const response = await withConcurrencyLimit(() =>
-        client.responses.create({
-          model: request.model,
-          instructions: request.instructions,
-          input: request.input,
-          store: false,
-          max_output_tokens: request.maxOutputTokens,
-          reasoning: { effort: request.reasoningEffort as "low" },
-          text: {
-            format: { type: "json_schema", name: request.schemaName, schema: request.jsonSchema, strict: true },
+        client.responses.create(
+          {
+            model: request.model,
+            instructions: request.instructions,
+            input: request.input,
+            store: false,
+            max_output_tokens: request.maxOutputTokens,
+            reasoning: { effort: request.reasoningEffort as "low" },
+            text: {
+              format: { type: "json_schema", name: request.schemaName, schema: request.jsonSchema, strict: true },
+            },
           },
-        }),
+          { timeout },
+        ),
       );
 
       const text = extractOutputText(response);
@@ -202,8 +212,10 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
       };
     } catch (error) {
       const classified = classifyProviderError(error);
-      if (RETRYABLE_TRANSPORT.has(classified.code) && attempt < LLM_SETTINGS.transportRetries) {
-        await delay(500 * 2 ** attempt);
+      const backoff = 500 * 2 ** attempt;
+      const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
+      if (RETRYABLE_TRANSPORT.has(classified.code) && attempt < LLM_SETTINGS.transportRetries && fitsDeadline) {
+        await delay(backoff);
         continue;
       }
       throw new LlmError(classified.code, classified.message, calls);

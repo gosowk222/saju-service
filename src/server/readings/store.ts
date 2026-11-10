@@ -83,7 +83,8 @@ export interface FollowupRow {
   readonly client_request_id: string;
   readonly question: string;
   readonly answer: string | null;
-  readonly status: "answering" | "answered" | "off_topic" | "failed";
+  /** clarify는 되묻기이며 질문 횟수를 차감하지 않는다. */
+  readonly status: "answering" | "answered" | "clarify" | "off_topic" | "failed";
   readonly created_at: string;
 }
 
