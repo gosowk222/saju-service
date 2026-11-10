@@ -15,13 +15,13 @@ import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { checkNarrationV2 } from "@/domain/reading/check";
 import { buildNarrationPlan, requestedTimingKey } from "@/domain/reading/focus";
-import { emptyAnalysis, excludedItems, inScopeItems, itemDomain, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
+import { emptyAnalysis, excludedItems, inScopeItems, itemDomain, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
 import type { NarrationOutputV2, StoredMessage } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { analyzeBirth, toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
 import { analyzeTiming } from "@/server/engine/timing";
 import { LlmError, type LlmUsage } from "@/server/llm/client";
-import { LLM_SETTINGS } from "@/server/llm/config";
+import { LLM_SETTINGS, liveCallBlockReason } from "@/server/llm/config";
 import { classifyQuestion, mergeUsage, narrateReading, toStoredMessages } from "@/server/llm/narrate";
 import { renderReadingPdf } from "@/server/pdf/render";
 import { applyHighlight } from "@/domain/reading/emphasis";
@@ -255,7 +255,8 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
     const followups: FollowupResult[] = [];
     let lastTurn: { question: string; answer: string } | null = null;
     for (const followup of skipFollowups ? [] : entry.followups) {
-      const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: followup.question, lastTurn, modelId: model });
+      const raw = await classifyQuestion({ product, referenceDate, mode: "followup", text: followup.question, lastTurn, modelId: model });
+      const classified = { ...raw, analysis: limitToTopics(raw.analysis, new Set(base.plan.topics.map((topic) => topic.inquiryDomain))) };
       usage = mergeUsage(usage, classified.meta.usage);
       let followupCalls = classified.meta.llmCalls;
       let status: string;
@@ -404,6 +405,11 @@ async function main() {
   const skipFollowups = process.argv.includes("--skip-followups");
   if (!process.env.OPENAI_API_KEY?.trim()) {
     console.log(JSON.stringify({ result: "LIVE_NOT_RUN", reason: "OPENAI_API_KEY 없음", models, cases: cases.length }));
+    return;
+  }
+  const blocked = liveCallBlockReason();
+  if (blocked) {
+    console.log(JSON.stringify({ result: "LIVE_NOT_RUN", reason: blocked, models, cases: cases.length }));
     return;
   }
   const results: CaseResult[] = [];

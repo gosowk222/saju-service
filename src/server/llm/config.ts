@@ -67,6 +67,31 @@ export function resolveModelId(env: Readonly<Record<string, string | undefined>>
   return DEVELOPMENT_DEFAULT_MODEL;
 }
 
+function isOpenAiHost(url: string): boolean {
+  try {
+    return /(^|\.)openai\.com$/i.test(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 실제 OpenAI 서버로 가는 호출을 막아야 하는 이유. 막지 않으면 null.
+ *
+ * 실제 호출은 Next 서버(사용자가 직접 여는 개발 서버나 배포 서버) 안에서만 허용한다. 개발 스크립트(llm:compare, llm:check)와
+ * 테스트는 Next 밖에서 실행되므로 OPENAI_BASE_URL로 가짜 서버를 가리킬 때만 호출할 수 있다. 비용은 사용자가 내기 때문이다.
+ * Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을 "nodejs"로 바꿔 넣으므로 이 표현을 그대로 둔다.
+ */
+export function liveCallBlockReason(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  runtime: string | undefined = process.env.NEXT_RUNTIME,
+): string | null {
+  const base = env.OPENAI_BASE_URL?.trim();
+  if (base && !isOpenAiHost(base)) return null;
+  if (runtime) return null;
+  return "실제 OpenAI 호출은 직접 연 개발 서버(npm run dev)나 배포 서버 안에서만 할 수 있습니다.";
+}
+
 export function requireApiKey(env: Readonly<Record<string, string | undefined>> = process.env): string {
   const key = env.OPENAI_API_KEY?.trim();
   if (!key) throw new LlmConfigError("OPENAI_API_KEY가 설정되지 않았습니다.");

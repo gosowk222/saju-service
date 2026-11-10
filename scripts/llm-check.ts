@@ -5,12 +5,17 @@
  *   npm run llm:check -- gpt-6-luna          특정 모델을 확인
  */
 import { LlmError, classifyProviderError, pingModel } from "@/server/llm/client";
-import { resolveModelId } from "@/server/llm/config";
+import { liveCallBlockReason, resolveModelId } from "@/server/llm/config";
 
 async function main() {
   const model = process.argv[2] ?? resolveModelId();
   if (!process.env.OPENAI_API_KEY?.trim()) {
     console.log(JSON.stringify({ model, result: "LIVE_NOT_RUN", reason: "OPENAI_API_KEY 없음" }));
+    return;
+  }
+  const blocked = liveCallBlockReason();
+  if (blocked) {
+    console.log(JSON.stringify({ model, result: "LIVE_NOT_RUN", reason: blocked }));
     return;
   }
   try {

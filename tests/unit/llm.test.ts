@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { callStructured, LlmError } from "@/server/llm/client";
-import { LLM_SETTINGS, LlmConfigError, resolveModelId } from "@/server/llm/config";
+import { LLM_SETTINGS, LlmConfigError, liveCallBlockReason, resolveModelId } from "@/server/llm/config";
 
 /** 고정된 테스트 응답을 돌려주는 로컬 서버. 실제 모델 품질과는 무관하다. */
 let server: Server;
@@ -178,5 +178,38 @@ describe("오류 구분", () => {
     expect(await codeOf(callStructured(request()))).toBe("model_not_configured");
     expect(requests).toHaveLength(0);
     process.env.OPENAI_API_KEY = saved;
+  });
+});
+
+describe("실제 API 호출 제한", () => {
+  it("Next 서버 밖에서는 실제 OpenAI 주소로 호출하지 않고, 가짜 서버 주소일 때만 호출한다", () => {
+    expect(liveCallBlockReason({}, undefined)).toContain("개발 서버");
+    expect(liveCallBlockReason({ OPENAI_BASE_URL: "https://api.openai.com/v1" }, undefined)).toContain("개발 서버");
+    expect(liveCallBlockReason({ OPENAI_BASE_URL: "http://127.0.0.1:4010/v1" }, undefined)).toBeNull();
+    // 직접 연 개발 서버나 배포 서버(Next)는 실제 호출을 할 수 있다.
+    expect(liveCallBlockReason({}, "nodejs")).toBeNull();
+  });
+
+  it("막힌 호출은 요청을 보내지 않고 설정 오류로 끝난다", async () => {
+    const base = process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_BASE_URL;
+    try {
+      const error = await callStructured({
+        model: "gpt-5.6-luna",
+        instructions: "x",
+        input: "x",
+        schemaName: "s",
+        jsonSchema: { type: "object", additionalProperties: false, properties: {}, required: [] },
+        parser: z.object({}),
+        maxOutputTokens: 10,
+        reasoningEffort: "low",
+      }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(LlmError);
+      expect((error as LlmError).code).toBe("live_call_blocked");
+      expect((error as LlmError).isConfigurationError).toBe(true);
+      expect(requests).toHaveLength(0);
+    } finally {
+      process.env.OPENAI_BASE_URL = base;
+    }
   });
 });

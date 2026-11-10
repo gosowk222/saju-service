@@ -1,12 +1,13 @@
 import "server-only";
 import OpenAI from "openai";
 import type { z } from "zod";
-import { LLM_SETTINGS, LlmConfigError, requireApiKey } from "./config";
+import { LLM_SETTINGS, LlmConfigError, liveCallBlockReason, requireApiKey } from "./config";
 
 /** OpenAI 호출은 이 모듈만 한다. 화면, 규칙, 결제 코드는 SDK를 직접 쓰지 않는다. */
 
 export type LlmErrorCode =
   | "model_not_configured"
+  | "live_call_blocked"
   | "model_not_found"
   | "permission_denied"
   | "auth_failed"
@@ -25,6 +26,7 @@ export type LlmErrorCode =
 /** 코드나 설정을 고치기 전까지 다시 시도해도 소용없는 오류. */
 const CONFIGURATION_ERRORS: ReadonlySet<LlmErrorCode> = new Set([
   "model_not_configured",
+  "live_call_blocked",
   "model_not_found",
   "permission_denied",
   "auth_failed",
@@ -155,6 +157,8 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 function createClient(): OpenAI {
+  const blocked = liveCallBlockReason();
+  if (blocked) throw new LlmError("live_call_blocked", blocked, 0);
   // SDK 자체 재시도는 끄고 아래에서 한 번만 관리한다.
   return new OpenAI({ apiKey: requireApiKey(), maxRetries: 0, timeout: DEFAULT_TIMEOUT_MS });
 }
