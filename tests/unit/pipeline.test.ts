@@ -10,6 +10,7 @@ import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import { callStructured, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
+import { CURRENT_READING_PROMPT, isPlanV2Prompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
@@ -41,7 +42,7 @@ function narration(input: Input, valid: boolean) {
     focus: valid ? focus : focus.slice(0, 1),
     topics: input.topics.map((topic) => ({
       topicId: topic.topicId,
-      bubbles: [0, 1, 2].map((index) => ({
+      bubbles: [0, 1, 2, 3].map((index) => ({
         kind: "explanation",
         refs: [topic.statements[index % topic.statements.length]!.ref],
         text: `[테스트] ${topic.topicId} ${index}`,
@@ -154,7 +155,8 @@ const birth = toPublicBirthInput({
 });
 const base = analyzeBirth({ birth, product: FIRST_OVERVIEW, nickname: "가람", situationId: "job-seeking" });
 const persona = findPersona("yeoul")!;
-const config = { modelId: "gpt-5.6-luna", promptVersion: "reading-2.0.0", schemaVersion: "narration-2.0.0", reasoningEffort: "low" };
+// 새 작업이 실제로 고정하는 값(계획 2.0.0의 현재 프롬프트와 출력 형식)으로 확인한다.
+const config = { modelId: "gpt-5.6-luna", promptVersion: PROMPTS_FOR_PLAN["2.0.0"]!.prompt, schemaVersion: PROMPTS_FOR_PLAN["2.0.0"]!.schema, reasoningEffort: "low" };
 
 describe("최초 풀이 준비", () => {
   it("궁금한 점이 비어 있으면 분류 LLM을 부르지 않는다", async () => {
@@ -218,6 +220,17 @@ describe("분석 저장소 장애", () => {
     expect(internalReason(new Error("analysis_load_failed"))).toBe("analysis_load_failed");
     expect(internalReason(new TypeError("Cannot read birthDate 1998-09-19"))).toBe("TypeError");
     expect(internalReason("x")).toBe("string");
+  });
+});
+
+describe("생성 경로 선택", () => {
+  it("계획 2.0.0용 프롬프트는 버전이 올라가도 새 경로를 쓰고, 1.0.0 프롬프트만 이전 경로를 쓴다", () => {
+    // reading-2.1.0을 추가했을 때 이름 비교 때문에 이전 경로로 빠져 생성이 모두 실패한 적이 있다.
+    expect(isPlanV2Prompt(CURRENT_READING_PROMPT)).toBe(true);
+    expect(isPlanV2Prompt(PROMPTS_FOR_PLAN["2.0.0"]!.prompt)).toBe(true);
+    expect(isPlanV2Prompt("reading-2.0.0")).toBe(true);
+    expect(isPlanV2Prompt(PROMPTS_FOR_PLAN["1.0.0"]!.prompt)).toBe(false);
+    expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 });
 

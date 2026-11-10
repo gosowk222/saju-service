@@ -261,6 +261,8 @@ export interface NarrationBubble {
   readonly kind: MessageKind;
   readonly refs: readonly string[];
   readonly text: string;
+  /** narration-2.1.0부터. 굵게 보일 핵심 구절(text 안의 글자 그대로). 저장할 때 **표시**로 바꾸고 따로 보관하지 않는다. */
+  readonly highlight?: string;
 }
 
 export interface NarrationTopic {

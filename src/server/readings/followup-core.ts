@@ -2,6 +2,7 @@ import "server-only";
 import type { Persona } from "@/domain/personas";
 import type { ProductDefinition } from "@/domain/products/types";
 import { statementTexts } from "@/domain/reading/check";
+import { tidyEmphasis } from "@/domain/reading/emphasis";
 import { assembleFocus, focusTopicsOf } from "@/domain/reading/focus";
 import { excludedItems, excludedLabel, inScopeFacts, inScopeItems, itemDomain, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type StoredMessage, type TimingAnalysis, type UserContextStatement } from "@/domain/reading/types";
@@ -91,8 +92,9 @@ export async function answerAnalyzedFollowup(input: {
     return { status: "clarify", answer: `${answer.output.clarifyQuestion.trim()}\n\n${NOT_CHARGED}`, refs: [], meta: answer.meta };
   }
   const body = questions
-    .map((item) => answer.output.sections.find((section) => section.questionRef === item.ref)?.text.trim())
-    .filter((text): text is string => Boolean(text))
+    .map((item) => answer.output.sections.find((section) => section.questionRef === item.ref)?.text)
+    .filter((text): text is string => Boolean(text?.trim()))
+    .map(tidyEmphasis)
     .join("\n\n");
   const note = excluded.length ? `\n\n${product.scope.partialScopeNote.replace("{excluded}", excludedLabel(excluded))}` : "";
   return {

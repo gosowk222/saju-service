@@ -392,6 +392,8 @@ describe("후속 답변 검사 2.0.0", () => {
     expect(checkFollowupV2(ok, context, chart)).toEqual([]);
     expect(checkFollowupV2({ ...ok, sections: ok.sections.slice(0, 1) }, context, chart).join()).toContain("q2");
     expect(checkFollowupV2({ ...ok, sections: [{ ...ok.sections[0]!, refs: ["s99"] }, ok.sections[1]!] }, context, chart).join()).toContain("없는 근거");
+    // 실제 모델이 답하는 질문의 ref(q1)를 근거 목록에 넣어 두 번 거부된 사례 (2026-11-10). 문제로 보지 않는다.
+    expect(checkFollowupV2({ ...ok, sections: [{ ...ok.sections[0]!, refs: ["q1", "t1"] }, ok.sections[1]!] }, context, chart)).toEqual([]);
   });
 
   it("되묻기는 짧은 질문만 검사하고, 범위 밖 주제가 섞이면 거부한다", () => {

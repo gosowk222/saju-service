@@ -2,6 +2,7 @@ import "server-only";
 import type { Persona } from "@/domain/personas";
 import type { ProductDefinition } from "@/domain/products/types";
 import { checkFollowupV2, checkNarration, checkNarrationV2, type ExcludedQuestion, type FollowupCheckContext } from "@/domain/reading/check";
+import { emphasizeGroup, tidyEmphasis } from "@/domain/reading/emphasis";
 import { buildQuestionAnalysis, type QuestionAnalysis } from "@/domain/reading/question";
 import type {
   ChartView,
@@ -112,16 +113,17 @@ export async function narrateReading(input: {
 export function toStoredMessages(output: NarrationOutput | NarrationOutputV2, focusSectionId = "focus"): StoredMessage[] {
   const messages: StoredMessage[] = [];
   const push = (message: Omit<StoredMessage, "seq">) => messages.push({ ...message, seq: messages.length + 1 });
-  push({ topicId: null, kind: "transition", text: output.opening.trim(), refs: [] });
+  push({ topicId: null, kind: "transition", text: tidyEmphasis(output.opening), refs: [] });
+  // 굵게 보이는 구절은 답변 영역에서 질문 수에 맞춰(말풍선 세 개에 하나 정도), 주제마다 2개까지만 둔다.
   if ("focus" in output) {
-    for (const bubble of output.focus) push({ topicId: focusSectionId, kind: bubble.kind, text: bubble.text.trim(), refs: bubble.refs });
+    const texts = emphasizeGroup(output.focus, Math.max(2, Math.ceil(output.focus.length / 3)));
+    output.focus.forEach((bubble, index) => push({ topicId: focusSectionId, kind: bubble.kind, text: texts[index]!, refs: bubble.refs }));
   }
   for (const topic of output.topics) {
-    for (const bubble of topic.bubbles) {
-      push({ topicId: topic.topicId, kind: bubble.kind, text: bubble.text.trim(), refs: bubble.refs });
-    }
+    const texts = emphasizeGroup(topic.bubbles, 2);
+    topic.bubbles.forEach((bubble, index) => push({ topicId: topic.topicId, kind: bubble.kind, text: texts[index]!, refs: bubble.refs }));
   }
-  push({ topicId: null, kind: "transition", text: output.closing.trim(), refs: [] });
+  push({ topicId: null, kind: "transition", text: tidyEmphasis(output.closing), refs: [] });
   return messages;
 }
 

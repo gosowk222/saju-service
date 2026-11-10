@@ -8,7 +8,7 @@ import { ApiError } from "@/server/api";
 import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { mergeUsage, narrateReading, toStoredMessages, type GenerationConfig, type NarrationInput } from "@/server/llm/narrate";
-import { PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { isPlanV2Prompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
@@ -102,7 +102,8 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
 
     let narration: NarrationInput;
     let prepared: Awaited<ReturnType<typeof prepareNarration>> | null = null;
-    if (config.promptVersion === "reading-2.0.0") {
+    // 프롬프트 이름을 직접 비교하면 새 버전(reading-2.1.0)이 이전 경로로 빠진다 (2026-11-10 브라우저 테스트에서 발견).
+    if (isPlanV2Prompt(config.promptVersion)) {
       if (!isPlanV2(plan) || !product) throw new Error("plan_version_mismatch");
       prepared = await prepareNarration({
         admin,
@@ -134,7 +135,7 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
         usage,
         llmCalls,
         durationMs,
-        versions: { promptVersion: config.promptVersion, schemaVersion: config.schemaVersion, ...(prepared?.versions ?? { planVersion: plan.planVersion }) },
+        versions: { promptVersion: config.promptVersion, schemaVersion: config.schemaVersion, personaVersion: persona.version, ...(prepared?.versions ?? { planVersion: plan.planVersion }) },
       },
     });
     console.info("[generation] done", {

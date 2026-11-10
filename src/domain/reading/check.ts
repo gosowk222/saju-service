@@ -247,7 +247,7 @@ const OUTSIDE_WORDS: Partial<Readonly<Record<QuestionDomain, RegExp>>> = {
   study: /시험\s*합격|입시|성적/,
 };
 
-const squash = (text: string) => text.replace(/[\s.,!?~'"“”‘’()]/g, "");
+const squash = (text: string) => text.replace(/[\s.,!?~'"“”‘’()*]/g, "");
 
 function checkExcluded(texts: readonly string[], excluded: readonly ExcludedQuestion[]): string[] {
   const issues: string[] = [];
@@ -408,7 +408,8 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
     if (text.length > FOLLOWUP_SECTION_MAX) issues.push("한 질문의 답변이 너무 깁니다.");
     issues.push(...checkTextV2(text, chart, percents, dates));
     for (const ref of section.refs) {
-      if (!context.knownRefs.has(ref)) issues.push(`없는 근거를 참조했습니다 (${ref}).`);
+      // 답하는 질문의 ref는 근거는 아니지만 틀린 참조도 아니다. 이것 때문에 다시 생성하지 않는다.
+      if (!context.knownRefs.has(ref) && !context.questionRefs.includes(ref)) issues.push(`없는 근거를 참조했습니다 (${ref}).`);
     }
   }
   if (total > FOLLOWUP_TOTAL_MAX) issues.push("답변 전체가 너무 깁니다.");
