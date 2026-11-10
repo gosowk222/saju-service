@@ -1,18 +1,25 @@
 import { Suspense } from "react";
+import { FreeTicketCard } from "@/components/free-ticket-card";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { Button } from "@/components/ui/button";
 import { Card, LoadingScreen, PageHeader } from "@/components/ui/layout";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
+import { loadFreeTicket } from "@/server/tickets/free-ticket";
 
+/** 로그인 방식은 카카오 하나다 (src/domain/auth/providers.ts). 다른 로그인 수단을 연결하는 메뉴는 두지 않는다. */
 async function Account() {
   const user = await requirePageUser("/my");
-  const provider = user.app_metadata?.provider;
-  const label = provider === "kakao" ? "카카오" : provider === "google" ? "Google" : "소셜";
+  const supabase = await createSupabaseServerClient();
+  const ticket = await loadFreeTicket(supabase, user.id);
   return (
-    <Card>
-      <p className="type-label font-normal text-gray-600">로그인 방식</p>
-      <p className="mt-1 type-title">{label} 계정</p>
-    </Card>
+    <>
+      <Card>
+        <p className="type-label font-normal text-gray-600">로그인 방식</p>
+        <p className="mt-1 type-title">카카오 계정</p>
+      </Card>
+      <FreeTicketCard ticket={ticket} />
+    </>
   );
 }
 
