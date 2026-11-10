@@ -13,10 +13,16 @@ const JWT_SECRET = "e2e-test-secret";
 export const SERVICE_KEY = "e2e-service-key";
 const BASE = `http://127.0.0.1:${PORT}`;
 
-type User = { id: string; email: string | null; provider: string };
+/**
+ * providers는 이 계정에 실제로 연결된 로그인 수단(identities)이다. 없으면 [provider].
+ * 앱은 카카오로만 로그인을 시작하지만, 예전에 구글로 만든 계정·세션을 흉내 내려고 구글 연결도 만들 수 있다.
+ */
+type User = { id: string; email: string | null; provider: string; providers?: string[] };
+
+const providersOf = (user: User) => user.providers ?? [user.provider];
 
 const control = {
-  loginUser: { id: "00000000-0000-4000-8000-00000000000a", email: null as string | null, provider: "kakao" },
+  loginUser: { id: "00000000-0000-4000-8000-00000000000a", email: null as string | null, provider: "kakao", providers: undefined as string[] | undefined },
   loginError: null as string | null,
   openai: "ok",
   tossFail: null as string | null,
@@ -24,6 +30,8 @@ const control = {
   streamDelayMs: 10,
 };
 const stats = {
+  /** /auth/v1/authorize에 들어온 제공자. 앱이 카카오 외의 로그인을 시작하지 않았는지 확인한다. */
+  authorizeProviders: [] as string[],
   openaiCalls: 0,
   /** 최초 풀이 호출 수와 마지막 입력. 이어 쓰기(alreadySent)를 확인할 때 쓴다. */
   narrationCalls: 0,
@@ -33,6 +41,8 @@ const stats = {
   openaiModels: [] as string[],
 };
 const codes = new Map<string, User>();
+/** 사용자별 연결된 로그인 수단. /auth/v1/user가 identities로 돌려준다. */
+const userProviders = new Map<string, string[]>();
 const refreshTokens = new Map<string, User>();
 const payments = new Map<string, { orderId: string; amount: number }>();
 
@@ -42,7 +52,16 @@ function signJwt(user: User, expiresInSeconds = 3600): string {
   const header = b64(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const now = Math.floor(Date.now() / 1000);
   const payload = b64(
-    JSON.stringify({ sub: user.id, role: "authenticated", aud: "authenticated", email: user.email, exp: now + expiresInSeconds, iat: now, session_id: randomUUID() }),
+    JSON.stringify({
+      sub: user.id,
+      role: "authenticated",
+      aud: "authenticated",
+      email: user.email,
+      app_metadata: { provider: providersOf(user)[0], providers: providersOf(user) },
+      exp: now + expiresInSeconds,
+      iat: now,
+      session_id: randomUUID(),
+    }),
   );
   const signature = b64(createHmac("sha256", JWT_SECRET).update(`${header}.${payload}`).digest());
   return `${header}.${payload}.${signature}`;
@@ -57,13 +76,22 @@ function verifyJwt(token: string): { sub: string; role: string; email: string | 
 }
 
 function userJson(user: User) {
+  const providers = providersOf(user);
   return {
     id: user.id,
     aud: "authenticated",
     role: "authenticated",
     email: user.email ?? undefined,
-    app_metadata: { provider: user.provider, providers: [user.provider] },
+    app_metadata: { provider: providers[0], providers },
     user_metadata: {},
+    identities: providers.map((provider) => ({
+      identity_id: `${provider}-${user.id}`,
+      id: `${provider}:${user.id}`,
+      user_id: user.id,
+      provider,
+      identity_data: {},
+      created_at: "2026-11-09T00:00:00Z",
+    })),
     created_at: "2026-11-09T00:00:00Z",
   };
 }
@@ -295,6 +323,13 @@ async function main() {
   const db = await createTestDb();
   await db.addUser(control.loginUser.id);
 
+  /** 사용자와 연결된 로그인 수단을 데이터베이스(auth.identities)와 Auth 응답에 함께 등록한다. */
+  async function register(user: User) {
+    const providers = providersOf(user);
+    userProviders.set(user.id, [...new Set([...(userProviders.get(user.id) ?? []), ...providers])]);
+    await db.addUser(user.id, user.email, providers);
+  }
+
   function identify(req: IncomingMessage): { role: DbRole; userId: string | null } {
     const apikey = String(req.headers.apikey ?? "");
     const bearer = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -426,9 +461,26 @@ async function main() {
 
     if (pathname === "/__control") {
       const incoming = body as Partial<typeof control>;
-      if (incoming.loginUser) await db.addUser(incoming.loginUser.id, incoming.loginUser.email);
+      // providers를 보내지 않으면 이전 테스트의 값이 남지 않게 지운다 (기본은 provider 하나).
+      if (incoming.loginUser) incoming.loginUser = { ...incoming.loginUser, providers: incoming.loginUser.providers ?? undefined };
       Object.assign(control, incoming);
       return send(res, 200, control);
+    }
+    /** 이미 발급된 세션을 흉내 낸다 (예: 구글 제공자를 끄기 전에 만든 구글 세션). 앱의 로그인 흐름을 거치지 않는다. */
+    if (pathname === "/__session") {
+      const user = body as unknown as User;
+      await register(user);
+      return send(res, 200, sessionJson(user));
+    }
+    /** 테스트에서 데이터베이스 상태를 직접 확인하거나 준비한다 (관리자 권한). */
+    if (pathname === "/__sql") {
+      const { sql, params } = body as unknown as { sql: string; params?: unknown[] };
+      try {
+        const result = await db.pg.query(sql, params ?? []);
+        return send(res, 200, result.rows);
+      } catch (error) {
+        return send(res, 400, { message: error instanceof Error ? error.message : String(error) });
+      }
     }
     if (pathname === "/__state") return send(res, 200, stats);
     // 서버 요청이 중간에 멈춘 상황을 흉내 낸다: 생성 작업의 점유 시간을 지난 것으로 바꿔 다음 요청이 이어받게 한다.
@@ -447,13 +499,18 @@ async function main() {
     }
 
     if (pathname === "/auth/v1/authorize") {
+      const provider = url.searchParams.get("provider") ?? "";
+      stats.authorizeProviders.push(provider);
       const redirect = new URL(url.searchParams.get("redirect_to")!);
       if (control.loginError) {
         redirect.searchParams.set("error", control.loginError);
         redirect.searchParams.set("error_description", "test");
       } else {
+        // 로그인한 계정의 연결 정보는 control.loginUser가 정한다 (기본은 카카오 하나).
+        const user: User = { ...control.loginUser, provider: control.loginUser.provider ?? provider };
+        await register(user);
         const code = randomUUID();
-        codes.set(code, { ...control.loginUser, provider: url.searchParams.get("provider") ?? "kakao" });
+        codes.set(code, user);
         redirect.searchParams.set("code", code);
       }
       res.writeHead(302, { location: redirect.toString() });
@@ -475,8 +532,8 @@ async function main() {
     if (pathname === "/auth/v1/user") {
       const claims = verifyJwt(String(req.headers.authorization ?? "").replace(/^Bearer /, ""));
       if (!claims) return send(res, 401, { error_code: "bad_jwt", msg: "invalid" });
-      const email = claims.email;
-      return send(res, 200, userJson({ id: claims.sub, email, provider: "kakao" }));
+      const providers = userProviders.get(claims.sub) ?? ["kakao"];
+      return send(res, 200, userJson({ id: claims.sub, email: claims.email, provider: providers[0]!, providers }));
     }
     if (pathname === "/auth/v1/logout") return send(res, 204, undefined);
 

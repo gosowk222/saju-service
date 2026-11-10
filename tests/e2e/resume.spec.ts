@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { GATEWAY, createPreview, gatewayStats, login, purchase, setControl, waitForCompletedReading } from "./helpers";
+import { GATEWAY, createPreview, gatewayStats, login, redeemFreeTicket, setControl, waitForCompletedReading } from "./helpers";
 
 /**
  * 생성 중에 사용자가 떠나거나 연결이 끊기는 경우 (주제별로 먼저 보여 주는 생성).
@@ -26,7 +26,7 @@ async function startSlowGeneration(page: Page, request: APIRequestContext) {
   await createPreview(page);
   await setControl(request, { streamDelayMs: 250 });
   const before = (await gatewayStats(request)).narrationCalls;
-  await purchase(page);
+  await redeemFreeTicket(page);
   const readingUrl = page.url();
   await expect(page.getByText("temperament 주제의 첫 설명", { exact: false })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("풀이 완료")).toHaveCount(0);

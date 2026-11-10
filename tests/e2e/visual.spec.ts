@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { createPreview, login, purchase, setControl, waitForCompletedReading } from "./helpers";
+import { createPreview, login, redeemFreeTicket, setControl, waitForCompletedReading } from "./helpers";
 
 /**
  * 상품 그림과 캐릭터 프로필이 실제 화면에서 제대로 보이는지 확인한다.
@@ -61,12 +61,15 @@ async function expectImagesIntact(page: Page) {
     { timeout: 15_000 },
   );
   await page.evaluate(() => window.scrollTo(0, 0));
+  // 화면을 오가면 앞 화면이 숨겨진 채(크기 0) 남는다. 지금 그려진 그림만 비율을 잰다.
   const images = await page.locator("img").evaluateAll((elements) =>
-    elements.map((element) => {
-      const img = element as HTMLImageElement;
-      const rect = img.getBoundingClientRect();
-      return { src: img.currentSrc, natural: img.naturalWidth / img.naturalHeight, drawn: rect.width / rect.height, fit: getComputedStyle(img).objectFit };
-    }),
+    elements
+      .map((element) => {
+        const img = element as HTMLImageElement;
+        const rect = img.getBoundingClientRect();
+        return { src: img.currentSrc, natural: img.naturalWidth / img.naturalHeight, drawn: rect.width / rect.height, fit: getComputedStyle(img).objectFit, shown: rect.width > 0 && rect.height > 0 };
+      })
+      .filter((image) => image.shown),
   );
   expect(images.length).toBeGreaterThan(0);
   for (const image of images) {
@@ -261,13 +264,14 @@ test("홈 포스터, 맛보기·메신저 프로필, 보관함 썸네일, PDF", 
   await page.getByRole("heading", { name: "맛보기" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SHOTS, "preview-390.png") });
 
-  await purchase(page);
+  await redeemFreeTicket(page);
   await waitForCompletedReading(page);
   const avatars = await expectImagesIntact(page);
   const avatar = avatars.find((image) => image.src.includes("myomyo-profile"));
   expect(avatar, "메신저에 묘묘 프로필 그림").toBeTruthy();
   // 원형 칸과 투명 배경: 칸은 완전한 원이고, 최적화된 그림의 모서리는 투명하며 가운데는 불투명하다.
-  const frame = page.locator("header img").first().locator("xpath=..");
+  // 앞 화면의 머리글은 숨겨진 채 남으므로 보이는 머리글(banner)만 쓴다.
+  const frame = page.getByRole("banner").locator("img").first().locator("xpath=..");
   const radius = await frame.evaluate((element) => {
     const style = getComputedStyle(element);
     return { radius: parseFloat(style.borderTopLeftRadius), width: element.getBoundingClientRect().width, overflow: style.overflow };
@@ -289,7 +293,7 @@ test("홈 포스터, 맛보기·메신저 프로필, 보관함 썸네일, PDF", 
   expect(alpha.center).toBeGreaterThan(200);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: path.join(SHOTS, "messenger-390.png") });
-  await page.locator("header").screenshot({ path: path.join(SHOTS, "messenger-header.png") });
+  await page.getByRole("banner").screenshot({ path: path.join(SHOTS, "messenger-header.png") });
   await expectNoHorizontalScroll(page);
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "PDF 내려받기" }).click()]);

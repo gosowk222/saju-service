@@ -1,12 +1,17 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { createPreview, gatewayStats, login, purchase, setControl, stubTossSdk, waitForCompletedReading, fillWizard, GATEWAY } from "./helpers";
+import { createPreview, gatewayStats, login, redeemFreeTicket, setControl, stubTossSdk, waitForCompletedReading, fillWizard, GATEWAY } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await setControl(request, { openai: "ok", tossFail: null, loginError: null });
 });
 
-test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 이용한다", async ({ page, request }) => {
+test("새 사용자가 상품을 둘러보고 카카오로 로그인해 무료 이용권으로 PDF까지 끝까지 이용한다", async ({ page, request }) => {
+  // 무료 테스트 모드에서는 결제창(토스 SDK)과 결제 주소를 한 번도 거치지 않는다.
+  const paymentRequests: string[] = [];
+  page.on("request", (req) => {
+    if (/tosspayments|\/checkout\/|\/orders$/.test(req.url())) paymentRequests.push(req.url());
+  });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /나를 읽는 시간/ })).toBeVisible();
   await page.getByRole("link", { name: "시작하기" }).click();
@@ -16,6 +21,7 @@ test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 �
   await page.getByRole("link", { name: /묘묘의 사주 참견/ }).first().click();
   await expect(page.getByText("실제 개인 풀이가 아닌 예시예요")).toBeVisible();
   await expect(page.getByText("990원").first()).toBeVisible();
+  await expect(page.getByText("무료 이용권 1장")).toBeVisible();
   await expect(page.getByText("3회 포함")).toBeVisible();
   await expect(page.getByText(/후기|만족도|구매 \d/)).toHaveCount(0);
   await expect(page.locator("strong", { hasText: "결론부터 들이미는 게 문제야" })).toBeVisible();
@@ -36,13 +42,17 @@ test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 �
   await expect(page.getByText("일간은")).toBeVisible();
   const previewBody = await page.locator("body").innerText();
   expect(previewBody).not.toContain("테스트 응답");
+  // 카드 번호, 결제 수단, 이용권 코드 입력이 없다.
+  await expect(page.locator("input")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /결제/ })).toHaveCount(0);
 
-  await purchase(page);
+  await redeemFreeTicket(page);
   await waitForCompletedReading(page);
   const bubbles = page.getByText(/\[테스트 응답\]/);
   expect(await bubbles.count()).toBeGreaterThanOrEqual(20);
   await expect(page.locator("strong", { hasText: "강조 확인 문구" }).first()).toBeVisible();
-  expect(await page.locator("main").innerText()).not.toContain("**");
+  // 앞 화면(입력, 맛보기)은 숨겨진 채 남으므로 보이는 본문만 읽는다.
+  expect(await page.getByRole("main").innerText()).not.toContain("**");
   await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
 
   await page.getByRole("textbox", { name: "후속 질문" }).fill("강점을 일할 때는 어떻게 써?");
@@ -54,6 +64,7 @@ test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 �
   const readingUrl = page.url();
   await page.goto("/library");
   await expect(page.getByText("완료")).toBeVisible();
+  await expect(page.getByText("무료 이용권", { exact: true })).toBeVisible();
   await expect(page.getByText(/달빛 님/)).toBeVisible();
   await page.getByRole("link", { name: /묘묘의 사주 참견/ }).click();
   await expect(page).toHaveURL(readingUrl);
@@ -74,12 +85,13 @@ test("새 사용자가 상품을 둘러보고 로그인해 PDF까지 끝까지 �
 
   const statsAfter = await gatewayStats(request);
   expect(statsAfter.openaiCalls).toBe(statsBefore.openaiCalls);
+  expect(paymentRequests).toEqual([]);
 });
 
 test("요청 모델은 OPENAI_MODEL 설정을 따른다", async ({ page, request }) => {
   await login(page, request);
   await createPreview(page);
-  await purchase(page);
+  await redeemFreeTicket(page);
   await waitForCompletedReading(page);
   const stats = await gatewayStats(request);
   expect(stats.openaiModels.at(-1)).toBe("gpt-5.6-luna");
@@ -90,7 +102,7 @@ test("요청 모델은 OPENAI_MODEL 설정을 따른다", async ({ page, request
 test("풀이는 다시 열어도 저장된 내용을 쓰고 다시 생성하지 않는다", async ({ page, request }) => {
   await login(page, request);
   await createPreview(page);
-  await purchase(page);
+  await redeemFreeTicket(page);
   await waitForCompletedReading(page);
   const url = page.url();
   const before = (await gatewayStats(request)).openaiCalls;
