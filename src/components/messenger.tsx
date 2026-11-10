@@ -3,6 +3,7 @@
 import { ArrowDown, Download, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ClientApiError } from "@/lib/client-api";
+import { typingDelay } from "@/lib/typing-delay";
 import type { ChartView } from "@/domain/reading/types";
 import type { ReadingStateView } from "@/server/readings/store";
 import { ChartPhoto } from "@/components/chart-table";
@@ -10,7 +11,6 @@ import { RichText } from "@/components/rich-text";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
 
-const REVEAL_INTERVAL_MS = 700;
 /** 생성 중에는 주제가 완성될 때마다 저장되므로 자주 확인한다. */
 const POLL_INTERVAL_MS = 2000;
 /** 후속 답변은 문단이 짧아 더 자주 확인한다. */
@@ -199,11 +199,28 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
     return () => clearInterval(timer);
   }, [answering, readingId]);
 
+  // 받은 말풍선을 길이에 맞춰 기다렸다가 하나씩 보여 준다.
+  const nextText = state.messages[revealed]?.text ?? "";
   useEffect(() => {
     if (!animating) return;
-    const timer = setTimeout(() => setRevealed((count) => count + 1), REVEAL_INTERVAL_MS);
+    const timer = setTimeout(() => setRevealed((count) => count + 1), typingDelay(nextText));
     return () => clearTimeout(timer);
-  }, [animating, revealed]);
+  }, [animating, revealed, nextText]);
+
+  // 이 화면에서 새로 받은 후속 답도 문단마다 길이에 맞춰 기다렸다 보여 준다. 화면을 열 때 이미 있던 답은 바로 보여 준다.
+  const [knownFollowups] = useState(() => new Set(initialState.followups.map((followup) => followup.id)));
+  const [followupShown, setFollowupShown] = useState<Readonly<Record<string, number>>>({});
+  const shownCount = (followup: ReadingStateView["followups"][number]) =>
+    knownFollowups.has(followup.id) ? Number.POSITIVE_INFINITY : (followupShown[followup.id] ?? 0);
+  const pendingFollowup = state.followups.find((followup) => shownCount(followup) < paragraphs(followup.answer ?? "").length);
+  const pendingIndex = pendingFollowup ? shownCount(pendingFollowup) : 0;
+  const pendingText = pendingFollowup ? (paragraphs(pendingFollowup.answer ?? "")[pendingIndex] ?? "") : "";
+  const pendingId = pendingFollowup?.id ?? null;
+  useEffect(() => {
+    if (!pendingId) return;
+    const timer = setTimeout(() => setFollowupShown((current) => ({ ...current, [pendingId]: pendingIndex + 1 })), typingDelay(pendingText));
+    return () => clearTimeout(timer);
+  }, [pendingId, pendingIndex, pendingText]);
 
   // 사용자가 위로 올려 읽는 중이면 끌어내리지 않는다.
   useEffect(() => {
@@ -217,12 +234,12 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const inflightLength = inflight?.answer?.length ?? 0;
+  const followupProgress = Object.values(followupShown).reduce((sum, count) => sum + count, 0);
   useEffect(() => {
-    if (!animating && !answering) return;
+    if (!animating && !answering && !pendingId) return;
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ block: "end" });
     else setShowJump(true);
-  }, [revealed, animating, answering, state.followups.length, inflightLength]);
+  }, [revealed, animating, answering, pendingId, state.followups.length, followupProgress]);
 
   const visible = useMemo(
     () => (animateReveal && !skipReveal ? state.messages.slice(0, revealed) : state.messages),
@@ -289,11 +306,8 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
               <TypingDots />
               <span className="sr-only">{personaSubject} 입력하고 있어요</span>
             </Bubble>
-            {animating ? (
-              <button type="button" onClick={() => setSkipReveal(true)} className="self-center type-label text-primary-600">
-                전체 바로 보기
-              </button>
-            ) : (
+            {/* 연결이 끊긴 안내는 받은 말풍선을 보여 주는 중에도 바로 보인다. */}
+            {connectionLost || !animating ? (
               <p className="self-center text-center type-caption text-gray-600">
                 {connectionLost
                   ? "인터넷 연결이 끊겼어요. 풀이는 계속 만들어지고 있으니, 연결되면 이어서 보여 드릴게요."
@@ -301,7 +315,12 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
                     ? `${personaSubject} 다음 이야기를 쓰고 있어요.`
                     : `${personaSubject} 풀이를 쓰고 있어요. 주제가 하나씩 완성되는 대로 바로 보여 드릴게요.`}
               </p>
-            )}
+            ) : null}
+            {animating ? (
+              <button type="button" onClick={() => setSkipReveal(true)} className="self-center type-label text-primary-600">
+                전체 바로 보기
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -323,17 +342,19 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
           <>
             <p className="self-center rounded-pill bg-green-50 px-4 py-1 type-caption-sm text-green-600">풀이 완료</p>
             {state.followups.map((followup) => {
-              const parts = paragraphs(followup.answer ?? "");
-              const writing = followup.status === "answering";
+              const all = paragraphs(followup.answer ?? "");
+              const parts = all.slice(0, shownCount(followup));
+              const live = !knownFollowups.has(followup.id);
+              // 다음 문단을 쓰는 중이거나, 받은 문단을 아직 다 보여 주지 않았으면 입력 중 표시를 둔다.
+              const writing = followup.status === "answering" || parts.length < all.length;
               return (
                 <div key={followup.id} className="flex flex-col gap-4">
                   <MyBubble>{followup.question}</MyBubble>
                   {parts.map((part, index) => (
-                    <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0} animate={writing}>
+                    <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0} animate={live}>
                       <RichText text={part} />
                     </Bubble>
                   ))}
-                  {/* 다음 문단을 쓰는 동안 입력 중 표시를 둔다. */}
                   {writing ? (
                     <Bubble glyph={personaGlyph} name={personaName} continued={parts.length > 0}>
                       <TypingDots />
