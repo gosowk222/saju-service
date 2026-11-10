@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ProductCard } from "@/components/product-card";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { LinkButton } from "@/components/ui/button";
-import { Card, LoadingScreen, Screen } from "@/components/ui/layout";
+import { Card, Screen } from "@/components/ui/layout";
 import { DEFAULT_PRODUCT_ID, findProduct, PRODUCTS } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
@@ -34,7 +34,8 @@ export default function HomePage() {
     <>
       <Screen>
         <h1 className="type-h2">오늘은 나를 읽어 볼까요?</h1>
-        <Suspense fallback={<LoadingScreen />}>
+        {/* 이어서 입력할 내용이 없으면 아무것도 보이지 않는 자리라, 큰 로딩 화면을 두면 아래 상품 카드가 올라오며 흔들린다. */}
+        <Suspense fallback={null}>
           <ContinueBanner />
         </Suspense>
         <section className="flex flex-col gap-4">
