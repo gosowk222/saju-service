@@ -3,7 +3,9 @@
 import { ArrowDown, Download, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ClientApiError } from "@/lib/client-api";
+import type { ChartView } from "@/domain/reading/types";
 import type { ReadingStateView } from "@/server/readings/store";
+import { ChartPhoto } from "@/components/chart-table";
 import { RichText } from "@/components/rich-text";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
@@ -20,11 +22,15 @@ interface Props {
   /** 후속 질문 입력 아래에 보여 줄 상품 범위 안내. */
   readonly scopeSummary: string;
   readonly initialState: ReadingStateView;
+  /** 첫 인사 다음에 사진처럼 보여 줄 사주원국. 저장된 계산값이다. */
+  readonly chart: ChartView | null;
+  readonly nickname: string;
 }
 
 /**
  * 상담사 말풍선. 메신저처럼 이어서 보내는 말풍선(continued)은 프로필과 이름을 생략하고 간격을 좁힌다.
  * 창작 장면은 제목 없이 옅은 보라 면으로만 구분하고, 장면이라는 점은 문장의 가정형 말투로 드러낸다.
+ * 사진(photo)은 말풍선 면 없이 내용만 보여 준다.
  */
 function Bubble({
   glyph,
@@ -32,6 +38,7 @@ function Bubble({
   children,
   animate,
   scene,
+  photo = false,
   continued = false,
 }: {
   glyph: string;
@@ -39,20 +46,25 @@ function Bubble({
   children: React.ReactNode;
   animate?: boolean;
   scene?: boolean;
+  photo?: boolean;
   continued?: boolean;
 }) {
   return (
     <div className={`flex items-start gap-3 ${continued ? "-mt-2" : ""} ${animate ? "animate-bubble" : ""}`}>
       {continued ? <span aria-hidden className="w-9 shrink-0" /> : <PersonaAvatar glyph={glyph} />}
-      <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
+      <div className={`flex min-w-0 max-w-[85%] flex-col gap-1 ${photo ? "w-full" : ""}`}>
         {continued ? null : <span className="type-caption-sm text-gray-600">{name}</span>}
-        <div
-          className={`whitespace-pre-wrap wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) px-4 py-4 type-body text-gray-900 ${
-            scene ? "border border-primary-200 bg-primary-50" : "bg-gray-100"
-          }`}
-        >
-          {children}
-        </div>
+        {photo ? (
+          children
+        ) : (
+          <div
+            className={`whitespace-pre-wrap wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) px-4 py-4 type-body text-gray-900 ${
+              scene ? "border border-primary-200 bg-primary-50" : "bg-gray-100"
+            }`}
+          >
+            {children}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -82,7 +94,7 @@ const ERROR_TEXT: Readonly<Record<string, string>> = {
   attempts_exhausted: "여러 번 시도했지만 풀이를 만들지 못했어요. 고객센터로 문의해 주세요.",
 };
 
-export function Messenger({ readingId, personaName, personaGlyph, topicTitles, scopeSummary, initialState }: Props) {
+export function Messenger({ readingId, personaName, personaGlyph, topicTitles, scopeSummary, initialState, chart, nickname }: Props) {
   const [state, setState] = useState(initialState);
   // 이 화면에서 생성을 지켜본 경우에만 전달 효과를 쓴다. 다시 열면 바로 보여 준다.
   const [animateReveal] = useState(initialState.status !== "completed");
@@ -209,6 +221,12 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
               >
                 <RichText text={message.text} />
               </Bubble>
+              {/* 첫 인사 다음에 사주표를 사진처럼 보낸다. 저장된 메시지에는 넣지 않는다. */}
+              {index === 0 && chart ? (
+                <Bubble glyph={personaGlyph} name={personaName} animate={animating} photo continued>
+                  <ChartPhoto chart={chart} nickname={nickname} />
+                </Bubble>
+              ) : null}
             </div>
           );
         })}

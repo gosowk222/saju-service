@@ -1,4 +1,4 @@
-import { ELEMENT_HANJA } from "@/domain/reading/chart";
+import { ELEMENT_HANJA, elementCounts } from "@/domain/reading/chart";
 import type { ChartElement, ChartPillar, ChartSymbol, ChartView } from "@/domain/reading/types";
 
 /** 디자인 시스템의 오행 틴트. 화면 표현에만 쓰며 계산과는 무관하다. */
@@ -47,7 +47,9 @@ function Column({ pillar }: { pillar: ChartPillar }) {
 
 const ELEMENTS: readonly ChartElement[] = ["목", "화", "토", "금", "수"];
 
-export function ChartTable({ chart }: { chart: ChartView }) {
+/** showCounts: 오행 비율 아래에 원국 글자 수도 보여 준다 (메신저의 사주표 사진). */
+export function ChartTable({ chart, showCounts = false }: { chart: ChartView; showCounts?: boolean }) {
+  const counts = showCounts ? elementCounts(chart) : null;
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-4 gap-3" aria-label="사주원국">
@@ -63,10 +65,23 @@ export function ChartTable({ chart }: { chart: ChartView }) {
                 {element}({ELEMENT_HANJA[element]})
               </span>
               <span className="type-caption type-price">{chart.elementPercent![element]}%</span>
+              {counts ? <span className="type-caption-sm">{counts[element]}개</span> : null}
             </li>
           ))}
         </ul>
       ) : null}
     </div>
+  );
+}
+
+/** 메신저에서 상담사가 보낸 사진처럼 보이는 사주표. 저장된 원국 계산값만 보여 준다. */
+export function ChartPhoto({ chart, nickname }: { chart: ChartView; nickname: string }) {
+  return (
+    <figure className="flex w-full flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4" aria-label="사주원국 표와 오행 비율">
+      <ChartTable chart={chart} showCounts />
+      <figcaption className="type-caption-sm text-gray-600">
+        {nickname} 님의 사주원국 · 오행 비율과 글자 수{chart.hourKnown ? "" : " (시주 제외)"}
+      </figcaption>
+    </figure>
   );
 }

@@ -46,6 +46,8 @@ async function Reading({ params }: { params: Promise<{ readingId: string }> }) {
         topicTitles={topicTitlesOf(product)}
         scopeSummary={product ? `이 풀이에서는 ${product.scope.summary}` : "이 풀이에 대해 물어볼 수 있어요"}
         initialState={state}
+        chart={reading.chart}
+        nickname={reading.nickname}
       />
     </>
   );
