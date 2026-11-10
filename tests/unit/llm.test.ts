@@ -2,12 +2,12 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { callStructured, LlmError } from "@/server/llm/client";
+import { callStructured, callStructuredStream, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, LlmConfigError, liveCallBlockReason, resolveModelId } from "@/server/llm/config";
 
 /** 고정된 테스트 응답을 돌려주는 로컬 서버. 실제 모델 품질과는 무관하다. */
 let server: Server;
-let handler: (body: Record<string, unknown>) => { status: number; json: unknown };
+let handler: (body: Record<string, unknown>) => { status: number; json?: unknown; sse?: readonly Record<string, unknown>[] };
 const requests: Record<string, unknown>[] = [];
 
 beforeAll(async () => {
@@ -17,7 +17,13 @@ beforeAll(async () => {
     req.on("end", () => {
       const body = JSON.parse(raw) as Record<string, unknown>;
       requests.push(body);
-      const { status, json } = handler(body);
+      const { status, json, sse } = handler(body);
+      if (sse) {
+        res.writeHead(status, { "content-type": "text/event-stream" });
+        sse.forEach((event, index) => res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify({ ...event, sequence_number: index })}\n\n`));
+        res.end();
+        return;
+      }
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(json));
     });
@@ -221,5 +227,57 @@ describe("실제 API 호출 제한", () => {
     } finally {
       process.env.OPENAI_BASE_URL = base;
     }
+  });
+});
+
+describe("스트리밍 호출 (주제별로 먼저 보여 주는 생성)", () => {
+  const events = (text: string, pieces = 4) => {
+    const size = Math.ceil(text.length / pieces);
+    const deltas = Array.from({ length: pieces }, (_, index) => text.slice(index * size, (index + 1) * size)).filter(Boolean);
+    const completed = okResponse(text).json as Record<string, unknown>;
+    return [
+      ...deltas.map((delta) => ({ type: "response.output_text.delta", item_id: "m", output_index: 0, content_index: 0, delta, logprobs: [] })),
+      { type: "response.completed", response: completed },
+    ];
+  };
+
+  it("글자가 들어올 때마다 알리고, 끝까지 받으면 형식을 확인한 결과와 사용량을 돌려준다", async () => {
+    handler = () => ({ status: 200, sse: events('{"a":"스트리밍 응답"}') });
+    const seen: string[] = [];
+    const result = await callStructuredStream({
+      ...request(),
+      onDelta: async (text) => {
+        seen.push(text);
+        return "continue";
+      },
+    });
+    expect(requests[0]!.stream).toBe(true);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.at(-1)).toBe('{"a":"스트리밍 응답"}');
+    expect(result.stopped).toBe(false);
+    expect(result.parsed).toEqual({ a: "스트리밍 응답" });
+    expect(result.meta.usage.outputTokens).toBe(5);
+    expect(result.meta.calls).toBe(1);
+  });
+
+  it("멈추라고 하면 거기서 끊고 결과 없이 돌려주며, 다시 호출하지 않는다", async () => {
+    handler = () => ({ status: 200, sse: events('{"a":"끝까지 받지 않을 응답"}', 6) });
+    const result = await callStructuredStream({ ...request(), onDelta: async () => "stop" });
+    expect(result.stopped).toBe(true);
+    expect(result.parsed).toBeNull();
+    expect(result.meta.usage.outputTokens).toBeNull();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("글자를 받기 전의 일시 오류만 다시 시도하고, 콜백에서 난 오류는 그대로 돌려준다", async () => {
+    let count = 0;
+    handler = () => (count++ === 0 ? { status: 503, json: { error: { message: "busy" } } } : { status: 200, sse: events('{"a":"두 번째"}') });
+    const result = await callStructuredStream({ ...request(), onDelta: async () => "continue" });
+    expect(result.parsed).toEqual({ a: "두 번째" });
+    expect(result.meta.calls).toBe(2);
+
+    handler = () => ({ status: 200, sse: events('{"a":"콜백 오류"}') });
+    class Handover extends Error {}
+    await expect(callStructuredStream({ ...request(), onDelta: async () => Promise.reject(new Handover("넘김")) })).rejects.toBeInstanceOf(Handover);
   });
 });

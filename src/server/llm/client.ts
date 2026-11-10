@@ -229,6 +229,138 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
   }
 }
 
+export interface StreamedResult<T> {
+  /** 끝까지 받고 형식이 맞으면 결과. 중간에 끊었거나 형식이 맞지 않으면 null. */
+  readonly parsed: T | null;
+  readonly text: string;
+  /** onDelta가 멈추라고 해서 중간에 끊었는지. */
+  readonly stopped: boolean;
+  readonly meta: StructuredResult<T>["meta"];
+}
+
+const UNKNOWN_USAGE: LlmUsage = { inputTokens: null, outputTokens: null, totalTokens: null, reasoningTokens: null, cachedInputTokens: null };
+
+/** onDelta 안에서 난 오류. 호출 오류로 분류하지 않고 그대로 돌려준다. */
+class DeltaHandlerFailure {
+  constructor(readonly cause: unknown) {}
+}
+
+export const isRetryableTransport = (code: LlmErrorCode) => RETRYABLE_TRANSPORT.has(code);
+
+/**
+ * callStructured와 같은 요청을 스트리밍으로 받는다. 호출 수는 같다 (한 번).
+ * 글자가 들어올 때마다 onDelta를 부르고, "stop"을 돌려받으면 생성을 끊는다 (끊은 호출은 사용량을 알 수 없다).
+ * 글자를 받기 전의 네트워크·일시 오류만 다시 시도한다. 받기 시작한 뒤의 오류는 호출한 쪽이 이어 쓰기로 처리한다.
+ */
+export async function callStructuredStream<T>(
+  request: StructuredRequest<T> & { readonly onDelta: (text: string, delta: string) => Promise<"continue" | "stop"> },
+): Promise<StreamedResult<T>> {
+  const startedAt = Date.now();
+  let calls = 0;
+  let client: OpenAI;
+  try {
+    client = createClient();
+  } catch (error) {
+    throw classifyProviderError(error);
+  }
+
+  const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  for (let attempt = 0; ; attempt += 1) {
+    let received = false;
+    // SDK의 timeout은 응답 헤더까지만 본다. 스트림 전체 시간은 여기서 끊는다.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      calls += 1;
+      const streamed = await withConcurrencyLimit(async () => {
+        const stream = await client.responses.create(
+          {
+            model: request.model,
+            instructions: request.instructions,
+            input: request.input,
+            store: false,
+            max_output_tokens: request.maxOutputTokens,
+            reasoning: { effort: request.reasoningEffort as "low" },
+            text: {
+              format: { type: "json_schema", name: request.schemaName, schema: request.jsonSchema, strict: true },
+            },
+            stream: true,
+          },
+          { timeout, signal: controller.signal },
+        );
+        let text = "";
+        let final: OpenAI.Responses.Response | null = null;
+        let stopped = false;
+        for await (const event of stream) {
+          if (event.type === "response.output_text.delta") {
+            received = true;
+            text += event.delta;
+            let decision: "continue" | "stop";
+            try {
+              decision = await request.onDelta(text, event.delta);
+            } catch (cause) {
+              throw new DeltaHandlerFailure(cause);
+            }
+            if (decision === "stop") {
+              // 반복을 멈추면 SDK가 요청을 끊는다.
+              stopped = true;
+              break;
+            }
+          } else if (event.type === "response.refusal.delta") {
+            throw new LlmError("refused", "모델이 응답을 거절했습니다.");
+          } else if (event.type === "response.completed") {
+            final = event.response;
+          } else if (event.type === "response.incomplete") {
+            throw new LlmError("incomplete", `응답이 완료되지 않았습니다: ${event.response.incomplete_details?.reason ?? "unknown"}`);
+          } else if (event.type === "response.failed") {
+            throw new LlmError("server_error", "응답 생성에 실패했습니다.");
+          } else if (event.type === "error") {
+            throw new LlmError("server_error", `응답 중 오류가 났습니다: ${event.code ?? "unknown"}`);
+          }
+        }
+        return { text, final, stopped };
+      });
+
+      const final = streamed.final as OpenAI.Responses.Response | null;
+      if (!streamed.stopped && !final) throw new LlmError("incomplete", "응답이 끝까지 오지 않았습니다.");
+      let parsed: T | null = null;
+      if (!streamed.stopped) {
+        try {
+          const result = request.parser.safeParse(JSON.parse(streamed.text));
+          parsed = result.success ? result.data : null;
+        } catch {
+          parsed = null;
+        }
+      }
+      return {
+        parsed,
+        text: streamed.text,
+        stopped: streamed.stopped,
+        meta: {
+          requestedModel: request.model,
+          actualModel: final?.model ?? null,
+          responseId: final?.id ?? null,
+          usage: final ? readUsage(final.usage) : UNKNOWN_USAGE,
+          durationMs: Date.now() - startedAt,
+          calls,
+        },
+      };
+    } catch (error) {
+      if (error instanceof DeltaHandlerFailure) throw error.cause;
+      const classified = classifyProviderError(error);
+      const backoff = 500 * 2 ** attempt;
+      const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
+      if (!received && RETRYABLE_TRANSPORT.has(classified.code) && attempt < LLM_SETTINGS.transportRetries && fitsDeadline) {
+        await delay(backoff);
+        continue;
+      }
+      throw new LlmError(classified.code, classified.message, calls);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /** 설정 확인용 최소 호출. 모델 접근 가능 여부만 확인한다. */
 export async function pingModel(model: string): Promise<{ actualModel: string | null; usage: LlmUsage }> {
   const client = createClient();
