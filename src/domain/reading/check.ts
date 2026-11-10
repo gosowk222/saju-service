@@ -241,7 +241,8 @@ export interface ExcludedQuestion {
 }
 
 const OUTSIDE_WORDS: Partial<Readonly<Record<QuestionDomain, RegExp>>> = {
-  health: /건강|질병|병원|다이어트|수술/,
+  // "건강한 관계"처럼 형용사로 쓰는 말은 범위 밖 주제의 재유입이 아니다.
+  health: /건강(?!한|하게|하|히)|질병|병원|다이어트|수술/,
   investment: /주식|코인|종목|매수|매도|수익률/,
   study: /시험\s*합격|입시|성적/,
 };

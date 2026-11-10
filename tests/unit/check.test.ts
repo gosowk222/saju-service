@@ -352,6 +352,7 @@ describe("풀이 검사 2.0.0", () => {
     const excluded = [{ summary: "요즘 건강이 괜찮을지", domain: "health" as const }];
     expect(checkNarrationV2(goodV2(), planV2, chart, excluded)).toEqual([]);
     expect(checkNarrationV2(withTopicBubble("요즘 건강도 챙기세요."), planV2, chart, excluded).join()).toContain("범위 밖");
+    expect(checkNarrationV2(withTopicBubble("서로 건강한 거리를 두는 연애가 맞아요."), planV2, chart, excluded)).toEqual([]);
   });
 
   it("창작 장면을 사실처럼 쓰거나 날짜를 넣으면 거부하고, 허용하지 않은 주제의 장면도 거부한다", () => {

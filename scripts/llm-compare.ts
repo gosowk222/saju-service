@@ -246,7 +246,15 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string)
       followups,
     };
   } catch (error) {
-    return { caseId: entry.id, note: entry.note, model, status: "failed", errorCode: error instanceof LlmError ? `${error.code}: ${error.message}` : String(error), calls, durationMs: Date.now() - startedAt };
+    return {
+      caseId: entry.id,
+      note: entry.note,
+      model,
+      status: "failed",
+      errorCode: error instanceof LlmError ? `${error.code}: ${error.message}${error.details.length ? ` [${error.details.join(" / ")}]` : ""}` : String(error),
+      calls: calls + (error instanceof LlmError ? error.calls : 0),
+      durationMs: Date.now() - startedAt,
+    };
   }
 }
 

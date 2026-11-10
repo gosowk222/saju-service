@@ -86,7 +86,7 @@ export async function narrateReading(input: {
         deadlineAt,
       });
     } catch (error) {
-      if (error instanceof LlmError) throw new LlmError(error.code, error.message, calls + error.calls);
+      if (error instanceof LlmError) throw new LlmError(error.code, error.message, calls + error.calls, error.details);
       throw error;
     }
     calls += result.meta.calls;
@@ -105,7 +105,7 @@ export async function narrateReading(input: {
     }
     previousIssues = issues;
   }
-  throw new LlmError("validation_failed", `검사를 통과하지 못했습니다 (${previousIssues.length}건).`, calls);
+  throw new LlmError("validation_failed", `검사를 통과하지 못했습니다 (${previousIssues.length}건).`, calls, previousIssues);
 }
 
 /** 저장할 메시지 순서: 시작 → 궁금한 점에 대한 답 → 주제별 설명 → 마무리. */
@@ -202,5 +202,5 @@ export async function answerFollowup(
     }
     previousIssues = issues;
   }
-  throw new LlmError("validation_failed", "후속 답변이 검사를 통과하지 못했습니다.", calls);
+  throw new LlmError("validation_failed", "후속 답변이 검사를 통과하지 못했습니다.", calls, previousIssues);
 }

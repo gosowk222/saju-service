@@ -38,6 +38,8 @@ export class LlmError extends Error {
     readonly code: LlmErrorCode,
     message: string,
     readonly calls = 1,
+    /** 검사 실패 내용. 생성 문장 일부가 들어 있어 서버 로그에는 남기지 않는다 (개발 스크립트에서만 출력). */
+    readonly details: readonly string[] = [],
   ) {
     super(message);
   }
