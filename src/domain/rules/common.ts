@@ -2,7 +2,7 @@ import type { Weakness } from "./natal-tables";
 
 /** 첫 상품 규칙 묶음의 식별자와 버전. 내용을 바꾸면 버전을 올리고 docs/rules/first-overview.md를 함께 고친다. */
 export const RULESET_ID = "first-overview";
-export const RULESET_VERSION = "3.0.0";
+export const RULESET_VERSION = "3.1.0";
 export const SOURCE_REF = `service:docs/rules/first-overview.md@${RULESET_VERSION}`;
 
 export const OUTCOME_CAVEAT = "성향을 읽는 해석이며 실제 사건, 금액, 합격 여부를 판단하지 않는다.";
@@ -13,6 +13,7 @@ export const TRADITION_CAVEAT = "행운의 방향·색·숫자와 잘 맞는 지
 export const FAMILY_CAVEAT = "가족 관계와 성장기는 사주 구조로 짐작한 것이며 실제 사건을 확정하지 않는다.";
 export const HEALTH_CAVEAT = "기운을 쓰는 생활 리듬을 읽은 것이며 몸 상태나 질병을 진단하지 않는다.";
 export const INVEST_CAVEAT = "돈을 움직이는 습관을 읽은 것이며 종목·시점·수익을 판단하지 않는다.";
+export const JOB_CAVEAT = "직업과 업종은 십성과 오행의 전통 대응으로 고른 예시이며 실제 적성, 자격, 시장 상황을 대신하지 않는다.";
 
 export interface CompareDetail {
   readonly options: readonly [string, string];

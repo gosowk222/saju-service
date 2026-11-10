@@ -1,5 +1,5 @@
 import type { InquiryEvidence, InquiryRule, InquiryRuleContext } from "sajuengine";
-import { FAMILY_CAVEAT, HEALTH_CAVEAT, INVEST_CAVEAT, SHINSAL_CAVEAT, TRADITION_CAVEAT, ruleMetadata, type RuleDetailSink } from "./common";
+import { FAMILY_CAVEAT, HEALTH_CAVEAT, INVEST_CAVEAT, JOB_CAVEAT, SHINSAL_CAVEAT, TRADITION_CAVEAT, ruleMetadata, type RuleDetailSink } from "./common";
 import { common, drafter, textDetail } from "./drafting";
 import {
   ELEMENTS,
@@ -7,6 +7,7 @@ import {
   ELEMENT_DRAIN,
   ELEMENT_HABIT,
   ELEMENT_HANJA,
+  ELEMENT_INDUSTRY,
   ELEMENT_LUCK,
   ELEMENT_NATURE,
   ELEMENT_PLACE,
@@ -14,6 +15,7 @@ import {
   ENERGY_TEXT,
   FAMILY_CHILDREN,
   FAMILY_EARLY,
+  FAMILY_JOBS,
   FAMILY_PARENTS,
   FAMILY_SIBLINGS,
   FRIENDS_FORTUNE,
@@ -395,6 +397,52 @@ function investmentRule(sink?: RuleDetailSink): InquiryRule {
   };
 }
 
+// ─── 어울리는 직업과 업종 (일과 직업 주제에 붙는다) ─────────────────
+
+function jobsRule(sink?: RuleDetailSink): InquiryRule {
+  const meta = ruleMetadata("jobs");
+  return {
+    metadata: meta,
+    domains: ["career"],
+    kinds: ["natal"],
+    evaluate: (context) => {
+      const base = common(context);
+      if (!base) return [];
+      const { percents, families, ranked, partial } = base;
+      const [top, second] = ranked;
+      if (!top) return [];
+      const out = drafter(meta.ruleId, context, sink, []);
+      out.add({
+        key: "family",
+        text: FAMILY_JOBS[top].claim,
+        // 시주를 몰라 1, 2위 계열이 가까우면 직업군을 단정하지 않는다.
+        hold: partial && second !== undefined && nearThreshold(percents[top], percents[second], 5),
+        support: [families],
+        caveats: [JOB_CAVEAT],
+        detail: textDetail("어울리는 직업", FAMILY_JOBS[top], [`가장 큰 계열 ${percentText(top, percents)}`]),
+      });
+
+      const usefulGods = findJudgment(context.evidence, "m01.assessment.useful-gods");
+      const { useful } = elementsOf(context);
+      if (usefulGods && useful) {
+        out.add({
+          key: "industry",
+          text: `업종으로 보면 ${withJosa(ELEMENT_INDUSTRY[useful], "과/와")} 인연이 있어요. 가장 필요한 ${elementText(useful)} 기운을 일에서 채우는 셈이라, 같은 일을 해도 덜 지쳐요.`,
+          hold: partial,
+          support: [usefulGods],
+          caveats: [JOB_CAVEAT],
+          detail: {
+            aspect: "인연 있는 업종",
+            basis: [`용신(가장 필요한 기운)이 ${elementText(useful)}로 계산됨`, "오행의 전통 대응(업종)으로 옮김"],
+            action: "진로나 이직을 고를 때 하는 일이 비슷하면 이 분야의 회사를 먼저 살펴보기",
+          },
+        });
+      }
+      return out.drafts;
+    },
+  };
+}
+
 export function createLifeRules(sink?: RuleDetailSink): InquiryRule[] {
-  return [familyRule(sink), friendsRule(sink), placeRule(sink), energyRule(sink), investmentRule(sink)];
+  return [familyRule(sink), friendsRule(sink), placeRule(sink), energyRule(sink), investmentRule(sink), jobsRule(sink)];
 }

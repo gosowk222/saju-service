@@ -10,10 +10,10 @@ import {
 } from "sajuengine";
 import { createDefaultDependencies } from "sajuengine/node";
 import { describe, expect, it } from "vitest";
-import { FAMILY_CAVEAT, HEALTH_CAVEAT, INVEST_CAVEAT, TRADITION_CAVEAT, type RuleDetailSink } from "@/domain/rules/common";
+import { FAMILY_CAVEAT, HEALTH_CAVEAT, INVEST_CAVEAT, JOB_CAVEAT, TRADITION_CAVEAT, type RuleDetailSink } from "@/domain/rules/common";
 import { createFirstOverviewRules } from "@/domain/rules/first-overview";
 import { createLifeRules } from "@/domain/rules/life";
-import { ELEMENT_DRAIN, ELEMENT_LUCK, ENERGY_TEXT, FAMILY_CHILDREN, FAMILY_EARLY, FAMILY_PARENTS, FRIENDS_FORTUNE, INVESTMENT_STYLE, MOVE_TEXT } from "@/domain/rules/life-tables";
+import { ELEMENT_DRAIN, ELEMENT_INDUSTRY, ELEMENT_LUCK, ENERGY_TEXT, FAMILY_CHILDREN, FAMILY_EARLY, FAMILY_JOBS, FAMILY_PARENTS, FRIENDS_FORTUNE, INVESTMENT_STYLE, MOVE_TEXT } from "@/domain/rules/life-tables";
 import { relationPositions } from "@/domain/rules/materials";
 
 /** 가족, 친구와 인복, 잘 맞는 곳과 행운, 에너지 관리, 투자 성향 규칙 (규칙 3.0.0). */
@@ -262,5 +262,26 @@ describe("실제 엔진 결과로 실행 (생활 주제)", () => {
     const answer = run("2001-11-03", null, "male");
     const children = answer("family").find((item) => item.id.includes(":children"));
     expect(children?.status).toBe("deferred");
+  });
+});
+
+describe("어울리는 직업과 업종 규칙 (3.1.0)", () => {
+  it("가장 큰 계열로 직업군을, 용신 오행으로 업종을 고르고 예시라는 한계를 붙인다", () => {
+    const drafts = rule("jobs").evaluate(context("career", assessment({ usefulElement: "토" }), [families, usefulGods]));
+    expect(keys(drafts)).toEqual(["family", "industry"]);
+    expect(byKey(drafts, "family").statement).toBe(FAMILY_JOBS.output.claim);
+    expect(byKey(drafts, "industry").statement).toContain(ELEMENT_INDUSTRY.토);
+    expect(byKey(drafts, "industry").supportingEvidenceIds).toEqual([usefulGods.id]);
+    expect(drafts.every((draft) => draft.caveats.includes(JOB_CAVEAT))).toBe(true);
+  });
+
+  it("용신 판단이 없으면 업종을 만들지 않고, 시간을 몰라 1·2위 계열이 가까우면 직업군을 보류한다", () => {
+    const percent = { resource: 14, output: 30, authority: 10, wealth: 18, peer: 28 } as AssessmentFacet["familyPercent"];
+    const close = assessment({ familyPercent: percent, coverage: "partial", missingPositions: ["hour"] } as Partial<AssessmentFacet>);
+    const drafts = rule("jobs").evaluate(context("career", close, [families], { facts: WITHOUT_HOUR }));
+    expect(keys(drafts)).toEqual(["family"]);
+    expect(byKey(drafts, "family").status).toBe("deferred");
+    const known = rule("jobs").evaluate(context("career", assessment({ familyPercent: percent }), [families]));
+    expect(byKey(known, "family").status).toBe("candidate");
   });
 });
