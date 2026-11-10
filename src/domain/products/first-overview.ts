@@ -6,7 +6,7 @@ import type { ProductDefinition } from "./types";
  */
 export const FIRST_OVERVIEW: ProductDefinition = {
   id: "first-overview",
-  version: "3.0.0",
+  version: "3.1.0",
   name: "나를 읽는 짧은 사주",
   tagline: "성향부터 돈, 사람, 가족, 행운까지 아홉 가지를 한 번에",
   description:
@@ -42,11 +42,11 @@ export const FIRST_OVERVIEW: ProductDefinition = {
     {
       id: "work",
       title: "일과 직업",
-      summary: "일할 때 힘이 나는 환경과 방식",
+      summary: "일할 때 힘이 나는 환경과 어울리는 직업",
       inquiryDomain: "career",
-      depth: { light: 4, standard: 6, focus: 9 },
+      depth: { light: 4, standard: 7, focus: 10 },
       creativeScene: true,
-      outline: ["일하는 방식", "조직과 업무 환경", "전문성·협업·독립성", "취업·이직·창업의 조건 비교", "관련 질문이 있을 때의 기간 분석"],
+      outline: ["일하는 방식", "조직과 업무 환경", "전문성·협업·독립성", "어울리는 직업", "인연 있는 업종", "취업·이직·창업의 조건 비교", "관련 질문이 있을 때의 기간 분석"],
     },
     {
       id: "money",
@@ -111,7 +111,7 @@ export const FIRST_OVERVIEW: ProductDefinition = {
     domainGuide: {
       temperament: "평소 성격, 반응 방식, 습관, 쉽게 지치거나 에너지가 빨리 닳는 이유, 나라는 사람 전반",
       strengths: "잘하는 것, 재능, 강점을 공부 방법이나 일에 쓰는 방법",
-      career: "일하는 방식, 직무 적성, 직장 생활, 취업·이직·창업·프리랜서의 선택과 시기",
+      career: "일하는 방식, 직무 적성, 어울리는 직업과 업종, 직장 생활, 취업·이직·창업·프리랜서의 선택과 시기",
       wealth: "돈을 버는 방식, 소비·저축 습관, 돈 관리, 빌려주기·동업 같은 금전 관계, 돈과 관련된 시기",
       romance: "연애 성향과 매력, 연인과의 관계와 갈등, 새 인연과 만남 시기, 데이트 비용처럼 연애 관계 안에서 생기는 문제",
       social: "직장 동료·모임 등 사회생활 속 관계의 협력, 경쟁, 거리 두기, 갈등",
