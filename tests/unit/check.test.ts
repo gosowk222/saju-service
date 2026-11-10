@@ -396,6 +396,18 @@ describe("후속 답변 검사 2.0.0", () => {
     expect(checkFollowupV2({ ...ok, sections: [{ ...ok.sections[0]!, refs: ["q1", "t1"] }, ok.sections[1]!] }, context, chart)).toEqual([]);
   });
 
+  it("원국에 없는 글자나 재료·전달한 풀이에 없는 신살을 말하면 거부한다 (상품 3.1.0)", () => {
+    const answer = (text: string) => ({
+      mode: "answer" as const,
+      clarifyQuestion: "",
+      sections: [{ questionRef: "q1", text, refs: ["s1"] }, { questionRef: "q2", text: "취업 쪽이 더 맞아요.", refs: ["s2"] }],
+    });
+    expect(checkFollowupV2(answer("연주의 경금 편인 덕분이에요."), context, chart).join()).toContain("원국에 없는 글자");
+    expect(checkFollowupV2(answer("일지에 도화살이 있어서 그래요."), context, chart).join()).toContain("신살");
+    const delivered = { ...context, termSources: ["일주의 사화(巳火)에 도화살이 있어요."] };
+    expect(checkFollowupV2(answer("일지에 도화살이 있어서 그래요."), delivered, chart)).toEqual([]);
+  });
+
   it("되묻기는 짧은 질문만 검사하고, 범위 밖 주제가 섞이면 거부한다", () => {
     expect(checkFollowupV2({ mode: "clarify", sections: [], clarifyQuestion: "어떤 직무를 생각하고 있나요?" }, context, chart)).toEqual([]);
     expect(checkFollowupV2({ mode: "clarify", sections: [], clarifyQuestion: "" }, context, chart).join()).toContain("비어");

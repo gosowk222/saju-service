@@ -84,6 +84,7 @@ export async function answerAnalyzedFollowup(input: {
       knownRefs: new Set([...plan.facts.map((fact) => fact.ref), ...userContext.map((item) => item.ref), ...statements.map((item) => item.ref), ...timingAll.map((item) => item.ref)]),
       timing: timingAll,
       percentSources: [...plan.facts.map((fact) => fact.text), ...statements.flatMap(statementTexts)],
+      termSources: [...topics.flatMap((topic) => topic.statements).flatMap(statementTexts), ...input.messages.map((message) => message.text), ...(input.lastTurn ? [input.lastTurn.answer] : [])],
       excluded: excluded.map(({ summary, domain }) => ({ summary, domain })),
     },
   });

@@ -1,5 +1,6 @@
 import type { QuestionDomain } from "../products/types";
 import { timingStatements } from "./focus";
+import { allowedChartTerms, chartTermIssues } from "./lore";
 import type {
   ChartView,
   FollowupOutput,
@@ -228,8 +229,8 @@ function percentsOf(texts: readonly string[]): Set<string> {
   return values;
 }
 
-function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<string>, dates: AllowedDates): string[] {
-  const issues: string[] = [...checkAgainstChart(text, chart), ...checkDates(text, dates)];
+function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<string>, dates: AllowedDates, terms: ReadonlySet<string>): string[] {
+  const issues: string[] = [...checkAgainstChart(text, chart), ...checkDates(text, dates), ...chartTermIssues(text, terms)];
   if (MONEY_CLAIM.test(text)) issues.push(`근거 없는 금액이 있습니다: ${text.slice(0, 40)}`);
   if (PROBABILITY_CLAIM.test(text)) issues.push(`확률 표현이 있습니다: ${text.slice(0, 40)}`);
   if (FORBIDDEN_TOPIC.test(text)) issues.push(`결과를 단정하거나 진단·매매를 지시했습니다: ${text.slice(0, 40)}`);
@@ -274,7 +275,20 @@ function statementsOf(plan: NarrationPlanV2): InterpretationStatement[] {
 /** 서버가 쓴 해석 문장에 들어 있는 숫자(예: 계산 비율, "마지막 10%" 같은 행동 제안). LLM이 새로 만든 비율만 잡는다. */
 export function statementTexts(statement: InterpretationStatement): string[] {
   const weakness = statement.weakness ? Object.values(statement.weakness) : [];
-  return [statement.text, ...(statement.basis ?? []), ...weakness, statement.upside ?? "", statement.action ?? "", statement.counterNote ?? ""];
+  return [
+    statement.text,
+    ...(statement.basis ?? []),
+    ...weakness,
+    statement.upside ?? "",
+    statement.action ?? "",
+    statement.counterNote ?? "",
+    ...(statement.lore ?? []),
+  ];
+}
+
+/** 기간 판단에 들어 있는 문장 (표지에 세운·월운 글자가 나올 수 있다). */
+function timingTexts(item: TimingPeriodStatement): string[] {
+  return [item.statement, ...item.markers.flatMap((marker) => [marker.text, marker.activity])];
 }
 
 function planPercents(plan: NarrationPlanV2): Set<string> {
@@ -293,6 +307,7 @@ export function checkNarrationV2(
   const timing = timingStatements(plan);
   const dates = allowedDates(timing);
   const percents = planPercents(plan);
+  const terms = allowedChartTerms(chart, [...plan.base.facts.map((fact) => fact.text), ...statementsOf(plan).flatMap(statementTexts), ...timing.flatMap(timingTexts)]);
   const seen = new Set<string>();
   const shared = [...plan.base.facts.map((fact) => fact.ref), ...plan.userContext.map((item) => item.ref)];
   const questionRefs = plan.questions.map((question) => question.ref);
@@ -305,7 +320,7 @@ export function checkNarrationV2(
   for (const frame of [output.opening, output.closing]) {
     if (!frame.trim()) issues.push("시작 또는 마무리 말풍선이 비어 있습니다.");
     if (frame.length > hardMax) issues.push("시작 또는 마무리 말풍선이 너무 깁니다.");
-    issues.push(...checkTextV2(frame, chart, percents, dates));
+    issues.push(...checkTextV2(frame, chart, percents, dates, terms));
   }
 
   const checkBubble = (bubble: NarrationBubble, where: string, allowed: ReadonlySet<string>, scenesAllowed: boolean) => {
@@ -314,7 +329,7 @@ export function checkNarrationV2(
     if (text.length > hardMax) issues.push(`${where}: 말풍선이 너무 깁니다 (${text.length}자). 나눠서 써 주세요.`);
     if (seen.has(text)) issues.push(`같은 문장이 반복되었습니다: ${text.slice(0, 40)}`);
     seen.add(text);
-    issues.push(...checkTextV2(text, chart, percents, dates));
+    issues.push(...checkTextV2(text, chart, percents, dates, terms));
     for (const ref of bubble.refs) {
       if (!allowed.has(ref)) issues.push(`${where}: 없는 근거를 참조했습니다 (${ref}).`);
     }
@@ -387,6 +402,8 @@ export interface FollowupCheckContext {
   readonly knownRefs: ReadonlySet<string>;
   readonly timing: readonly TimingPeriodStatement[];
   readonly percentSources: readonly string[];
+  /** 원국 글자·신살 이름을 확인할 때 함께 허용할 문장 (전체 해석 재료와 이미 전달한 풀이). */
+  readonly termSources?: readonly string[];
   readonly excluded: readonly ExcludedQuestion[];
 }
 
@@ -394,11 +411,12 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
   const issues: string[] = [];
   const dates = allowedDates(context.timing);
   const percents = percentsOf(context.percentSources);
+  const terms = allowedChartTerms(chart, [...context.percentSources, ...(context.termSources ?? []), ...context.timing.flatMap(timingTexts)]);
   if (output.mode === "clarify") {
     const question = output.clarifyQuestion.trim();
     if (!question) issues.push("되묻는 질문이 비어 있습니다.");
     if (question.length > CLARIFY_MAX) issues.push("되묻는 질문이 너무 깁니다.");
-    issues.push(...checkTextV2(question, chart, percents, dates), ...checkExcluded([question], context.excluded));
+    issues.push(...checkTextV2(question, chart, percents, dates, terms), ...checkExcluded([question], context.excluded));
     return issues;
   }
   let total = 0;
@@ -411,7 +429,7 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
     total += text.length;
     if (!context.questionRefs.includes(section.questionRef)) issues.push(`없는 질문에 답했습니다 (${section.questionRef}).`);
     if (text.length > FOLLOWUP_SECTION_MAX) issues.push("한 질문의 답변이 너무 깁니다.");
-    issues.push(...checkTextV2(text, chart, percents, dates));
+    issues.push(...checkTextV2(text, chart, percents, dates, terms));
     for (const ref of section.refs) {
       // 답하는 질문의 ref는 근거는 아니지만 틀린 참조도 아니다. 이것 때문에 다시 생성하지 않는다.
       if (!context.knownRefs.has(ref) && !context.questionRefs.includes(ref)) issues.push(`없는 근거를 참조했습니다 (${ref}).`);
