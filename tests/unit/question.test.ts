@@ -10,6 +10,8 @@ import {
   inScope,
   inScopeFacts,
   inScopeItems,
+  itemDomain,
+  limitToTopics,
   resolvePeriod,
   type ClassifierOutput,
 } from "@/domain/reading/question";
@@ -68,7 +70,41 @@ describe("상품 범위 판정", () => {
     // 범위는 상품 설정만으로 정한다. 연애 이야기를 하다 직업을 물어도 종합 상품에서는 범위 안이다.
     expect(inScope(FIRST_OVERVIEW, "career")).toBe(true);
     expect(inScope(FIRST_OVERVIEW, "wealth")).toBe(true);
-    expect(inScope(FIRST_OVERVIEW, "health")).toBe(false);
+    expect(inScope(FIRST_OVERVIEW, "family")).toBe(true);
+    expect(inScope(FIRST_OVERVIEW, "study")).toBe(false);
+  });
+
+  it("건강과 투자는 상품 설정으로 답할 주제에 잇고, 건강은 진단하지 않도록 limited로 둔다", () => {
+    const analysis = buildQuestionAnalysis(
+      FIRST_OVERVIEW,
+      REF,
+      raw([item("health", "general", "요즘 너무 피곤한데 괜찮을지"), item("investment", "timing", "언제 주식을 시작하면 좋을지"), item("family", "apply", "엄마와 자꾸 부딪히는 이유")]),
+    );
+    expect(analysis.items.map((entry) => [entry.scope, entry.topicDomain, entry.answerability])).toEqual([
+      ["in", "temperament", "limited"],
+      ["in", "wealth", "full"],
+      ["in", "family", "full"],
+    ]);
+    // 투자 시기 질문은 돈 주제의 기간 판단으로 답한다.
+    expect(analysis.items[1]!.timingSupported).toBe(true);
+    expect(analysis.items.map(itemDomain)).toEqual(["temperament", "wealth", "family"]);
+  });
+
+  it("이전 방식(1.0.0)으로 저장된 분석은 질문 분야를 그대로 주제로 쓴다", () => {
+    const stored = buildQuestionAnalysis(FIRST_OVERVIEW, REF, raw([item("career", "timing", "언제 이직할지")]));
+    const legacy = { ...stored.items[0]! };
+    delete (legacy as { topicDomain?: unknown }).topicDomain;
+    expect(itemDomain(legacy)).toBe("career");
+  });
+
+  it("주제가 늘기 전에 만든 풀이에서 새 주제를 물으면 범위 밖으로 돌린다", () => {
+    const analysis = buildQuestionAnalysis(FIRST_OVERVIEW, REF, raw([item("family", "apply", "엄마와 부딪히는 이유"), item("career", "apply", "회사에서 강점 쓰는 법")]));
+    const sixTopics = new Set(["temperament", "strengths", "career", "wealth", "romance", "social"]);
+    const limited = limitToTopics(analysis, sixTopics);
+    expect(inScopeItems(limited).map((entry) => entry.summary)).toEqual(["회사에서 강점 쓰는 법"]);
+    expect(excludedLabel(excludedItems(limited))).toBe("가족");
+    // 모든 주제가 있는 풀이에서는 그대로 둔다.
+    expect(limitToTopics(analysis, new Set(FIRST_OVERVIEW.topics.map((topic) => topic.inquiryDomain)))).toBe(analysis);
   });
 
   it("한 문장의 여러 질문을 나눠 받고, 시기와 비교를 각각 남긴다", () => {

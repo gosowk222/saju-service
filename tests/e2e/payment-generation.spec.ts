@@ -177,7 +177,7 @@ test.describe("후속 질문", () => {
     await completed(page, request);
     await page.getByRole("textbox", { name: "후속 질문" }).fill("내일 날씨 어때?");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/이 풀이에서는 성향, 강점, 일, 돈, 연애, 인간관계에 대한 질문에 답할 수 있어요/)).toBeVisible();
+    await expect(page.getByText(/이 풀이에서는 성향, 강점, 일, 돈, 연애, 인간관계, 친구, 가족, 지역과 행운/)).toBeVisible();
     await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
   });
 

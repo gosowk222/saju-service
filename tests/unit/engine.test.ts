@@ -93,7 +93,7 @@ describe("sajuengine 연결", () => {
 });
 
 describe("작성 재료", () => {
-  it("여섯 주제를 만들고 계산, 해석, 사용자 상황을 구분한다", () => {
+  it("상품의 모든 주제(아홉 개)를 만들고 계산, 해석, 사용자 상황을 구분한다", () => {
     const { plan, trace } = analyze();
     expect(plan.planVersion).toBe("2.0.0");
     expect(plan.topics.map((topic) => topic.topicId)).toEqual(FIRST_OVERVIEW.topics.map((topic) => topic.id));
@@ -101,7 +101,7 @@ describe("작성 재료", () => {
     // 궁금한 점의 원문은 작성 재료에 넣지 않는다. 범위를 판정한 뒤 생성 단계에서 정리된 값만 더한다.
     expect(plan.userContext).toEqual([{ ref: "u1", kind: "user-context", text: "사용자가 고른 현재 상황: 직장인", source: "situation" }]);
     expect(plan.situation?.context).toContain("회사");
-    expect(trace).toHaveLength(6);
+    expect(trace).toHaveLength(FIRST_OVERVIEW.topics.length);
     for (const topic of trace) {
       expect(topic.policyVersion).toBe("1.1.0");
       for (const conclusion of topic.conclusions) {

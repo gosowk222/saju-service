@@ -32,7 +32,12 @@ const DATE_CLAIM = /\d{4}\s*년|\d{1,2}\s*월\s*\d{1,2}\s*일/;
 const MONEY_CLAIM = /\d[\d,]*\s*(?:만\s*원|억|원(?![칙인리래소화형]))/;
 const PERCENT_VALUE = /(\d{1,3})\s*%/g;
 const PROBABILITY_CLAIM = /확률|적중률/;
-const FORBIDDEN_TOPIC = /질병|진단명|합격(?:할|합니다|해요)|재회(?:할|합니다|해요)/;
+/**
+ * 건강·투자·미래는 완곡하게만 말한다 (상품 3.0.0). 단어가 아니라 단정하는 결과, 진단, 매매 지시만 잡는다.
+ * "합격할 흐름이 보여요"는 통과하고 "합격합니다", "지금 매수하세요"는 걸린다.
+ */
+const FORBIDDEN_TOPIC =
+  /진단명|처방(?:해|을|받)|(?:합격|재회|결혼|취업|당첨)(?:합니다|할 거예요|하게 됩니다|하게 될 거예요|할 겁니다)|(?:매수|매도)하세요|수익(?:이|을)\s*보장/;
 const SCENE_AS_FACT = /사주(?:에|로|가)\s*(?:나와|나옵|보면|확정|정해)|계산(?:상|결과|된)|반드시|확실(?:히|합니다|해요)|틀림없/;
 
 function collectRefs(plan: ReadingPlan): Map<string, Set<string>> {
@@ -79,7 +84,7 @@ function checkCommonText(text: string, chart: ChartView, percents: Set<string>):
   if (DATE_CLAIM.test(text)) issues.push(`근거 없는 날짜가 있습니다: ${text.slice(0, 40)}`);
   if (MONEY_CLAIM.test(text)) issues.push(`근거 없는 금액이 있습니다: ${text.slice(0, 40)}`);
   if (PROBABILITY_CLAIM.test(text)) issues.push(`확률 표현이 있습니다: ${text.slice(0, 40)}`);
-  if (FORBIDDEN_TOPIC.test(text)) issues.push(`다루지 않는 판단이 있습니다: ${text.slice(0, 40)}`);
+  if (FORBIDDEN_TOPIC.test(text)) issues.push(`결과를 단정하거나 진단·매매를 지시했습니다: ${text.slice(0, 40)}`);
   for (const match of text.matchAll(PERCENT_VALUE)) {
     if (!percents.has(match[1]!)) issues.push(`계산에 없는 비율입니다: ${match[0]}`);
   }
@@ -227,7 +232,7 @@ function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<strin
   const issues: string[] = [...checkAgainstChart(text, chart), ...checkDates(text, dates)];
   if (MONEY_CLAIM.test(text)) issues.push(`근거 없는 금액이 있습니다: ${text.slice(0, 40)}`);
   if (PROBABILITY_CLAIM.test(text)) issues.push(`확률 표현이 있습니다: ${text.slice(0, 40)}`);
-  if (FORBIDDEN_TOPIC.test(text)) issues.push(`다루지 않는 판단이 있습니다: ${text.slice(0, 40)}`);
+  if (FORBIDDEN_TOPIC.test(text)) issues.push(`결과를 단정하거나 진단·매매를 지시했습니다: ${text.slice(0, 40)}`);
   for (const match of text.matchAll(PERCENT_VALUE)) {
     if (!percents.has(match[1]!)) issues.push(`계산에 없는 비율입니다: ${match[0]}`);
   }

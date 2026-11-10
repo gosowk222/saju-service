@@ -57,7 +57,7 @@ function respond(schema: string, input: Record<string, unknown>) {
     return {
       items: [
         { summary: "언제 취업할 수 있을지", domain: "career", intent: "timing", options: [], period: { kind: "default", start: "", end: "" }, missingInfo: [] },
-        { summary: "요즘 건강이 괜찮을지", domain: "health", intent: "outcome", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] },
+        { summary: "이번 시험에 합격할지", domain: "study", intent: "outcome", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] },
       ],
       userFacts: [],
       needsClarification: false,
@@ -170,14 +170,14 @@ describe("최초 풀이 준비", () => {
 
   it("분류와 기간 계산은 한 번만 하고, 재시도에서는 저장된 값을 다시 쓴다", async () => {
     const { admin } = fakeAdmin();
-    const args = { admin, readingId: "r2", base: base.plan, product: FIRST_OVERVIEW, birth, concern: "언제 취업할까요? 요즘 건강은 괜찮을까요?", modelId: "gpt-5.6-luna", deadlineAt: Date.now() + 60_000 };
+    const args = { admin, readingId: "r2", base: base.plan, product: FIRST_OVERVIEW, birth, concern: "언제 취업할까요? 이번 시험에 합격할까요?", modelId: "gpt-5.6-luna", deadlineAt: Date.now() + 60_000 };
     const first = await prepareNarration(args);
     expect(requests.map((item) => item.schema)).toEqual(["saju_question_analysis"]);
     expect(first.versions.timingComputed).toBe(1);
     expect(first.plan.questions.map((question) => question.summary)).toEqual(["언제 취업할 수 있을지"]);
-    expect(first.excluded).toEqual([{ summary: "요즘 건강이 괜찮을지", domain: "health" }]);
+    expect(first.excluded).toEqual([{ summary: "이번 시험에 합격할지", domain: "study" }]);
     // 분류 원문은 생성 입력으로 넘어가지 않는다.
-    expect(JSON.stringify(first.plan)).not.toContain("건강");
+    expect(JSON.stringify(first.plan)).not.toContain("이번 시험에 합격할지");
 
     requests.length = 0;
     const second = await prepareNarration(args);
@@ -298,7 +298,7 @@ describe("후속 질문 답변 조립", () => {
       items: [
         { summary: "언제 취업할 수 있을지", domain: "career", intent: "timing", options: [], period: { kind: "default", start: "", end: "" }, missingInfo: [] },
         { summary: "취업과 창업 중 무엇이 맞는지", domain: "career", intent: "compare", options: ["취업", "창업"], period: { kind: "none", start: "", end: "" }, missingInfo: [] },
-        { summary: "어떤 주식을 살지", domain: "investment", intent: "general", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] },
+        { summary: "이번 시험에 붙을지", domain: "study", intent: "outcome", options: [], period: { kind: "none", start: "", end: "" }, missingInfo: [] },
       ],
       userFacts: [],
       needsClarification: false,
@@ -306,9 +306,9 @@ describe("후속 질문 답변 조립", () => {
     const result = await answerAnalyzedFollowup({ plan: base.plan, product: FIRST_OVERVIEW, persona, chart: base.chart, analysis, initialAnalysis: null, timing: [], messages: [], lastTurn: null, modelId: "gpt-5.6-luna" });
     expect(result.status).toBe("answered");
     expect(result.answer.indexOf("q1의 답")).toBeLessThan(result.answer.indexOf("q2의 답"));
-    expect(result.answer).toContain("투자 종목 이야기는 이 풀이에서 다루지 않아");
+    expect(result.answer).toContain("시험·학업 결과 이야기는 이 풀이에서 다루지 않아");
     const sent = requests.find((item) => item.schema === "saju_followup_v2")!.input as Input;
-    expect(JSON.stringify(sent)).not.toContain("주식");
+    expect(JSON.stringify(sent)).not.toContain("시험에 붙을지");
   });
 
   it("범위 안 질문이 없으면 답변을 만들지 않고 범위 안내나 되묻기로 끝낸다", () => {

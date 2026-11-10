@@ -403,3 +403,18 @@ describe("후속 답변 검사 2.0.0", () => {
     expect(checkFollowupV2(leaked, context, chart).join()).toContain("범위 밖");
   });
 });
+
+describe("건강·투자·미래의 완곡한 표현 (상품 3.0.0)", () => {
+  it("완곡한 표현은 통과하고, 결과 단정·진단·매매 지시만 거부한다", () => {
+    for (const text of [
+      "합격할 흐름이 보이는 달이에요. 준비해 볼 만한 때예요.",
+      "몸 상태를 진단하는 건 아니지만, 쉬는 습관이 중요한 리듬이에요.",
+      "투자에서는 공부한 만큼만 나눠 담는 방식이 어울려요.",
+    ]) {
+      expect(checkNarrationV2(withTopicBubble(text), planV2, chart)).toEqual([]);
+    }
+    for (const text of ["이번 시험은 합격합니다.", "그 사람과 결혼하게 될 거예요.", "지금 매수하세요.", "수익이 보장되는 흐름이에요."]) {
+      expect(checkNarrationV2(withTopicBubble(text), planV2, chart).join()).toContain("단정하거나");
+    }
+  });
+});
