@@ -1,52 +1,28 @@
 import type { AssessmentFacet, InquiryConclusion, InquiryReader } from "sajuengine";
 import type { Persona } from "../personas";
-import type { ProductDefinition } from "../products/types";
-import { RULESET_ID, RULESET_VERSION, familyLabel } from "../rules/first-overview";
+import type { ProductDefinition, ProductTopic } from "../products/types";
+import { RULESET_ID, RULESET_VERSION, detailKey, familyLabel, type RuleDetailSink } from "../rules/first-overview";
+import { PATTERN_LABEL, STRENGTH_LABEL } from "../rules/materials";
 import { ELEMENT_HANJA } from "./chart";
 import type {
   ChartElement,
   ChartView,
   FactStatement,
   InterpretationStatement,
-  ReadingPlan,
+  ReadingPlanV2,
   ReadingPreview,
-  TopicPlan,
   TopicPlanStatus,
+  TopicPlanV2,
   TopicTrace,
+  TopicWeight,
   UserContextStatement,
 } from "./types";
 
-export const PLAN_VERSION = "1.0.0";
-
-const STRENGTH_LABEL: Readonly<Record<string, string>> = {
-  strong: "강한 편",
-  "slightly-strong": "조금 강한 편",
-  balanced: "균형 잡힌 편",
-  "slightly-weak": "조금 약한 편",
-  weak: "약한 편",
-};
-
-const PATTERN_LABEL: Readonly<Record<string, string>> = {
-  "eating-god": "식신격",
-  "hurting-officer": "상관격",
-  "direct-wealth": "정재격",
-  "indirect-wealth": "편재격",
-  "direct-officer": "정관격",
-  "seven-killings": "칠살격",
-  "direct-resource": "정인격",
-  "indirect-resource": "편인격",
-  "month-prosperity": "건록격",
-  "month-robbery": "양인격",
-};
-
-/** 주제당 넘길 앱 규칙 결론과 엔진 기본 결론의 최대 개수. */
-const MAX_APP_CONCLUSIONS = 2;
-const MAX_ENGINE_DEFERRED = 1;
+export const PLAN_VERSION = "2.0.0";
 
 function buildFacts(chart: ChartView, assessment: AssessmentFacet | null): FactStatement[] {
   const facts: FactStatement[] = [];
-  const add = (text: string, originPath: string) =>
-    facts.push({ ref: `f${facts.length + 1}`, kind: "engine-fact", text, originPath });
+  const add = (text: string, originPath: string) => facts.push({ ref: `f${facts.length + 1}`, kind: "engine-fact", text, originPath });
 
   if (chart.dayMaster) {
     const { ko, hanja, element } = chart.dayMaster;
@@ -76,28 +52,16 @@ function buildFacts(chart: ChartView, assessment: AssessmentFacet | null): FactS
   return facts;
 }
 
-function buildUserContext(
-  product: ProductDefinition,
-  situationId: string | null,
-  concern: string,
-): UserContextStatement[] {
-  const items: UserContextStatement[] = [];
-  const situation = product.situation.options.find((option) => option.id === situationId);
-  if (situation) {
-    items.push({ ref: "u1", kind: "user-context", text: `사용자가 알려 준 현재 상황: ${situation.label}`, source: "situation" });
-  }
-  if (concern) {
-    items.push({ ref: `u${items.length + 1}`, kind: "user-context", text: `사용자가 궁금하다고 적은 내용: ${concern}`, source: "concern" });
-  }
-  return items;
-}
-
 const isAppRule = (conclusion: InquiryConclusion) => conclusion.rule.ruleId.startsWith(`${RULESET_ID}.`);
 
+/**
+ * 앱 규칙의 결론을 모두 쓴다(주제당 최대 4개). 엔진 기본 규칙의 보류 결론은 앱 규칙 결론이 하나도 없을 때만
+ * 보조 재료로 1개 넘긴다. 엔진 결론은 기술 문장이라 본문 재료로는 앱 규칙 결론을 우선한다.
+ */
 function selectConclusions(conclusions: readonly InquiryConclusion[]): InquiryConclusion[] {
-  const fromApp = conclusions.filter(isAppRule).sort((a, b) => Number(b.status === "candidate") - Number(a.status === "candidate"));
-  const fromEngine = conclusions.filter((conclusion) => !isAppRule(conclusion) && conclusion.status === "deferred");
-  return [...fromApp.slice(0, MAX_APP_CONCLUSIONS), ...fromEngine.slice(0, MAX_ENGINE_DEFERRED)];
+  const fromApp = conclusions.filter(isAppRule);
+  if (fromApp.length) return fromApp;
+  return conclusions.filter((conclusion) => conclusion.status === "deferred").slice(0, 1);
 }
 
 function topicStatus(selected: readonly InquiryConclusion[]): TopicPlanStatus {
@@ -106,75 +70,111 @@ function topicStatus(selected: readonly InquiryConclusion[]): TopicPlanStatus {
   return "limited";
 }
 
+export function targetFor(topic: Pick<ProductTopic, "depth">, weight: TopicWeight): number {
+  if (weight === "focus") return topic.depth.focus;
+  if (weight === "light") return topic.depth.light;
+  if (weight === "lead") return topic.depth.standard + 1;
+  return topic.depth.standard;
+}
+
+export function toStatement(ref: string, conclusion: InquiryConclusion, sink: RuleDetailSink | undefined): InterpretationStatement {
+  const detail = sink?.get(detailKey(conclusion.rule.ruleId, conclusion.periodId, conclusion.statement));
+  return {
+    ref,
+    kind: "service-interpretation",
+    text: conclusion.statement,
+    status: conclusion.status,
+    caveats: conclusion.caveats,
+    conclusionId: conclusion.id,
+    ruleId: conclusion.rule.ruleId,
+    ruleVersion: conclusion.rule.version,
+    ...(detail
+      ? {
+          aspect: detail.aspect,
+          basis: detail.basis,
+          ...(detail.upside ? { upside: detail.upside } : {}),
+          ...(detail.weakness ? { weakness: detail.weakness } : {}),
+          ...(detail.action ? { action: detail.action } : {}),
+          ...(detail.counterNote ? { counterNote: detail.counterNote } : {}),
+          ...(detail.compare ? { compare: detail.compare } : {}),
+        }
+      : {}),
+  };
+}
+
+export function traceOf(topicId: string, domain: string, answer: ReturnType<InquiryReader["answer"]>, adoptedIds: ReadonlySet<string>): TopicTrace {
+  return {
+    topicId,
+    inquiryDomain: domain,
+    inquiryStatus: answer.status,
+    policyVersion: answer.policyVersion,
+    limitations: answer.limitations,
+    evaluatedRules: answer.evaluatedRules,
+    conclusions: answer.conclusions.map((conclusion) => ({
+      id: conclusion.id,
+      status: conclusion.status,
+      statement: conclusion.statement,
+      rule: conclusion.rule,
+      supportingEvidenceIds: conclusion.supportingEvidence.map((entry) => entry.id),
+      counterEvidenceIds: conclusion.counterEvidence.map((entry) => entry.id),
+      contextualEvidenceIds: conclusion.contextualEvidence.map((entry) => entry.id),
+      sourceRefs: [...new Set(conclusion.supportingEvidence.flatMap((entry) => entry.sourceRefs))],
+      caveats: conclusion.caveats,
+      adopted: adoptedIds.has(conclusion.id),
+    })),
+  };
+}
+
+/**
+ * 풀이 기록을 만들 때 저장하는 원국 작성 재료. 궁금한 점의 원문은 넣지 않는다.
+ * 질문 분석과 기간 재료는 결제 후 생성 단계에서 더한다 (focus.ts).
+ */
 export function buildReadingPlan(input: {
   readonly reader: InquiryReader;
+  readonly sink: RuleDetailSink;
   readonly product: ProductDefinition;
   readonly persona: Persona;
   readonly chart: ChartView;
   readonly assessment: AssessmentFacet | null;
   readonly nickname: string;
+  readonly gender: "male" | "female";
   readonly situationId: string | null;
-  readonly concern: string;
-}): { readonly plan: ReadingPlan; readonly trace: readonly TopicTrace[] } {
-  const { reader, product, persona, chart, assessment, nickname, situationId, concern } = input;
+}): { readonly plan: ReadingPlanV2; readonly trace: readonly TopicTrace[] } {
+  const { reader, sink, product, persona, chart, assessment, nickname, gender, situationId } = input;
+  const situation = product.situation.options.find((option) => option.id === situationId) ?? null;
   let nextStatement = 1;
   const trace: TopicTrace[] = [];
 
-  const topics: TopicPlan[] = product.topics.map((topic) => {
+  const topics: TopicPlanV2[] = product.topics.map((topic) => {
     const answer = reader.answer({ domain: topic.inquiryDomain, kind: "natal" });
     const selected = selectConclusions(answer.conclusions);
     const status = topicStatus(selected);
-    const adoptedIds = new Set(selected.map((conclusion) => conclusion.id));
-
-    trace.push({
-      topicId: topic.id,
-      inquiryDomain: topic.inquiryDomain,
-      inquiryStatus: answer.status,
-      policyVersion: answer.policyVersion,
-      limitations: answer.limitations,
-      evaluatedRules: answer.evaluatedRules,
-      conclusions: answer.conclusions.map((conclusion) => ({
-        id: conclusion.id,
-        status: conclusion.status,
-        statement: conclusion.statement,
-        rule: conclusion.rule,
-        supportingEvidenceIds: conclusion.supportingEvidence.map((entry) => entry.id),
-        counterEvidenceIds: conclusion.counterEvidence.map((entry) => entry.id),
-        contextualEvidenceIds: conclusion.contextualEvidence.map((entry) => entry.id),
-        sourceRefs: [...new Set(conclusion.supportingEvidence.flatMap((entry) => entry.sourceRefs))],
-        caveats: conclusion.caveats,
-        adopted: adoptedIds.has(conclusion.id),
-      })),
-    });
-
-    const statements: InterpretationStatement[] = selected.map((conclusion) => ({
-      ref: `s${nextStatement++}`,
-      kind: "service-interpretation",
-      text: conclusion.statement,
-      status: conclusion.status,
-      caveats: conclusion.caveats,
-      conclusionId: conclusion.id,
-      ruleId: conclusion.rule.ruleId,
-      ruleVersion: conclusion.rule.version,
-    }));
-
+    trace.push(traceOf(topic.id, topic.inquiryDomain, answer, new Set(selected.map((conclusion) => conclusion.id))));
+    const weight: TopicWeight = situation?.focusDomains.includes(topic.inquiryDomain) ? "lead" : "standard";
     return {
       topicId: topic.id,
       title: topic.title,
+      inquiryDomain: topic.inquiryDomain,
       status,
       limitNote:
         status === "limited"
-          ? "이 주제는 판단할 근거가 부족합니다. 알 수 없다고 짧게 말하고 결론을 만들지 않습니다."
+          ? "이 주제는 판단할 근거가 부족합니다. 무엇을 알 수 없는지 짧게 말하고 결론을 만들지 않습니다."
           : status === "tentative"
             ? "확정하기 어려운 후보입니다. 경향으로만 말하고 한계를 함께 말합니다."
             : null,
-      statements,
-      bubbles: status === "limited" ? { min: 1, target: 1, max: 2 } : topic.bubbles,
+      statements: selected.map((conclusion) => toStatement(`s${nextStatement++}`, conclusion, sink)),
+      outline: topic.outline,
+      depth: topic.depth,
+      weight,
+      target: status === "limited" ? 1 : targetFor(topic, weight),
       creativeSceneAllowed: topic.creativeScene && status === "adopted",
+      situationAngle: situation?.angles[topic.inquiryDomain] ?? null,
     };
   });
 
-  const coverageNotes = chart.hourKnown ? [] : ["태어난 시간을 몰라 시주를 뺀 범위에서 읽었습니다."];
+  const userContext: UserContextStatement[] = situation
+    ? [{ ref: "u1", kind: "user-context", text: `사용자가 고른 현재 상황: ${situation.label}`, source: "situation" }]
+    : [];
 
   return {
     plan: {
@@ -187,9 +187,11 @@ export function buildReadingPlan(input: {
       personaVersion: persona.version,
       nickname,
       hourKnown: chart.hourKnown,
-      coverageNotes,
+      gender,
+      coverageNotes: chart.hourKnown ? [] : ["태어난 시간을 몰라 시주를 뺀 범위에서 읽었습니다."],
       facts: buildFacts(chart, assessment),
-      userContext: buildUserContext(product, situationId, concern),
+      userContext,
+      situation: situation ? { id: situation.id, label: situation.label, context: situation.context } : null,
       topics,
     },
     trace,
@@ -200,7 +202,7 @@ export function buildReadingPlan(input: {
  * 결제 전에 보여 줄 짧은 맛보기. LLM 없이 계산값과 규칙 결론만으로 만든다.
  * 본문은 결제 후에 별도로 생성되므로 브라우저로 미리 내려가지 않는다.
  */
-export function buildReadingPreview(plan: ReadingPlan, chart: ChartView): ReadingPreview {
+export function buildReadingPreview(plan: ReadingPlanV2, chart: ChartView): ReadingPreview {
   const bubbles: string[] = [];
   if (chart.dayMaster) {
     const { ko, hanja, element } = chart.dayMaster;

@@ -323,7 +323,7 @@ function careerRule(sink?: RuleDetailSink): InquiryRule {
       const { percents, families, ranked, partial } = base;
       const out = drafter(meta.ruleId, context, sink, topicGuards(context.evidence, "career"));
       const [first, second] = [ranked[0]!, ranked[1]!];
-      const { peer, output, authority, resource } = percents;
+      const { peer, output, authority } = percents;
 
       if (percents[first] >= DOMINANT_MIN_PERCENT) {
         const reading = CAREER_STYLE[first];

@@ -4,7 +4,6 @@ import {
   branchClockRanges,
   createFeatureSession,
   createInquiryReader,
-  defineFeatureSet,
   toAnalysisInput,
   type AssessmentFacet,
   type PublicBirthInput,
@@ -25,7 +24,9 @@ import type { ProductDefinition } from "@/domain/products/types";
 import { buildChartView, type ChartFacts } from "@/domain/reading/chart";
 import { buildReadingPlan, buildReadingPreview } from "@/domain/reading/plan";
 import type { ChartElement } from "@/domain/reading/types";
-import { FIRST_OVERVIEW_RULES } from "@/domain/rules/first-overview";
+import type { RuleDetailSink } from "@/domain/rules/common";
+import { createFirstOverviewRules } from "@/domain/rules/first-overview";
+import { FEATURE_SET } from "./features";
 
 /** vendor의 tgz와 일치하는 값. tests/unit/engine.test.ts에서 확인한다. */
 export const ENGINE_PACKAGE = {
@@ -33,26 +34,6 @@ export const ENGINE_PACKAGE = {
   version: "0.1.0",
   tarballSha256: "8596539c819c5fdb18ee2e0c5322dc5130ca1e6d22b1703f41d8ac10b5ce90fd",
 } as const;
-
-/**
- * 첫 상품에 필요한 재료만 계산한다. 원국 구조, 관계, 주제 후보, 신살·12운성까지이며
- * 기간 모듈(M05~M07)은 쓰지 않는다.
- */
-const NATAL_TOPICS = ["temperament", "strengths", "career", "wealth", "romance", "social"] as const;
-
-const FEATURE_SET = defineFeatureSet([
-  {
-    id: "first-overview-natal",
-    version: "1.0.0",
-    modules: ["M01", "M02", "M03", "M04"],
-    topics: [...NATAL_TOPICS],
-    targetKind: "none",
-    selection: {
-      version: "1.0.0",
-      rules: [{ module: "M01" }, { module: "M02" }, { module: "M03" }, { module: "M04" }],
-    },
-  },
-]);
 
 export const calendarConverter: CalendarConverter = ({ calendar, isLeapMonth, year, month, day }) => {
   try {
@@ -117,14 +98,17 @@ export function toPublicBirthInput(input: AnalyzeInput): PublicBirthInput {
   });
 }
 
+/**
+ * 풀이 기록을 만들 때 한 번 원국을 계산하고 원국 작성 재료를 만든다.
+ * 궁금한 점은 여기서 쓰지 않는다. 질문 분석과 기간 재료는 결제 후 생성 단계에서 더한다.
+ */
 export function analyzeBirth(input: {
   readonly birth: PublicBirthInput;
   readonly product: ProductDefinition;
   readonly nickname: string;
   readonly situationId: string | null;
-  readonly concern: string;
 }) {
-  const { birth, product, nickname, situationId, concern } = input;
+  const { birth, product, nickname, situationId } = input;
   const persona = findPersona(product.personaId);
   if (!persona) throw new Error(`Unknown persona: ${product.personaId}`);
 
@@ -138,8 +122,19 @@ export function analyzeBirth(input: {
       facts,
       (assessment?.elementPercent as Readonly<Record<ChartElement, number>> | undefined) ?? null,
     );
-    const reader = createInquiryReader([result], { rules: [...FIRST_OVERVIEW_RULES] });
-    const { plan, trace } = buildReadingPlan({ reader, product, persona, chart, assessment, nickname, situationId, concern });
+    const sink: RuleDetailSink = new Map();
+    const reader = createInquiryReader([result], { rules: createFirstOverviewRules(sink) });
+    const { plan, trace } = buildReadingPlan({
+      reader,
+      sink,
+      product,
+      persona,
+      chart,
+      assessment,
+      nickname,
+      gender: birth.gender === "male" ? "male" : "female",
+      situationId,
+    });
     return {
       birth,
       chart,

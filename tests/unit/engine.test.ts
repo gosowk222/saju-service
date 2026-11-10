@@ -23,7 +23,6 @@ function analyze(input: AnalyzeInput = base) {
     product: FIRST_OVERVIEW,
     nickname: "달빛",
     situationId: "employee",
-    concern: "이직이 고민이에요",
   });
 }
 
@@ -96,10 +95,12 @@ describe("sajuengine 연결", () => {
 describe("작성 재료", () => {
   it("여섯 주제를 만들고 계산, 해석, 사용자 상황을 구분한다", () => {
     const { plan, trace } = analyze();
+    expect(plan.planVersion).toBe("2.0.0");
     expect(plan.topics.map((topic) => topic.topicId)).toEqual(FIRST_OVERVIEW.topics.map((topic) => topic.id));
     expect(plan.facts.every((fact) => fact.kind === "engine-fact")).toBe(true);
-    expect(plan.userContext.map((item) => item.kind)).toEqual(["user-context", "user-context"]);
-    expect(plan.userContext[1]!.text).toContain("사용자가 궁금하다고 적은 내용");
+    // 궁금한 점의 원문은 작성 재료에 넣지 않는다. 범위를 판정한 뒤 생성 단계에서 정리된 값만 더한다.
+    expect(plan.userContext).toEqual([{ ref: "u1", kind: "user-context", text: "사용자가 고른 현재 상황: 직장인", source: "situation" }]);
+    expect(plan.situation?.context).toContain("회사");
     expect(trace).toHaveLength(6);
     for (const topic of trace) {
       expect(topic.policyVersion).toBe("1.1.0");
@@ -131,5 +132,25 @@ describe("작성 재료", () => {
   it("캐릭터는 계산과 판단 재료를 바꾸지 않는다", () => {
     const { plan } = analyze();
     expect(plan.topics[0]!.statements[0]!.text).not.toContain("여울");
+  });
+
+  it("판단마다 상품 항목, 이유, 근거가 있는 약점을 함께 남긴다", () => {
+    const { plan } = analyze();
+    for (const topic of plan.topics) {
+      expect(topic.statements.length).toBeGreaterThanOrEqual(2);
+      for (const statement of topic.statements) {
+        expect(topic.outline).toContain(statement.aspect);
+        expect(statement.basis?.length).toBeGreaterThan(0);
+      }
+    }
+    expect(plan.topics.flatMap((topic) => topic.statements).filter((statement) => statement.weakness).length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("상황을 바꾸면 같은 사주라도 주제 비중과 관점이 바뀌고 판단은 그대로다", () => {
+    const employee = analyze().plan;
+    const seeking = analyzeBirth({ birth: toPublicBirthInput(base), product: FIRST_OVERVIEW, nickname: "달빛", situationId: "job-seeking" }).plan;
+    expect(employee.topics.map((topic) => topic.statements.map((item) => item.text))).toEqual(seeking.topics.map((topic) => topic.statements.map((item) => item.text)));
+    expect(employee.topics.map((topic) => topic.weight)).not.toEqual(seeking.topics.map((topic) => topic.weight));
+    expect(employee.topics.find((topic) => topic.topicId === "work")!.situationAngle).not.toBe(seeking.topics.find((topic) => topic.topicId === "work")!.situationAngle);
   });
 });
