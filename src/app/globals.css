@@ -79,6 +79,9 @@
 
   --shadow-float: var(--shadow-float);
   --container-content: var(--content-max-width);
+
+  /* tokens.json layout.breakpoints.desktop. 미디어 쿼리에는 CSS 변수를 쓸 수 없어 값을 옮겨 적는다. */
+  --breakpoint-desktop: 768px;
 }
 
 @utility type-display {

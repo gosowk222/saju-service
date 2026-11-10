@@ -4,6 +4,7 @@ import { ArrowDown, Download, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ClientApiError } from "@/lib/client-api";
 import { typingDelay } from "@/lib/typing-delay";
+import type { PersonaFace } from "@/domain/personas";
 import type { ChartView } from "@/domain/reading/types";
 import type { ReadingStateView } from "@/server/readings/store";
 import { ChartPhoto } from "@/components/chart-table";
@@ -33,7 +34,7 @@ interface Props {
   readonly personaName: string;
   /** 조사를 붙인 이름 (묘묘가). 안내 문구에 쓴다. */
   readonly personaSubject: string;
-  readonly personaGlyph: string;
+  readonly personaFace: PersonaFace;
   readonly topicTitles: Readonly<Record<string, string>>;
   /** 후속 질문 입력 아래에 보여 줄 상품 범위 안내. */
   readonly scopeSummary: string;
@@ -49,7 +50,7 @@ interface Props {
  * 사진(photo)은 말풍선 면 없이 내용만 보여 준다.
  */
 function Bubble({
-  glyph,
+  face,
   name,
   children,
   animate,
@@ -57,7 +58,7 @@ function Bubble({
   photo = false,
   continued = false,
 }: {
-  glyph: string;
+  face: PersonaFace;
   name: string;
   children: React.ReactNode;
   animate?: boolean;
@@ -67,7 +68,7 @@ function Bubble({
 }) {
   return (
     <div className={`flex items-start gap-3 ${continued ? "-mt-2" : ""} ${animate ? "animate-bubble" : ""}`}>
-      {continued ? <span aria-hidden className="w-9 shrink-0" /> : <PersonaAvatar glyph={glyph} />}
+      {continued ? <span aria-hidden className="w-9 shrink-0" /> : <PersonaAvatar persona={face} />}
       <div className={`flex min-w-0 max-w-[85%] flex-col gap-1 ${photo ? "w-full" : ""}`}>
         {continued ? null : <span className="type-caption-sm text-gray-600">{name}</span>}
         {photo ? (
@@ -110,7 +111,7 @@ const ERROR_TEXT: Readonly<Record<string, string>> = {
   attempts_exhausted: "여러 번 시도했지만 풀이를 만들지 못했어요. 고객센터로 문의해 주세요.",
 };
 
-export function Messenger({ readingId, personaName, personaSubject, personaGlyph, topicTitles, scopeSummary, initialState, chart, nickname }: Props) {
+export function Messenger({ readingId, personaName, personaSubject, personaFace, topicTitles, scopeSummary, initialState, chart, nickname }: Props) {
   const [state, setState] = useState(initialState);
   // 이 화면에서 생성을 지켜본 경우에만 전달 효과를 쓴다. 다시 열면 바로 보여 준다.
   const [animateReveal] = useState(initialState.status !== "completed");
@@ -281,7 +282,7 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
                 <p className="self-center rounded-pill bg-gray-100 px-4 py-1 type-caption-sm text-gray-600">{topicTitles[message.topicId!]}</p>
               ) : null}
               <Bubble
-                glyph={personaGlyph}
+                face={personaFace}
                 name={personaName}
                 animate={animating}
                 scene={message.kind === "creative-scene"}
@@ -291,7 +292,7 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
               </Bubble>
               {/* 첫 인사 다음에 사주표를 사진처럼 보낸다. 저장된 메시지에는 넣지 않는다. */}
               {index === 0 && chart ? (
-                <Bubble glyph={personaGlyph} name={personaName} animate={animating} photo continued>
+                <Bubble face={personaFace} name={personaName} animate={animating} photo continued>
                   <ChartPhoto chart={chart} nickname={nickname} />
                 </Bubble>
               ) : null}
@@ -302,7 +303,7 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
         {/* 쓰는 중이거나 받은 말풍선을 차례로 보여 주는 중에는 입력 중 표시를 하나만 둔다. */}
         {generating || animating ? (
           <div aria-live="polite" className="flex flex-col gap-3">
-            <Bubble glyph={personaGlyph} name={personaName} continued={visible.length > 0}>
+            <Bubble face={personaFace} name={personaName} continued={visible.length > 0}>
               <TypingDots />
               <span className="sr-only">{personaSubject} 입력하고 있어요</span>
             </Bubble>
@@ -351,12 +352,12 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
                 <div key={followup.id} className="flex flex-col gap-4">
                   <MyBubble>{followup.question}</MyBubble>
                   {parts.map((part, index) => (
-                    <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0} animate={live}>
+                    <Bubble key={index} face={personaFace} name={personaName} continued={index > 0} animate={live}>
                       <RichText text={part} />
                     </Bubble>
                   ))}
                   {writing ? (
-                    <Bubble glyph={personaGlyph} name={personaName} continued={parts.length > 0}>
+                    <Bubble face={personaFace} name={personaName} continued={parts.length > 0}>
                       <TypingDots />
                       <span className="sr-only">{personaSubject} 입력하고 있어요</span>
                     </Bubble>
@@ -368,7 +369,7 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
             {sending && !inflight ? (
               <div className="flex flex-col gap-4">
                 <MyBubble animate>{sending}</MyBubble>
-                <Bubble glyph={personaGlyph} name={personaName}>
+                <Bubble face={personaFace} name={personaName}>
                   <TypingDots />
                 </Bubble>
               </div>

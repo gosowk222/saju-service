@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Messenger } from "@/components/messenger";
 import { LoadingScreen, PageHeader, PersonaAvatar } from "@/components/ui/layout";
-import { findPersona, withSubject } from "@/domain/personas";
+import { faceOf, findPersona, withSubject } from "@/domain/personas";
 import { findProduct, topicTitlesOf } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requirePageUser } from "@/server/auth";
@@ -29,7 +29,7 @@ async function Reading({ params }: { params: Promise<{ readingId: string }> }) {
         backHref="/library"
         title={
           <span className="flex items-center gap-3">
-            <PersonaAvatar glyph={persona.avatarGlyph} />
+            <PersonaAvatar persona={persona} />
             <span className="flex min-w-0 flex-col">
               <span className="truncate type-label font-semibold">{persona.name}</span>
               <span className="truncate type-caption font-normal text-gray-600">{product?.name ?? "사주 풀이"} · {reading.nickname} 님</span>
@@ -43,7 +43,7 @@ async function Reading({ params }: { params: Promise<{ readingId: string }> }) {
         readingId={readingId}
         personaName={persona.name}
         personaSubject={withSubject(persona.name)}
-        personaGlyph={persona.avatarGlyph}
+        personaFace={faceOf(persona)}
         topicTitles={topicTitlesOf(product)}
         scopeSummary={product ? `이 풀이에서는 ${product.scope.summary}` : "이 풀이에 대해 물어볼 수 있어요"}
         initialState={state}

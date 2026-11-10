@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import { LinkButton } from "@/components/ui/button";
-import { Badge, EmptyState, LoadingScreen, PageHeader, PersonaAvatar } from "@/components/ui/layout";
+import { ProductThumb } from "@/components/product-card";
+import { Badge, EmptyState, GlyphAvatar, LoadingScreen, PageHeader } from "@/components/ui/layout";
 import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -53,16 +54,17 @@ async function LibraryList() {
         const reading = readingById.get(row.reading_id);
         if (!reading) return null;
         const persona = findPersona(reading.persona_id);
+        const product = findProduct(reading.product_id);
         return (
           <li key={row.reading_id}>
             <Link
               href={`/readings/${row.reading_id}`}
               className="flex items-center gap-4 rounded-lg border border-gray-200 p-4 text-gray-900 hover:text-gray-900 hover:no-underline"
             >
-              <PersonaAvatar glyph={persona?.avatarGlyph ?? "사"} large />
+              {product ? <ProductThumb product={product} /> : <GlyphAvatar glyph={persona?.avatarGlyph ?? "사"} large />}
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <StatusBadgeRow job={jobById.get(row.reading_id)} name={persona?.name} />
-                <span className="truncate type-label font-semibold">{findProduct(reading.product_id)?.name ?? "사주 풀이"}</span>
+                <span className="truncate type-label font-semibold">{product?.name ?? "사주 풀이"}</span>
                 <span className="truncate type-caption text-gray-600">
                   {reading.nickname} 님 · {formatDate(row.created_at)}
                 </span>

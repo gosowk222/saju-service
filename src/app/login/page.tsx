@@ -2,6 +2,11 @@ import { Suspense } from "react";
 import { LoginButtons } from "@/components/login-buttons";
 import { LoadingScreen, Notice, PersonaAvatar } from "@/components/ui/layout";
 import { safeNextPath } from "@/domain/auth/safe-next";
+import { findPersona } from "@/domain/personas";
+import { DEFAULT_PRODUCT_ID, findProduct } from "@/domain/products";
+
+/** 첫 상품의 캐릭터가 맞이한다. */
+const HOST = findPersona(findProduct(DEFAULT_PRODUCT_ID)!.personaId)!;
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   cancelled: "로그인을 취소했어요. 다시 시도하려면 아래 버튼을 눌러 주세요.",
@@ -18,7 +23,7 @@ async function LoginContent({ searchParams }: { searchParams: Promise<Record<str
   return (
     <main className="flex flex-1 flex-col justify-center gap-8 px-5 py-8">
       <div className="flex flex-col items-center gap-5 text-center">
-        <PersonaAvatar glyph="여" large />
+        <PersonaAvatar persona={HOST} large />
         <div className="flex flex-col gap-2">
           <h1 className="type-h1">반가워요</h1>
           <p className="type-body text-gray-700">간편 로그인으로 시작해요.</p>

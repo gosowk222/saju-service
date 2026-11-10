@@ -66,7 +66,7 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
           </div>
           {reading.preview.bubbles.map((bubble) => (
             <div key={bubble} className="flex items-start gap-3">
-              <PersonaAvatar glyph={persona.avatarGlyph} />
+              <PersonaAvatar persona={persona} />
               <p className="wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) bg-gray-100 px-4 py-4 type-body text-gray-900">{bubble}</p>
             </div>
           ))}
