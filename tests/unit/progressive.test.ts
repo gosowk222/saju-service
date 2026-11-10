@@ -6,9 +6,9 @@ import { emptyAnalysis } from "@/domain/reading/question";
 import type { NarrationOutputV2, NarrationPlanV2 } from "@/domain/reading/types";
 import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import type { callStructuredStream } from "@/server/llm/client";
-import { narrateReadingProgressive, sentPartsFrom, type NewMessage, type SentParts } from "@/server/llm/narrate";
+import { answerFollowupProgressive, narrateReadingProgressive, sentPartsFrom, type NewMessage, type SentParts } from "@/server/llm/narrate";
 import { CURRENT_READING_PROMPT, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
-import { completedParts } from "@/server/llm/stream-parts";
+import { completedParts, followupParts } from "@/server/llm/stream-parts";
 
 /** 주제가 완성될 때마다 먼저 보여 주는 생성 (reading-2.4.0). 모델 대신 정해 둔 글자를 조금씩 흘려보낸다. */
 
@@ -166,5 +166,140 @@ describe("주제가 완성될 때마다 먼저 보여 주는 생성", () => {
     const { commits, inputs } = await run([extra]);
     expect(inputs).toHaveLength(1);
     expect(commits.flat().some((message) => message.text === "묻지 않은 답이에요.")).toBe(false);
+  });
+});
+
+// ─── 후속 답변 (followup-2.5.0 / followup-output-2.1.0) ─────────────────
+
+/** 정해 둔 JSON 문자열들을 차례로 흘려보내는 가짜 스트림. */
+function fakeTextStream(texts: readonly string[], size = 23) {
+  const inputs: Record<string, unknown>[] = [];
+  const stream = (async (request: Parameters<typeof callStructuredStream>[0]) => {
+    const text = texts[inputs.length]!;
+    inputs.push(JSON.parse(request.input) as Record<string, unknown>);
+    let received = "";
+    let stopped = false;
+    for (let index = 0; index < text.length; index += size) {
+      const delta = text.slice(index, index + size);
+      received += delta;
+      if ((await request.onDelta(received, delta)) === "stop") {
+        stopped = true;
+        break;
+      }
+    }
+    let parsed: unknown = null;
+    if (!stopped) {
+      const result = request.parser.safeParse(JSON.parse(received));
+      parsed = result.success ? result.data : null;
+    }
+    return {
+      parsed,
+      text: received,
+      stopped,
+      meta: { requestedModel: request.model, actualModel: "fake", responseId: null, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, reasoningTokens: 0, cachedInputTokens: 0 }, durationMs: 1, calls: 1 },
+    };
+  }) as unknown as typeof callStructuredStream;
+  return { stream, inputs };
+}
+
+const followupAnswer = (sections: { questionRef: string; refs: string[]; paragraphs: string[] }[]) =>
+  JSON.stringify({ mode: "answer", sections: sections.map(({ questionRef, refs, paragraphs }) => ({ questionRef, refs, text: paragraphs.join("\n\n") })), clarifyQuestion: "" });
+
+describe("스트리밍 후속 답변에서 완성된 문단 찾기", () => {
+  it("근거 연결을 먼저 읽고, 쓰는 중인 마지막 문단은 빼고 돌려준다", () => {
+    const text = followupAnswer([{ questionRef: "q1", refs: ["s1"], paragraphs: ["첫 문단이야.", "두 번째 \"따옴표\" 문단이야.", "세 번째 문단"] }]);
+    const cut = text.indexOf("세 번째") + 3;
+    const parts = followupParts(text.slice(0, cut));
+    expect(parts.mode).toBe("answer");
+    expect(parts.sections[0]).toMatchObject({ questionRef: "q1", refs: ["s1"], paragraphs: ["첫 문단이야.", '두 번째 "따옴표" 문단이야.'], closed: false });
+    expect(followupParts(text).sections[0]!.paragraphs).toHaveLength(3);
+    // 이스케이프가 끊긴 자리에서도 앞 문단은 읽는다.
+    const escape = text.indexOf("\\n\\n") + 1;
+    expect(followupParts(text.slice(0, escape)).sections[0]!.paragraphs).toEqual([]);
+  });
+});
+
+describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () => {
+  const { chart: followupChart } = analyzeBirth({
+    birth: toPublicBirthInput({ birthDate: "1998-09-19", calendar: "solar", isLeapMonth: false, gender: "female", birthTime: { status: "branch", branch: "신" }, birthPlace: place }),
+    product: FIRST_OVERVIEW,
+    nickname: "달빛",
+    situationId: null,
+  });
+  const check = { questionRefs: ["q1", "q2"], knownRefs: new Set(["s1", "s2"]), timing: [], percentSources: [], excluded: [], persona: MYOMYO };
+  const args = {
+    persona: MYOMYO,
+    nickname: "달빛",
+    hourKnown: true,
+    expression: FIRST_OVERVIEW.expression,
+    situation: null,
+    facts: [],
+    userContext: [],
+    questions: [],
+    statements: [],
+    timing: [],
+    delivered: [],
+    lastTurn: null,
+    chart: followupChart,
+    modelId: "gpt-5.6-luna",
+    check,
+  };
+
+  async function runFollowup(texts: readonly string[]) {
+    const published: string[][] = [];
+    const { stream, inputs } = fakeTextStream(texts);
+    const result = await answerFollowupProgressive({
+      ...args,
+      publish: async (sections) => {
+        published.push(sections.flatMap((section) => section.paragraphs));
+      },
+      stream,
+    });
+    return { result, published, inputs };
+  }
+
+  it("질문 순서대로 문단을 하나씩 보내고, 마지막에 보낸 그대로 돌려준다", async () => {
+    const text = followupAnswer([
+      { questionRef: "q1", refs: ["s1"], paragraphs: ["어라~? 그건 이렇게 봐야 해.", "왜냐면 근거가 이쪽이거든."] },
+      { questionRef: "q2", refs: ["s2", "q2"], paragraphs: ["두 번째 질문은 간단해."] },
+    ]);
+    const { result, published, inputs } = await runFollowup([text]);
+    expect(inputs).toHaveLength(1);
+    expect(published.map((list) => list.length)).toEqual([1, 2, 3]);
+    expect(result.output.sections.map((section) => section.text)).toEqual(["어라~? 그건 이렇게 봐야 해.\n\n왜냐면 근거가 이쪽이거든.", "두 번째 질문은 간단해."]);
+    expect(result.output.sections[1]!.refs).toEqual(["s2", "q2"]);
+  });
+
+  it("없는 근거를 참조하면 문단을 보내기 전에 끊고 다시 쓰게 한다", async () => {
+    const bad = followupAnswer([{ questionRef: "q1", refs: ["s99"], paragraphs: ["보이면 안 되는 문단이야."] }, { questionRef: "q2", refs: [], paragraphs: ["두 번째."] }]);
+    const good = followupAnswer([{ questionRef: "q1", refs: ["s1"], paragraphs: ["다시 쓴 문단이야."] }, { questionRef: "q2", refs: [], paragraphs: ["두 번째 답."] }]);
+    const { result, published, inputs } = await runFollowup([bad, good]);
+    expect(inputs).toHaveLength(2);
+    expect(published.flat()).not.toContain("보이면 안 되는 문단이야.");
+    expect(String(inputs[1]!.fixTheseProblemsFromPreviousAttempt)).toContain("없는 근거");
+    expect(result.output.sections[0]!.text).toBe("다시 쓴 문단이야.");
+  });
+
+  it("중간 문단이 검사에 걸리면 보낸 문단은 두고 이어서 쓰게 한다", async () => {
+    const first = followupAnswer([
+      { questionRef: "q1", refs: ["s1"], paragraphs: ["먼저 보낸 문단이야.", "이건 진짜 병신 같은 습관이야.", "안 보일 문단."] },
+      { questionRef: "q2", refs: [], paragraphs: ["두 번째."] },
+    ]);
+    const rest = followupAnswer([
+      { questionRef: "q1", refs: ["s1"], paragraphs: ["이어서 쓴 문단이야."] },
+      { questionRef: "q2", refs: [], paragraphs: ["두 번째 답이야."] },
+    ]);
+    const { result, published, inputs } = await runFollowup([first, rest]);
+    expect(published[0]).toEqual(["먼저 보낸 문단이야."]);
+    expect(published.flat()).not.toContain("안 보일 문단.");
+    expect(inputs[1]!.alreadySent).toEqual([{ questionRef: "q1", paragraphs: ["먼저 보낸 문단이야."] }]);
+    expect(result.output.sections[0]!.text).toBe("먼저 보낸 문단이야.\n\n이어서 쓴 문단이야.");
+  });
+
+  it("되묻기는 끝까지 받은 뒤 한 번에 돌려주고 문단을 보내지 않는다", async () => {
+    const text = JSON.stringify({ mode: "clarify", sections: [], clarifyQuestion: "어느 주제 얘기야?" });
+    const { result, published } = await runFollowup([text]);
+    expect(result.output).toEqual({ mode: "clarify", sections: [], clarifyQuestion: "어느 주제 얘기야?" });
+    expect(published).toEqual([]);
   });
 });

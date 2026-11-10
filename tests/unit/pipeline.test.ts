@@ -321,4 +321,17 @@ describe("후속 질문 답변 조립", () => {
     const vague = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: true });
     expect(routeWithoutItems(FIRST_OVERVIEW, persona, vague).status).toBe("clarify");
   });
+
+  it("질문 없이 칭찬이나 허세 지적만 보내면 캐릭터가 받아치고 차감하지 않는다", () => {
+    const praise = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: false, reaction: "praise" });
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, praise, "소름 돋게 맞췄네")).toEqual({
+      status: "clarify",
+      answer: persona.lines.reaction("praise", "소름 돋게 맞췄네"),
+    });
+    const tease = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", { items: [], userFacts: [], needsClarification: true, reaction: "tease" });
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, tease, "허세 좀 그만 부려").answer).toBe(persona.lines.reaction("tease", "허세 좀 그만 부려"));
+    // 이전에 저장한 분석(반응 칸 없음)은 예전처럼 되묻는다.
+    const old = { ...tease, reaction: undefined };
+    expect(routeWithoutItems(FIRST_OVERVIEW, persona, old).answer).toBe(persona.lines.clarify);
+  });
 });

@@ -84,6 +84,15 @@ describe("모델 없이 보내는 묘묘의 문장", () => {
     expect(MYOMYO.lines.partialScope("시험·학업 결과")).toBe("시험·학업 결과 얘기는 이 풀이 범위 밖이라 빼고 답했어.");
   });
 
+  it("질문 없이 칭찬·허세 지적·의심만 보내면 묘묘가 받아치고, 같은 말에는 같은 문장을 고른다", () => {
+    const praise = MYOMYO.lines.reaction("praise", "소름 돋게 맞췄네");
+    expect(praise).toBe(MYOMYO.lines.reaction("praise", "소름 돋게 맞췄네"));
+    expect(praise).toMatch(/흐|어라|흥/);
+    expect(MYOMYO.lines.reaction("tease", "허세 좀 그만 부려")).toMatch(/허세/);
+    expect(MYOMYO.lines.reaction("doubt", "틀린 것 같은데")).toMatch(/정정|근거/);
+    for (const kind of ["praise", "tease", "doubt"] as const) expect(MYOMYO.lines.reaction(kind, "아무 말")).toContain("횟수에서 안 뺐어");
+  });
+
   it("상품 화면 예시 대화도 묘묘 말투다", () => {
     for (const bubble of FIRST_OVERVIEW.sampleBubbles) expect(bubble.text).not.toMatch(/(?:에요|해요|어요|세요)[.!?]|여울/);
   });
@@ -116,7 +125,7 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
   });
 
   it("후속 답변: 같은 캐릭터와 호칭, 진지한 순간과 오류 정정 규칙이 들어간다", () => {
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.4.0");
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.5.0");
     const prompt = buildFollowupPrompt({
       persona: MYOMYO,
       nickname: "하나",

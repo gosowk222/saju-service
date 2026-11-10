@@ -6,6 +6,7 @@ import {
   checkFollowupV2,
   checkNarration,
   checkNarrationV2,
+  followupChecker,
   narrationChecker,
   type ExcludedQuestion,
   type FollowupCheckContext,
@@ -26,7 +27,7 @@ import type {
 import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmUsage, type StreamedResult } from "./client";
 import { LLM_SETTINGS } from "./config";
 import { buildFollowupPrompt, buildQuestionPrompt, getNarrationSchema, getReadingPrompt, type FollowupPromptArgs } from "./prompts";
-import { completedParts, type StreamedParts } from "./stream-parts";
+import { completedParts, followupParts, type StreamedFollowup, type StreamedParts } from "./stream-parts";
 
 export interface GenerationConfig {
   readonly modelId: string;
@@ -370,6 +371,143 @@ export async function classifyQuestion(input: {
     analysis: buildQuestionAnalysis(input.product, input.referenceDate, result.parsed),
     meta: { actualModel: result.meta.actualModel, usage: result.meta.usage, durationMs: Date.now() - startedAt, llmCalls: result.meta.calls, issueCount: 0 },
   };
+}
+
+export interface PublishedSection {
+  readonly questionRef: string;
+  readonly paragraphs: readonly string[];
+}
+
+/**
+ * 후속 답변을 스트리밍으로 받아, 질문마다 근거 연결을 먼저 확인하고 문단이 완성될 때마다 검사해 보낸다(publish).
+ * 호출 수와 재시도 횟수는 answerFollowup과 같다. 검사에 걸리면 생성을 끊고, 보낸 문단은 둔 채 이어서 쓰게 다시 요청한다.
+ * 되묻기(clarify)는 짧아서 끝까지 받은 뒤 돌려준다.
+ */
+export async function answerFollowupProgressive(
+  input: Omit<FollowupPromptArgs, "previousIssues" | "alreadySent"> & {
+    readonly chart: ChartView;
+    readonly modelId: string;
+    readonly check: FollowupCheckContext;
+    readonly deadlineAt?: number;
+    /** 질문 순서대로, 그때까지 보낸 문단 전체. */
+    readonly publish: (sections: readonly PublishedSection[]) => Promise<void>;
+    readonly stream?: typeof callStructuredStream;
+  },
+): Promise<{ readonly output: FollowupOutputV2; readonly meta: GenerationMeta }> {
+  const callStream = input.stream ?? callStructuredStream;
+  const task = LLM_SETTINGS.tasks.followup;
+  const startedAt = Date.now();
+  const order = input.check.questionRefs;
+  const sent = new Map<string, string[]>();
+  const refsOf = new Map<string, Set<string>>();
+  const snapshot = (): PublishedSection[] => order.filter((ref) => sent.get(ref)?.length).map((ref) => ({ questionRef: ref, paragraphs: [...sent.get(ref)!] }));
+
+  let previousIssues: string[] = [];
+  let usage: LlmUsage | null = null;
+  let actualModel: string | null = null;
+  let calls = 0;
+  let issueCount = 0;
+  const metaOf = (extraIssues = 0): GenerationMeta => ({
+    actualModel,
+    usage: usage!,
+    durationMs: Date.now() - startedAt,
+    llmCalls: calls,
+    issueCount: issueCount + extraIssues,
+  });
+
+  for (let round = 0; round <= LLM_SETTINGS.validationRetries; round += 1) {
+    if (round > 0 && input.deadlineAt !== undefined && Date.now() + task.timeoutMs > input.deadlineAt) break;
+    const prompt = buildFollowupPrompt({ ...input, previousIssues, alreadySent: snapshot() });
+    const checker = followupChecker(input.check, input.chart);
+    for (const paragraphs of sent.values()) for (const paragraph of paragraphs) checker.remember(paragraph);
+    const issues: string[] = [];
+    const checkedSections = new Set<number>();
+    const handled = new Map<number, number>();
+    let progressed = false;
+    const stop = (...found: string[]): "stop" => {
+      issues.push(...found);
+      return "stop";
+    };
+
+    const handle = async (parts: StreamedFollowup): Promise<"continue" | "stop"> => {
+      if (parts.mode !== "answer") return "continue";
+      for (const [index, section] of parts.sections.entries()) {
+        // 근거 연결(refs)은 문단보다 먼저 온다. 확인하기 전에는 문단을 보내지 않는다.
+        if (section.questionRef === undefined || section.refs === undefined) return "continue";
+        if (!checkedSections.has(index)) {
+          const found = checker.section(section.questionRef, section.refs);
+          if (found.length) return stop(...found);
+          checkedSections.add(index);
+          refsOf.set(section.questionRef, new Set([...(refsOf.get(section.questionRef) ?? []), ...section.refs]));
+        }
+        for (const paragraph of section.paragraphs.slice(handled.get(index) ?? 0)) {
+          const found = checker.paragraph(paragraph);
+          if (found.length) return stop(...found);
+          sent.set(section.questionRef, [...(sent.get(section.questionRef) ?? []), tidyEmphasis(paragraph)]);
+          handled.set(index, (handled.get(index) ?? 0) + 1);
+          await input.publish(snapshot());
+          progressed = true;
+        }
+      }
+      return "continue";
+    };
+
+    let result: StreamedResult<FollowupOutputV2>;
+    try {
+      result = await callStream({
+        model: input.modelId,
+        instructions: prompt.instructions,
+        input: prompt.input,
+        schemaName: prompt.schemaName,
+        jsonSchema: prompt.jsonSchema,
+        parser: prompt.parser,
+        maxOutputTokens: task.maxOutputTokens,
+        reasoningEffort: task.reasoningEffort,
+        timeoutMs: task.timeoutMs,
+        deadlineAt: input.deadlineAt,
+        // 문단 경계(\n)나 닫는 따옴표·괄호가 들어온 때만 다시 읽는다.
+        onDelta: (text, delta) => (/["\]\\]/.test(delta) ? handle(followupParts(text)) : Promise.resolve("continue")),
+      });
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      calls += error.calls;
+      if (progressed && isRetryableTransport(error.code) && round < LLM_SETTINGS.validationRetries) continue;
+      throw new LlmError(error.code, error.message, calls, error.details);
+    }
+    calls += result.meta.calls;
+    usage = mergeUsage(usage, result.meta.usage);
+    actualModel = result.meta.actualModel ?? actualModel;
+
+    if (!result.stopped && !issues.length) await handle(followupParts(result.text));
+    if (!issues.length) {
+      const mode = followupParts(result.text).mode;
+      if (mode === "clarify") {
+        const question = result.parsed?.clarifyQuestion.trim() ?? "";
+        if (sent.size) issues.push("이미 답을 보내기 시작했으니 되묻지 말고 이어서 답한다.");
+        else {
+          const found = checker.clarify(question);
+          if (!found.length) return { output: { mode: "clarify", sections: [], clarifyQuestion: question }, meta: metaOf() };
+          issues.push(...found);
+        }
+      } else {
+        const missing = order.filter((ref) => !sent.get(ref)?.length);
+        if (missing.length) issues.push(...missing.map((ref) => `질문(${ref})에 대한 답이 없습니다.`));
+        else {
+          const texts = order.map((ref) => sent.get(ref)!.join("\n\n"));
+          const output: FollowupOutputV2 = {
+            mode: "answer",
+            sections: order.map((ref, index) => ({ questionRef: ref, text: texts[index]!, refs: [...(refsOf.get(ref) ?? [])] })),
+            clarifyQuestion: "",
+          };
+          // 길이 기준은 이미 보낸 뒤라 고칠 수 없다. 넘으면 기록만 한다.
+          return { output, meta: metaOf(checker.overLength(texts) ? 1 : 0) };
+        }
+      }
+    }
+    issueCount += issues.length;
+    previousIssues = issues;
+  }
+  throw new LlmError("validation_failed", "후속 답변이 검사를 통과하지 못했습니다.", calls, previousIssues);
 }
 
 export async function answerFollowup(

@@ -4,10 +4,10 @@ import type { ProductDefinition } from "@/domain/products/types";
 import { statementTexts } from "@/domain/reading/check";
 import { tidyEmphasis } from "@/domain/reading/emphasis";
 import { assembleFocus, focusTopicsOf } from "@/domain/reading/focus";
-import { excludedItems, excludedLabel, inScopeFacts, inScopeItems, itemDomain, type QuestionAnalysis } from "@/domain/reading/question";
+import { excludedItems, excludedLabel, inScopeFacts, inScopeItems, itemDomain, reactionOf, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type StoredMessage, type TimingAnalysis, type UserContextStatement } from "@/domain/reading/types";
 import { LLM_SETTINGS } from "@/server/llm/config";
-import { answerFollowup, type GenerationMeta } from "@/server/llm/narrate";
+import { answerFollowup, answerFollowupProgressive, type GenerationMeta } from "@/server/llm/narrate";
 
 export type FollowupStatus = "answered" | "off_topic" | "clarify";
 
@@ -25,7 +25,11 @@ export function routeWithoutItems(
   product: ProductDefinition,
   persona: Persona,
   analysis: QuestionAnalysis,
+  question = "",
 ): { status: FollowupStatus; answer: string } {
+  // 질문 없이 칭찬·놀림·의심만 보낸 메시지는 캐릭터가 받아친다. 답을 만든 게 아니라 차감하지 않는다.
+  const reaction = reactionOf(analysis);
+  if (reaction !== "none" && !excludedItems(analysis).length) return { status: "clarify", answer: persona.lines.reaction(reaction, question) };
   const clarify = analysis.needsClarification && !excludedItems(analysis).length;
   return clarify
     ? { status: "clarify", answer: persona.lines.clarify }
@@ -48,6 +52,11 @@ export async function answerAnalyzedFollowup(input: {
   readonly lastTurn: { readonly question: string; readonly answer: string } | null;
   readonly modelId: string;
   readonly deadlineAt?: number;
+  /**
+   * 문단이 완성될 때마다 그때까지의 답(문단을 빈 줄로 이은 것)을 저장한다. 있으면 스트리밍으로 받아 먼저 보여 준다.
+   * 이 요청이 더는 이 질문을 맡지 않으면 오류를 던진다.
+   */
+  readonly publish?: (answer: string) => Promise<void>;
 }): Promise<{ readonly status: FollowupStatus; readonly answer: string; readonly refs: readonly string[]; readonly meta: GenerationMeta }> {
   const { plan, product, analysis } = input;
   const items = inScopeItems(analysis);
@@ -70,7 +79,7 @@ export async function answerAnalyzedFollowup(input: {
   ];
   const timingAll = timing.flatMap((entry) => [...entry.months, ...entry.years]);
 
-  const answer = await answerFollowup({
+  const args = {
     persona: input.persona,
     nickname: plan.nickname,
     hourKnown: plan.hourKnown,
@@ -83,6 +92,7 @@ export async function answerAnalyzedFollowup(input: {
     timing,
     delivered,
     lastTurn: input.lastTurn,
+    reaction: reactionOf(analysis),
     chart: input.chart,
     modelId: input.modelId,
     deadlineAt: input.deadlineAt,
@@ -95,7 +105,14 @@ export async function answerAnalyzedFollowup(input: {
       excluded: excluded.map(({ summary, domain }) => ({ summary, domain })),
       persona: input.persona,
     },
-  });
+  };
+  const publish = input.publish;
+  const answer = publish
+    ? await answerFollowupProgressive({
+        ...args,
+        publish: (sections) => publish(sections.map((section) => section.paragraphs.join("\n\n")).join("\n\n")),
+      })
+    : await answerFollowup(args);
 
   if (answer.output.mode === "clarify") {
     return { status: "clarify", answer: `${answer.output.clarifyQuestion.trim()}\n\n${input.persona.lines.notCharged}`, refs: [], meta: answer.meta };

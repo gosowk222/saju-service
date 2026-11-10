@@ -32,6 +32,9 @@ interface BeginResult {
   readonly followup?: { readonly id: string; readonly status: string; readonly answer: string | null };
 }
 
+/** 시간이 지나 다른 요청이 이 질문을 실패로 정리했다. 더 저장하지 않는다. */
+class FollowupHandedOver extends Error {}
+
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 /** 분석 결과 중 남겨 둘 최소 기록. 질문 원문은 followups.question에 따로 있다. */
@@ -42,6 +45,7 @@ function analysisRecord(analysis: QuestionAnalysis, llmCalls: number) {
     referenceDate: analysis.referenceDate,
     items: analysis.items.map(({ id, domain, intent, scope, answerability, timingSupported, period }) => ({ id, domain, intent, scope, answerability, timingSupported, period })),
     needsClarification: analysis.needsClarification,
+    reaction: analysis.reaction ?? "none",
     llmCalls,
   };
 }
@@ -128,7 +132,7 @@ export async function askFollowup(input: {
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
     const items = inScopeItems(analysis);
     if (!items.length) {
-      result = { ...routeWithoutItems(product, persona, analysis), refs: [] };
+      result = { ...routeWithoutItems(product, persona, analysis, question), refs: [] };
     } else {
       const { timing } = await timingFor({ admin, readingId, birth: reading.data.birth_input as PublicBirthInput, items, referenceDate });
       const initialAnalysis = isPlanV2(plan) ? await loadAnalysis<QuestionAnalysis>(admin, readingId, INITIAL_QUESTION_KEY) : null;
@@ -144,6 +148,16 @@ export async function askFollowup(input: {
         lastTurn,
         modelId,
         deadlineAt,
+        // 문단이 완성될 때마다 답을 먼저 저장해 화면에 보여 준다. 횟수 차감과 완료 상태는 complete_followup에서 한 번에 바꾼다.
+        publish: async (partial) => {
+          const { data: updated, error: updateError } = await admin
+            .from("followups")
+            .update({ answer: partial })
+            .eq("id", followupId)
+            .eq("status", "answering")
+            .select("id");
+          if (updateError || !updated?.length) throw new FollowupHandedOver();
+        },
       });
       usage = mergeUsage(usage, answered.meta.usage);
       llmCalls += answered.meta.llmCalls;
@@ -177,6 +191,7 @@ export async function askFollowup(input: {
     return { status: result.status, answer: result.answer, questionsUsed: saved.used, questionLimit: saved.limit, replayed: false };
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof FollowupHandedOver) throw new ApiError(409, "busy", "답변을 만드는 시간이 지나 처리를 멈췄어요. 질문 횟수는 줄지 않았어요.");
     const code = error instanceof LlmError ? error.code : "internal";
     console.error("[followup] failed", { readingId, code, ...(code === "internal" ? { reason: internalReason(error) } : {}) });
     await failFollowup(code);

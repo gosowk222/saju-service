@@ -528,3 +528,34 @@ export function checkFollowupV2(output: FollowupOutputV2, context: FollowupCheck
   issues.push(...checkExcluded(output.sections.map((section) => section.text), context.excluded));
   return issues;
 }
+
+/**
+ * 후속 답변을 문단이 완성될 때마다 검사하는 도구 (문단마다 먼저 보여 주는 후속 답변). checkFollowupV2와 같은 기준을 쓴다.
+ * 말버릇 횟수는 한 검사기 안에서 이어서 센다. 이미 보낸 문단은 remember로 넣는다.
+ */
+export function followupChecker(context: FollowupCheckContext, chart: ChartView) {
+  const dates = allowedDates(context.timing);
+  const percents = percentsOf(context.percentSources);
+  const terms = allowedChartTerms(chart, [...context.percentSources, ...(context.termSources ?? []), ...context.timing.flatMap(timingTexts)]);
+  const tics = catchphraseCounter(context.persona, "answer", context.questionRefs.length);
+  return {
+    /** 문단보다 먼저 오는 질문 ref와 근거 연결. */
+    section: (questionRef: string, refs: readonly string[]): string[] => [
+      ...(context.questionRefs.includes(questionRef) ? [] : [`없는 질문에 답했습니다 (${questionRef}).`]),
+      ...refs.filter((ref) => !context.knownRefs.has(ref) && !context.questionRefs.includes(ref)).map((ref) => `없는 근거를 참조했습니다 (${ref}).`),
+    ],
+    paragraph: (text: string): string[] => [...checkTextV2(text, chart, percents, dates, terms), ...tics.count(text), ...checkExcluded([text], context.excluded)],
+    remember: (text: string) => {
+      tics.count(text);
+    },
+    clarify: (question: string): string[] => {
+      const issues: string[] = [];
+      if (!question.trim()) issues.push("되묻는 질문이 비어 있습니다.");
+      if (question.length > CLARIFY_MAX) issues.push("되묻는 질문이 너무 깁니다.");
+      return [...issues, ...checkTextV2(question, chart, percents, dates, terms), ...checkExcluded([question], context.excluded)];
+    },
+    /** 이미 보낸 뒤라 고칠 수 없는 길이 기준. 넘으면 기록만 한다. */
+    overLength: (texts: readonly string[]): boolean =>
+      texts.some((text) => text.length > FOLLOWUP_SECTION_MAX) || texts.reduce((sum, text) => sum + text.length, 0) > FOLLOWUP_TOTAL_MAX,
+  };
+}
