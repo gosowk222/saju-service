@@ -136,7 +136,12 @@ function fixtureNarrationV2(input: NarrationV2Input) {
       bubbles: Array.from({ length: Math.max(topic.target, 3) }, (_, index) => ({
         kind: "explanation",
         refs: [topic.statements[index % Math.max(topic.statements.length, 1)]?.ref ?? input.facts[0]!.ref],
-        text: `[테스트 응답] ${topic.topicId} 주제의 ${index + 1}번째 설명이에요. 긴 문장이 자연스럽게 줄바꿈되는지 확인하기 위한 문구도 함께 들어 있어요.`,
+        text:
+          index === 0
+            ? `[테스트 응답] ${topic.topicId} 주제의 첫 설명이에요. 강조 확인 문구는 굵게 보여야 해요.`
+            : `[테스트 응답] ${topic.topicId} 주제의 ${index + 1}번째 설명이에요. 긴 문장이 자연스럽게 줄바꿈되는지 확인하기 위한 문구도 함께 들어 있어요.`,
+        // narration-2.1.0: 굵게 보일 구절은 따로 받고 서버가 표시를 붙인다.
+        highlight: index === 0 ? "강조 확인 문구" : "",
       })),
     })),
     closing: "[테스트 응답] 궁금한 점은 편하게 물어봐 주세요.",
@@ -181,7 +186,16 @@ function handleOpenai(body: { model: string; input: string; text: { format: { na
       res,
       200,
       openaiResponse(
-        JSON.stringify({ mode: "answer", clarifyQuestion: "", sections: questions.map((question) => ({ questionRef: question.ref, text: `[테스트 응답] "${question.summary}"에 대한 답변이에요.`, refs: [] })) }),
+        JSON.stringify({
+          mode: "answer",
+          clarifyQuestion: "",
+          // 빈 줄로 나눈 문단은 화면에서 말풍선 하나씩으로 보인다.
+          sections: questions.map((question) => ({
+            questionRef: question.ref,
+            text: `[테스트 응답] "${question.summary}"에 대한 답변이에요.\n\n[테스트 응답] **두 번째 문단**은 다음 말풍선이에요.`,
+            refs: [],
+          })),
+        }),
         body.model,
       ),
     );

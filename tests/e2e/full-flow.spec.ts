@@ -19,6 +19,7 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await expect(page.getByText("990원").first()).toBeVisible();
   await expect(page.getByText("3회 포함")).toBeVisible();
   await expect(page.getByText(/후기|만족도|구매 \d/)).toHaveCount(0);
+  await expect(page.locator("strong", { hasText: "결론부터 들이밀어요" })).toBeVisible();
 
   await page.getByRole("link", { name: "내 사주 입력하기" }).click();
   await page.waitForURL("**/readings/new*");
@@ -37,11 +38,14 @@ test("새 사용자가 로그인부터 PDF까지 끝까지 이용한다", async 
   await waitForCompletedReading(page);
   const bubbles = page.getByText(/\[테스트 응답\]/);
   expect(await bubbles.count()).toBeGreaterThanOrEqual(20);
+  await expect(page.locator("strong", { hasText: "강조 확인 문구" }).first()).toBeVisible();
+  expect(await page.locator("main").innerText()).not.toContain("**");
   await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
 
   await page.getByRole("textbox", { name: "후속 질문" }).fill("강점을 일할 때는 어떻게 써?");
   await page.getByRole("button", { name: "보내기" }).click();
   await expect(page.getByText(/강점을 일할 때는 어떻게 써\?"에 대한 답변/)).toBeVisible();
+  await expect(page.locator("strong", { hasText: "두 번째 문단" })).toBeVisible();
   await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
 
   const readingUrl = page.url();
