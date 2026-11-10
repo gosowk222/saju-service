@@ -67,7 +67,7 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
             {product.sampleBubbles.map((bubble) => (
               <div key={bubble.text} className="flex items-start gap-3">
                 <PersonaAvatar glyph={persona.avatarGlyph} />
-                <p className="rounded-t-lg rounded-br-lg rounded-bl-[var(--space-2)] bg-gray-100 px-4 py-3 type-body text-gray-900">{bubble.text}</p>
+                <p className="rounded-t-lg rounded-br-lg rounded-bl-(--space-2) bg-gray-100 px-4 py-3 type-body text-gray-900">{bubble.text}</p>
               </div>
             ))}
           </div>

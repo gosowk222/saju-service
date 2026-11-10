@@ -3,7 +3,7 @@ import { formatPrice, type ProductDefinition } from "@/domain/products";
 
 export function ProductPoster({ product, large = false }: { product: ProductDefinition; large?: boolean }) {
   return (
-    <div className={`relative overflow-hidden bg-primary-900 ${large ? "aspect-[4/3] rounded-xl" : "aspect-[3/4] rounded-md"}`}>
+    <div className={`relative overflow-hidden bg-primary-900 ${large ? "aspect-4/3 rounded-xl" : "aspect-3/4 rounded-md"}`}>
       <div className="absolute inset-0 bg-scrim" />
       <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-5">
         <p className="type-caption text-on-image-muted">{product.tagline}</p>

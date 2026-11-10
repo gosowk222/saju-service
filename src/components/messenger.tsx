@@ -40,7 +40,7 @@ function Bubble({
       <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
         <span className="type-caption-sm text-gray-600">{name}</span>
         <div
-          className={`whitespace-pre-wrap break-words rounded-t-lg rounded-br-lg rounded-bl-[var(--space-2)] px-4 py-4 type-body text-gray-900 ${
+          className={`whitespace-pre-wrap wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) px-4 py-4 type-body text-gray-900 ${
             scene ? "border border-primary-200 bg-primary-50" : "bg-gray-100"
           }`}
         >
@@ -55,7 +55,7 @@ function Bubble({
 function MyBubble({ children, animate }: { children: React.ReactNode; animate?: boolean }) {
   return (
     <div className={`flex justify-end ${animate ? "animate-bubble" : ""}`}>
-      <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-t-lg rounded-bl-lg rounded-br-[var(--space-2)] bg-primary-600 px-4 py-4 type-body text-white">
+      <div className="max-w-[85%] whitespace-pre-wrap wrap-break-word rounded-t-lg rounded-bl-lg rounded-br-(--space-2) bg-primary-600 px-4 py-4 type-body text-white">
         {children}
       </div>
     </div>

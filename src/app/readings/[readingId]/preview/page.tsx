@@ -41,8 +41,8 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
       <PageHeader title="사주원국과 맛보기" backHref="/home" />
       <main className="flex flex-1 flex-col gap-7 px-5 py-6">
         <section className="flex flex-col gap-2">
-          <h1 className="break-words type-h2">{reading.nickname} 님의 사주</h1>
-          <p className="break-words type-caption text-gray-600">{birthSummary(reading)}</p>
+          <h1 className="wrap-break-word type-h2">{reading.nickname} 님의 사주</h1>
+          <p className="wrap-break-word type-caption text-gray-600">{birthSummary(reading)}</p>
           <div>
             <LinkButton href={`/readings/new?product=${product.id}&edit=${reading.id}`} variant="secondary">
               입력 수정
@@ -62,7 +62,7 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
           {reading.preview.bubbles.map((bubble) => (
             <div key={bubble} className="flex items-start gap-3">
               <PersonaAvatar glyph={persona.avatarGlyph} />
-              <p className="break-words rounded-t-lg rounded-br-lg rounded-bl-[var(--space-2)] bg-gray-100 px-4 py-4 type-body text-gray-900">{bubble}</p>
+              <p className="wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) bg-gray-100 px-4 py-4 type-body text-gray-900">{bubble}</p>
             </div>
           ))}
         </section>
