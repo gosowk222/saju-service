@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import PDFDocument from "pdfkit";
+import { describe, expect, it, vi } from "vitest";
 import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { buildChartView, type ChartFacts } from "@/domain/reading/chart";
@@ -88,5 +89,30 @@ describe("PDF", () => {
     const newPdf = await renderReadingPdf(input(0, { messages: current, topicTitles: titles }));
     expect(oldPdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pageCount(newPdf)).toBeGreaterThan(pageCount(oldPdf));
+  }, 30_000);
+
+  it("**강조** 구절은 굵은 글꼴로 쓰고 별표와 장면 제목은 남기지 않는다", async () => {
+    const original = PDFDocument.prototype.text;
+    const written: { text: string; font: string }[] = [];
+    const spy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (this: PDFKit.PDFDocument, ...args: unknown[]) {
+      written.push({ text: String(args[0]), font: (this as unknown as { _font?: { name?: string } })._font?.name ?? "" });
+      return (original as (...rest: unknown[]) => PDFKit.PDFDocument).apply(this, args);
+    });
+    try {
+      const messages: StoredMessage[] = [
+        { seq: 1, topicId: "focus", kind: "explanation", text: "결론부터 말할게요. **지금은 먼저 다가가는 쪽이 이겨요.**\n\n두 번째 문단이에요.", refs: ["q1"] },
+        { seq: 2, topicId: "focus", kind: "creative-scene", text: '달빛 님이라면 아마 "주말에 시간 돼요?" 하고 묻기 전에 열 번은 고민할 거예요.', refs: ["s1"] },
+      ];
+      const followups = [{ question: "어떻게 해요?", answer: "**먼저 묻는 연습**부터 해요.\n\n천천히요." }];
+      await renderReadingPdf(input(0, { messages, topicTitles: { focus: "궁금한 점에 대한 답" }, followups }));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(written.some((item) => item.text.includes("**"))).toBe(false);
+    expect(written.some((item) => item.text.includes("예시 장면"))).toBe(false);
+    expect(written.find((item) => item.text === "지금은 먼저 다가가는 쪽이 이겨요.")?.font).toMatch(/Bold/);
+    expect(written.find((item) => item.text === "결론부터 말할게요. ")?.font).toMatch(/Regular/);
+    expect(written.find((item) => item.text === "먼저 묻는 연습")?.font).toMatch(/Bold/);
+    expect(written.some((item) => item.text === "두 번째 문단이에요.")).toBe(true);
   }, 30_000);
 });

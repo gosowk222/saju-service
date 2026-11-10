@@ -4,6 +4,7 @@ import { ArrowDown, Download, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ClientApiError } from "@/lib/client-api";
 import type { ReadingStateView } from "@/server/readings/store";
+import { RichText } from "@/components/rich-text";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
 
@@ -21,35 +22,48 @@ interface Props {
   readonly initialState: ReadingStateView;
 }
 
+/**
+ * 상담사 말풍선. 메신저처럼 이어서 보내는 말풍선(continued)은 프로필과 이름을 생략하고 간격을 좁힌다.
+ * 창작 장면은 제목 없이 옅은 보라 면으로만 구분하고, 장면이라는 점은 문장의 가정형 말투로 드러낸다.
+ */
 function Bubble({
   glyph,
   name,
   children,
   animate,
   scene,
+  continued = false,
 }: {
   glyph: string;
   name: string;
   children: React.ReactNode;
   animate?: boolean;
   scene?: boolean;
+  continued?: boolean;
 }) {
   return (
-    <div className={`flex items-start gap-3 ${animate ? "animate-bubble" : ""}`}>
-      <PersonaAvatar glyph={glyph} />
+    <div className={`flex items-start gap-3 ${continued ? "-mt-2" : ""} ${animate ? "animate-bubble" : ""}`}>
+      {continued ? <span aria-hidden className="w-9 shrink-0" /> : <PersonaAvatar glyph={glyph} />}
       <div className="flex min-w-0 max-w-[85%] flex-col gap-1">
-        <span className="type-caption-sm text-gray-600">{name}</span>
+        {continued ? null : <span className="type-caption-sm text-gray-600">{name}</span>}
         <div
           className={`whitespace-pre-wrap wrap-break-word rounded-t-lg rounded-br-lg rounded-bl-(--space-2) px-4 py-4 type-body text-gray-900 ${
             scene ? "border border-primary-200 bg-primary-50" : "bg-gray-100"
           }`}
         >
-          {scene ? <span className="mb-1 block type-caption-sm text-primary-600">예시 장면</span> : null}
           {children}
         </div>
       </div>
     </div>
   );
+}
+
+/** 후속 답변은 문단마다 말풍선 하나로 나눠 메신저처럼 보여 준다. 저장된 답변은 그대로다. */
+function paragraphs(text: string): string[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function MyBubble({ children, animate }: { children: React.ReactNode; animate?: boolean }) {
@@ -186,8 +200,14 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
               {showTopic ? (
                 <p className="self-center rounded-pill bg-gray-100 px-4 py-1 type-caption-sm text-gray-600">{topicTitles[message.topicId!]}</p>
               ) : null}
-              <Bubble glyph={personaGlyph} name={personaName} animate={animating} scene={message.kind === "creative-scene"}>
-                {message.text}
+              <Bubble
+                glyph={personaGlyph}
+                name={personaName}
+                animate={animating}
+                scene={message.kind === "creative-scene"}
+                continued={index > 0 && !showTopic}
+              >
+                <RichText text={message.text} />
               </Bubble>
             </div>
           );
@@ -233,11 +253,11 @@ export function Messenger({ readingId, personaName, personaGlyph, topicTitles, s
             {state.followups.map((followup) => (
               <div key={followup.id} className="flex flex-col gap-4">
                 <MyBubble>{followup.question}</MyBubble>
-                {followup.answer ? (
-                  <Bubble glyph={personaGlyph} name={personaName}>
-                    {followup.answer}
+                {paragraphs(followup.answer ?? "").map((part, index) => (
+                  <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0}>
+                    <RichText text={part} />
                   </Bubble>
-                ) : null}
+                ))}
               </div>
             ))}
             {sending ? (
