@@ -11,17 +11,20 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { findPersona } from "@/domain/personas";
+import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { checkNarrationV2 } from "@/domain/reading/check";
 import { buildNarrationPlan, requestedTimingKey } from "@/domain/reading/focus";
 import { emptyAnalysis, excludedItems, inScopeItems, itemDomain, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
-import type { NarrationOutputV2 } from "@/domain/reading/types";
+import type { NarrationOutputV2, StoredMessage } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { analyzeBirth, toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
 import { analyzeTiming } from "@/server/engine/timing";
 import { LlmError, type LlmUsage } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { classifyQuestion, mergeUsage, narrateReading, toStoredMessages } from "@/server/llm/narrate";
+import { renderReadingPdf } from "@/server/pdf/render";
+import { applyHighlight } from "@/domain/reading/emphasis";
 import { CURRENT_READING_PROMPT, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
 import { answerAnalyzedFollowup, routeWithoutItems } from "@/server/readings/followup-core";
 
@@ -92,6 +95,18 @@ export const QUALITY_CASES: readonly QualityCase[] = [
     ],
   },
   {
+    id: "romance-crush",
+    note: "연애 · 직장인 · 호감 가는 사람에게 다가가는 방법 (말투·약점·강조 확인용)",
+    nickname: "새벽",
+    situationId: "employee",
+    concern: "좋아하는 사람이 있는데 마음을 잘 열어 주지 않아요. 어떻게 다가가야 관계가 발전할까요?",
+    birth: { birthDate: "1995-02-07", calendar: "solar", isLeapMonth: false, gender: "female", birthTime: { status: "branch", branch: "미" }, birthPlace: SEOUL },
+    followups: [
+      { kind: "상황 적용", question: "제가 먼저 연락하면 부담스러워할까 봐 망설여져요. 먼저 연락해도 될까요?", expected: "answered" },
+      { kind: "시기", question: "고백은 언제쯤 하는 게 좋을까요?", expected: "answered" },
+    ],
+  },
+  {
     id: "social-homemaker",
     note: "인간관계 · 가사·육아 · 시간 모름",
     nickname: "노을",
@@ -152,12 +167,41 @@ interface CaseResult {
   readonly bubbles?: number;
   readonly totalChars?: number;
   readonly checkIssues?: readonly string[];
+  readonly style?: StyleCount;
+  /** 출력 형식 2.1.0의 강조 구절: 채운 말풍선 수 / 문장에서 찾아 굵게 바꾼 수 / 찾지 못한 구절 예시. */
+  readonly highlights?: { readonly filled: number; readonly applied: number; readonly missed: readonly string[] };
+  readonly pdfPages?: number;
   readonly calls?: number;
   readonly durationMs?: number;
   readonly usage?: LlmUsage;
   readonly text?: string;
   readonly followups?: readonly FollowupResult[];
 }
+
+/** 사람이 읽기 전에 눈에 띄는 말투 습관을 센다. 약점 표현은 단어로 어림한 값이다. */
+interface StyleCount {
+  readonly exampleOpeners: number;
+  readonly hedged: number;
+  readonly emphasized: number;
+  readonly weaknessLike: number;
+  readonly scenes: number;
+  readonly averageChars: number;
+}
+
+function styleOf(messages: readonly Pick<StoredMessage, "kind" | "text">[]): StyleCount {
+  const texts = messages.map((message) => message.text);
+  const bubblesWith = (pattern: RegExp) => texts.filter((text) => pattern.test(text)).length;
+  return {
+    exampleOpeners: texts.reduce((sum, text) => sum + (text.match(/예를 들면|예를 들어/g)?.length ?? 0), 0),
+    hedged: bubblesWith(/수 있어요|수도 있어요|수 있습니다/),
+    emphasized: bubblesWith(/\*\*[^*\n]+\*\*/),
+    weaknessLike: bubblesWith(/약점|단점|손해|놓쳐|놓치|문제는|발목/),
+    scenes: messages.filter((message) => message.kind === "creative-scene").length,
+    averageChars: texts.length ? Math.round(texts.reduce((sum, text) => sum + text.length, 0) / texts.length) : 0,
+  };
+}
+
+const pageCount = (pdf: Buffer) => (pdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length;
 
 const describeAnalysis = (analysis: QuestionAnalysis) =>
   analysis.items.length
@@ -176,7 +220,7 @@ function timingFor(analysis: QuestionAnalysis, birth: ReturnType<typeof toPublic
   return entries.map(([requestKey], index) => ({ requestKey, analysis: analyses[index]! }));
 }
 
-async function runCase(entry: QualityCase, model: string, referenceDate: string): Promise<CaseResult> {
+async function runCase(entry: QualityCase, model: string, referenceDate: string, skipFollowups: boolean): Promise<CaseResult> {
   const persona = findPersona(FIRST_OVERVIEW.personaId)!;
   const product = FIRST_OVERVIEW;
   const birth = toPublicBirthInput(entry.birth);
@@ -204,10 +248,13 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string)
     usage = mergeUsage(usage, meta.usage);
     calls += meta.llmCalls;
     const messages = toStoredMessages(output, product.focusSection.id);
+    const rawBubbles = "focus" in output ? [...output.focus, ...output.topics.flatMap((topic) => topic.bubbles)] : [];
+    const filled = rawBubbles.filter((bubble) => bubble.highlight?.trim());
+    const missed = filled.filter((bubble) => !applyHighlight(bubble.text, bubble.highlight).includes("**")).map((bubble) => bubble.highlight!);
 
     const followups: FollowupResult[] = [];
     let lastTurn: { question: string; answer: string } | null = null;
-    for (const followup of entry.followups) {
+    for (const followup of skipFollowups ? [] : entry.followups) {
       const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: followup.question, lastTurn, modelId: model });
       usage = mergeUsage(usage, classified.meta.usage);
       let followupCalls = classified.meta.llmCalls;
@@ -238,6 +285,18 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string)
       followups.push({ kind: followup.kind, question: followup.question, expected: followup.expected, status, items: describeAnalysis(classified.analysis), answer, calls: followupCalls });
     }
 
+    // 운영의 PDF 함수로 쪽수를 잰다 (후속 답변 포함).
+    const pdf = await renderReadingPdf({
+      productName: product.name,
+      nickname: entry.nickname,
+      createdAt: referenceDate,
+      personaName: persona.name,
+      chart: base.chart,
+      topicTitles: topicTitlesOf(product),
+      messages,
+      followups: followups.filter((item) => item.status === "answered").map(({ question, answer }) => ({ question, answer })),
+    });
+
     return {
       caseId: entry.id,
       note: entry.note,
@@ -251,6 +310,9 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string)
       bubbles: messages.length,
       totalChars: messages.reduce((sum, message) => sum + message.text.length, 0),
       checkIssues: checkNarrationV2(output as NarrationOutputV2, plan, base.chart, excluded),
+      style: styleOf(messages),
+      highlights: { filled: filled.length, applied: filled.length - missed.length, missed: missed.slice(0, 8) },
+      pdfPages: pageCount(pdf),
       calls,
       durationMs: Date.now() - startedAt,
       usage: usage ?? undefined,
@@ -291,6 +353,20 @@ function report(results: readonly CaseResult[], models: readonly string[], refer
   }
   lines.push(
     "",
+    "### 말투 지표 (본문 말풍선 기준)",
+    "",
+    "'약점 표현'은 약점·손해 같은 단어가 들어간 말풍선 수를 어림한 값이다.",
+    "",
+    "| 사례 | '예를 들면' 횟수 | 흐리는 말 말풍선 | 강조 말풍선 | 약점 표현 말풍선 | 장면 | 평균 글자 | PDF 쪽수 |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+  );
+  for (const result of results) {
+    if (!result.style) continue;
+    const style = result.style;
+    lines.push(`| ${result.caseId} | ${style.exampleOpeners} | ${style.hedged} | ${style.emphasized} | ${style.weaknessLike} | ${style.scenes} | ${style.averageChars} | ${result.pdfPages ?? "-"} |`);
+  }
+  lines.push(
+    "",
     "## 사람이 확인할 항목",
     "",
     "- [ ] 질문에 대한 핵심 답이 앞에 분명하게 나온다",
@@ -325,6 +401,7 @@ async function main() {
   const selected = readArg("cases")?.split(",");
   const cases = QUALITY_CASES.filter((entry) => !selected || selected.includes(entry.id));
   const referenceDate = readArg("date") ?? seoulDate();
+  const skipFollowups = process.argv.includes("--skip-followups");
   if (!process.env.OPENAI_API_KEY?.trim()) {
     console.log(JSON.stringify({ result: "LIVE_NOT_RUN", reason: "OPENAI_API_KEY 없음", models, cases: cases.length }));
     return;
@@ -333,8 +410,9 @@ async function main() {
   for (const entry of cases) {
     for (const model of models) {
       console.log(`실행: ${entry.id} / ${model}`);
-      const result = await runCase(entry, model, referenceDate);
+      const result = await runCase(entry, model, referenceDate, skipFollowups);
       console.log(`  ${result.status} 말풍선 ${result.bubbles ?? "-"} 검사 ${result.checkIssues?.length ?? "-"} 호출 ${result.calls ?? "-"} ${result.durationMs ?? "-"}ms ${result.errorCode ?? ""}`);
+      if (result.highlights) console.log(`  강조 구절: 채움 ${result.highlights.filled}, 적용 ${result.highlights.applied}, 못 찾음 ${JSON.stringify(result.highlights.missed)}`);
       results.push(result);
     }
   }
