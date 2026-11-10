@@ -9,8 +9,8 @@ export default function ProductsPage() {
       <Screen>
         <h1 className="type-h2">탐색</h1>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
-          {PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {PRODUCTS.map((product, index) => (
+            <ProductCard key={product.id} product={product} order={index} />
           ))}
         </div>
       </Screen>

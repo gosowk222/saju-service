@@ -21,14 +21,30 @@ function Tagline({ text, className }: { text: string; className: string }) {
 }
 
 /**
- * 3:4 포스터. 그림 아래쪽 여백에 부설명과 제목을 올린다. 얼굴이 있는 위쪽은 글자로 가리지 않는다.
- * 그림이 오기 전에는 같은 비율의 밤 인디고 면이 자리를 잡는다.
+ * 첫 화면 안에 보이는 포스터 수 (모바일 두 줄, 데스크톱 한 줄 남짓). 이 카드들은 바로 불러오고,
+ * 그 아래 카드는 스크롤해서 가까워질 때 불러온다.
  */
-export function ProductPoster({ product }: { product: ProductDefinition }) {
+const FIRST_SCREEN_POSTERS = 4;
+
+/**
+ * 3:4 포스터. 그림 아래쪽 여백에 부설명과 제목을 올린다. 얼굴이 있는 위쪽은 글자로 가리지 않는다.
+ * 그림이 오기 전에는 같은 비율의 밤 인디고 면(포스터 스켈레톤)이 자리를 잡고, 글자는 그 위에 먼저 보인다.
+ * order는 목록에서의 순서다. 첫 화면에 보이는 포스터는 바로 불러오고, 첫 번째는 가장 먼저 받는다.
+ */
+export function ProductPoster({ product, order = 0 }: { product: ProductDefinition; order?: number }) {
   const { poster } = product.art;
+  const firstScreen = order < FIRST_SCREEN_POSTERS;
   return (
     <div className="relative aspect-3/4 overflow-hidden rounded-md bg-primary-900">
-      <Image src={poster.src} alt={poster.alt} fill sizes="(min-width: 600px) 184px, 50vw" className="object-cover object-top" />
+      <Image
+        src={poster.src}
+        alt={poster.alt}
+        fill
+        sizes="(min-width: 600px) 184px, 50vw"
+        loading={firstScreen ? "eager" : "lazy"}
+        fetchPriority={order === 0 ? "high" : undefined}
+        className="object-cover object-top"
+      />
       <div className="absolute inset-0 bg-scrim" />
       <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-4">
         <Tagline text={product.tagline} className="type-caption text-on-image-muted" />
@@ -62,10 +78,10 @@ export function ProductThumb({ product }: { product: ProductDefinition }) {
   return <SquareArt image={product.art.poster} displayPx={56} className="h-tile w-tile rounded-md bg-primary-900" />;
 }
 
-export function ProductCard({ product }: { product: ProductDefinition }) {
+export function ProductCard({ product, order = 0 }: { product: ProductDefinition; order?: number }) {
   return (
     <Link href={`/products/${product.id}`} className="flex flex-col gap-3 text-gray-900 hover:text-gray-900 hover:no-underline">
-      <ProductPoster product={product} />
+      <ProductPoster product={product} order={order} />
       <span className="type-label font-semibold">{product.name}</span>
       <span className="type-label type-price">{formatPrice(product.priceKrw)}</span>
     </Link>
