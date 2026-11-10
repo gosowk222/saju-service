@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { findPersona } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
@@ -12,6 +12,7 @@ import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, routeWithoutItems } from "@/server/readings/followup-core";
+import { internalReason } from "@/server/log";
 
 /**
  * 생성 경로를 실제 모델 없이 확인한다. 로컬 서버가 고정된 테스트 응답을 돌려주므로
@@ -181,6 +182,42 @@ describe("최초 풀이 준비", () => {
     expect(requests).toHaveLength(0);
     expect(second.versions.timingComputed).toBe(0);
     expect(second.plan.timing[0]!.windowLabel).toBe(first.plan.timing[0]!.windowLabel);
+  });
+});
+
+/** migration이 적용되지 않은 데이터베이스처럼 reading_analyses 조회·저장이 모두 실패한다. */
+function brokenAdmin() {
+  const failure = { data: null, error: { code: "PGRST205", message: "Could not find the table 'public.reading_analyses'" } };
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => failure };
+  return { from: () => query, rpc: async () => failure } as unknown as SupabaseClient;
+}
+
+describe("분석 저장소 장애", () => {
+  it("저장소를 쓸 수 없어도 풀이 준비를 멈추지 않고, 저장 없이 분류와 기간 계산을 진행한다", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const prepared = await prepareNarration({
+      admin: brokenAdmin(),
+      readingId: "r-broken",
+      base: base.plan,
+      product: FIRST_OVERVIEW,
+      birth,
+      concern: "호감 가는 사람이 있는데 곁을 쉽게 내주지 않아요. 언제 취업할까요?",
+      modelId: "gpt-5.6-luna",
+      deadlineAt: Date.now() + 60_000,
+    });
+    expect(requests.map((item) => item.schema)).toEqual(["saju_question_analysis"]);
+    expect(prepared.plan.questions.length).toBeGreaterThan(0);
+    expect(prepared.versions.timingComputed).toBe(1);
+    // 오류 코드만 남기고 질문 원문이나 저장소 메시지는 남기지 않는다.
+    expect(warn).toHaveBeenCalledWith("[analysis] cache unavailable", { op: "load", code: "PGRST205" });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("호감");
+    warn.mockRestore();
+  });
+
+  it("내부 예외의 원인은 앱의 고정 코드만 그대로 남기고 그 밖의 메시지는 예외 이름만 남긴다", () => {
+    expect(internalReason(new Error("analysis_load_failed"))).toBe("analysis_load_failed");
+    expect(internalReason(new TypeError("Cannot read birthDate 1998-09-19"))).toBe("TypeError");
+    expect(internalReason("x")).toBe("string");
   });
 });
 

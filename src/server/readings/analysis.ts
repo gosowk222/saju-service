@@ -33,9 +33,21 @@ export function timingCacheKey(domain: string, startMonth: string, endMonth: str
   return `timing:${domain}:${startMonth}..${endMonth}@${referenceDate}`;
 }
 
+/**
+ * 분석 저장소는 같은 분류·계산을 반복하지 않기 위한 보조 기능이다. 조회나 저장이 실패해도
+ * (예: migration 미적용, 일시적 DB 오류) 결제한 풀이의 생성을 막지 않고 저장 없이 계속한다.
+ * 로그에는 저장소 오류 코드만 남긴다.
+ */
+function warnCache(op: "load" | "save", error: { code?: string } | null) {
+  console.warn("[analysis] cache unavailable", { op, code: error?.code ?? "unknown" });
+}
+
 export async function loadAnalysis<T>(admin: Admin, readingId: string, cacheKey: string): Promise<T | null> {
   const { data, error } = await admin.from("reading_analyses").select("payload").eq("reading_id", readingId).eq("cache_key", cacheKey).maybeSingle();
-  if (error) throw new Error("analysis_load_failed");
+  if (error) {
+    warnCache("load", error);
+    return null;
+  }
   return ((data as { payload: T } | null)?.payload ?? null) as T | null;
 }
 
@@ -48,7 +60,10 @@ export async function saveAnalysis<T>(admin: Admin, readingId: string, cacheKey:
     p_version: version,
     p_payload: payload,
   });
-  if (error) throw new Error("analysis_save_failed");
+  if (error) {
+    warnCache("save", error);
+    return payload;
+  }
   return (data as T | null) ?? payload;
 }
 

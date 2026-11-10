@@ -10,6 +10,7 @@ import { LlmError, type LlmUsage } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
 import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { internalReason } from "@/server/log";
 import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
 import { answerAnalyzedFollowup, routeWithoutItems, type FollowupStatus } from "./followup-core";
 
@@ -175,7 +176,7 @@ export async function askFollowup(input: {
   } catch (error) {
     if (error instanceof ApiError) throw error;
     const code = error instanceof LlmError ? error.code : "internal";
-    console.error("[followup] failed", { readingId, code });
+    console.error("[followup] failed", { readingId, code, ...(code === "internal" ? { reason: internalReason(error) } : {}) });
     await failFollowup(code);
     throw new ApiError(502, "generation_failed", "답변을 만들지 못했어요. 질문 횟수는 줄지 않았어요.");
   }

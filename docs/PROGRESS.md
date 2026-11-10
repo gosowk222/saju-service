@@ -22,9 +22,16 @@
 | 브라우저 테스트 (Chrome, 가짜 외부 서버) | 32개 통과 |
 | 실제 모델 품질 확인 (`gpt-5.6-luna`, 가상 사례 8개) | 실행. 결과는 `docs/READING_QUALITY.md` |
 | `gpt-6-luna` 실제 비교 | LIVE_NOT_RUN (이번 작업 범위에서 모델을 바꾸지 않음. 절차는 `docs/LLM_OPERATIONS.md`) |
-| 새 migration의 실제 Supabase 적용 | NOT_RUN (테스트용 Postgres에만 적용해 확인) |
+| 새 migration의 실제 Supabase 적용 | 2026-11-10 적용 (아래 장애 기록 참고) |
 
-출시 전 할 일: `supabase/migrations/20261110120000_reading_quality.sql`을 운영 데이터베이스에 적용한다. 적용 전에 배포하면 질문 분석 저장(`save_reading_analysis`)과 되묻기 저장이 실패한다.
+### 장애 기록 (2026-11-10)
+
+로컬 앱을 실제 Supabase에 연결해 궁금한 점이 있는 풀이를 결제했을 때 생성이 4번 모두 `internal`로 실패했다.
+
+- 원인: `20261110120000_reading_quality.sql`이 실제 데이터베이스에 적용되지 않아 `reading_analyses` 테이블이 없었다. 생성 첫 단계의 분석 저장소 조회가 매번 예외를 냈고, OpenAI는 한 번도 호출되지 않았다(`llm_calls = 0`). 시도 상한(4회)에 걸려 화면에서도 다시 시도할 수 없게 됐다.
+- 조치: migration을 적용하고, 해당 풀이 한 건의 작업을 `queued`·시도 0회로 되돌렸다(프롬프트·모델 버전은 처음 값 유지). 결제와 질문 횟수는 건드리지 않았다.
+- 재발 방지: 분석 저장소는 보조 기능이므로 조회·저장이 실패하면 경고 로그만 남기고 저장 없이 생성을 계속한다. 내부 실패 로그에 원인 코드(`analysis_load_failed` 등 앱의 고정 코드)를 남긴다. 테스트: `tests/unit/pipeline.test.ts`의 "분석 저장소 장애".
+- 배포 순서: 새 migration은 앱 배포 전에 적용한다 (README).
 
 ---
 

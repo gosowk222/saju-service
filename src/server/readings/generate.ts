@@ -9,6 +9,7 @@ import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { mergeUsage, narrateReading, toStoredMessages, type GenerationConfig, type NarrationInput } from "@/server/llm/narrate";
 import { PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
 interface ClaimResult {
@@ -155,7 +156,7 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
       console.error("[generation] failed", { readingId, code: error.code });
       await fail(error.code, retryable(error), error.calls);
     } else {
-      console.error("[generation] failed", { readingId, code: "internal" });
+      console.error("[generation] failed", { readingId, code: "internal", reason: internalReason(error) });
       await fail("internal", true, 0);
     }
     return "failed";
