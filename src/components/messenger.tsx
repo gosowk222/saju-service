@@ -13,6 +13,19 @@ import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
 const REVEAL_INTERVAL_MS = 700;
 /** 생성 중에는 주제가 완성될 때마다 저장되므로 자주 확인한다. */
 const POLL_INTERVAL_MS = 2000;
+/** 후속 답변은 문단이 짧아 더 자주 확인한다. */
+const FOLLOWUP_POLL_INTERVAL_MS = 1500;
+
+/** 늦게 도착한 이전 확인 결과가 이미 끝난 후속 답변을 '만드는 중'으로 되돌리지 않게 합친다. */
+function mergeFollowups(current: ReadingStateView, next: ReadingStateView): ReadingStateView {
+  return {
+    ...next,
+    followups: next.followups.map((followup) => {
+      const known = current.followups.find((item) => item.id === followup.id);
+      return known && known.status !== "answering" && followup.status === "answering" ? known : followup;
+    }),
+  };
+}
 const NEAR_BOTTOM_PX = 120;
 
 interface Props {
@@ -173,6 +186,19 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
     return () => clearInterval(timer);
   }, [state.status, readingId]);
 
+  // 후속 답변을 만드는 동안에도 저장 상태를 확인해, 완성된 문단을 먼저 보여 준다.
+  const inflight = state.followups.find((followup) => followup.status === "answering");
+  const answering = sending !== null || inflight !== undefined;
+  useEffect(() => {
+    if (!answering) return;
+    const timer = setInterval(() => {
+      apiFetch<ReadingStateView>(`/api/readings/${readingId}/state`)
+        .then((next) => setState((current) => mergeFollowups(current, next)))
+        .catch(() => undefined);
+    }, FOLLOWUP_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [answering, readingId]);
+
   useEffect(() => {
     if (!animating) return;
     const timer = setTimeout(() => setRevealed((count) => count + 1), REVEAL_INTERVAL_MS);
@@ -191,11 +217,12 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const inflightLength = inflight?.answer?.length ?? 0;
   useEffect(() => {
-    if (!animating && sending === null) return;
+    if (!animating && !answering) return;
     if (stickToBottom.current) bottomRef.current?.scrollIntoView({ block: "end" });
     else setShowJump(true);
-  }, [revealed, animating, sending, state.followups.length]);
+  }, [revealed, animating, answering, state.followups.length, inflightLength]);
 
   const visible = useMemo(
     () => (animateReveal && !skipReveal ? state.messages.slice(0, revealed) : state.messages),
@@ -295,17 +322,29 @@ export function Messenger({ readingId, personaName, personaSubject, personaGlyph
         {isDone ? (
           <>
             <p className="self-center rounded-pill bg-green-50 px-4 py-1 type-caption-sm text-green-600">풀이 완료</p>
-            {state.followups.map((followup) => (
-              <div key={followup.id} className="flex flex-col gap-4">
-                <MyBubble>{followup.question}</MyBubble>
-                {paragraphs(followup.answer ?? "").map((part, index) => (
-                  <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0}>
-                    <RichText text={part} />
-                  </Bubble>
-                ))}
-              </div>
-            ))}
-            {sending ? (
+            {state.followups.map((followup) => {
+              const parts = paragraphs(followup.answer ?? "");
+              const writing = followup.status === "answering";
+              return (
+                <div key={followup.id} className="flex flex-col gap-4">
+                  <MyBubble>{followup.question}</MyBubble>
+                  {parts.map((part, index) => (
+                    <Bubble key={index} glyph={personaGlyph} name={personaName} continued={index > 0} animate={writing}>
+                      <RichText text={part} />
+                    </Bubble>
+                  ))}
+                  {/* 다음 문단을 쓰는 동안 입력 중 표시를 둔다. */}
+                  {writing ? (
+                    <Bubble glyph={personaGlyph} name={personaName} continued={parts.length > 0}>
+                      <TypingDots />
+                      <span className="sr-only">{personaSubject} 입력하고 있어요</span>
+                    </Bubble>
+                  ) : null}
+                </div>
+              );
+            })}
+            {/* 서버가 질문을 받기 전까지만 보낸 질문을 따로 보여 준다. 받은 뒤에는 위 목록에 나온다. */}
+            {sending && !inflight ? (
               <div className="flex flex-col gap-4">
                 <MyBubble animate>{sending}</MyBubble>
                 <Bubble glyph={personaGlyph} name={personaName}>
