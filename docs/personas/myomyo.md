@@ -1,6 +1,6 @@
 # 캐릭터 묘묘 (persona `myomyo` 1.0.0)
 
-첫 상품(`first-overview` 3.2.0)의 기본 캐릭터다. 이전 캐릭터 여울은 코드에서 지웠다. 등록된 캐릭터는 묘묘 하나다.
+첫 상품(`first-overview`, 3.2.0부터, 현재 이름 "묘묘의 사주 참견")의 기본 캐릭터다. 이전 캐릭터 여울은 코드에서 지웠다. 등록된 캐릭터는 묘묘 하나다.
 
 **설정의 원본은 코드다.** `src/domain/personas/index.ts`의 `MYOMYO`에 있다. 이 문서는 사람이 읽기 위한 설명이다. 설정을 바꿀 때는 코드를 고치고 `version`을 올린 뒤 이 문서를 함께 고친다. 프롬프트마다 설정을 복사하지 않는다.
 
@@ -74,5 +74,6 @@
 | 후속 답변 프롬프트 | 같은 `personaBlock`, followup-2.4.0, 입력의 `address` |
 | 모델 없이 보내는 문장 | 맛보기(`buildReadingPreview`), 범위 밖·되묻기·일부 제외 안내(`followup-core.ts`)가 `persona.lines`를 쓴다 |
 | 말버릇·욕설 검사 | `src/domain/reading/check.ts`의 `catchphraseCounter`, `STRONG_PROFANITY` |
-| 화면 | 상품 화면(캐릭터 소개와 대표 대사), 맛보기 화면(이름과 소개), 메신저(이름, 아바타 글자 '묘'), 보관함 |
+| 화면 | 상품 화면(캐릭터 소개와 대표 대사), 맛보기 화면(이름과 소개), 메신저(이름, 프로필 그림), 로그인 |
+| 프로필 그림 | `avatar`: `public/images/personas/myomyo-profile.png` (1:1, 투명 배경). 원 안에는 가운데 80%만 보여 준다. 그림이 없으면 `avatarGlyph` 글자 '묘'를 쓴다 |
 | PDF | 글꼴에 없는 그림 이모티콘은 빼고 쓴다 (`withoutEmoji`) |
