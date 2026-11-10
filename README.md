@@ -50,9 +50,10 @@ npm run lint
 npm test             # 단위 테스트와 테스트용 Postgres로 권한 검증
 npm run build
 npm run test:e2e     # 브라우저 테스트
+npm run test:e2e:clean  # .env 없이 임시 복사본에서 브라우저 테스트 (Claude Code는 이것만 사용)
 ```
 
-`test:e2e`는 시스템의 Chrome을 사용하고, Supabase, OpenAI, 토스 API를 `tests/support/fake-gateway.ts`로 대신합니다. 실제 OAuth, 실제 결제, 실제 모델 품질을 검증하지 않습니다.
+`test:e2e`는 시스템의 Chrome을 사용하고, Supabase, OpenAI, 토스 API를 `tests/support/fake-gateway.ts`로 대신합니다. 실제 OAuth, 실제 결제, 실제 모델 품질을 검증하지 않습니다. Claude Code에서는 `.env`가 있는 폴더의 `test:e2e`가 거부되고, 실제 OpenAI 호출도 막힙니다 (CLAUDE.md).
 
 ## 자주 쓰는 명령
 

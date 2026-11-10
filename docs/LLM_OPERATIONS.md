@@ -39,7 +39,9 @@
 
 ## 실제 호출 제한
 
-실제 OpenAI 호출은 Next 서버 안에서만 한다. 사용자가 직접 연 개발 서버(`npm run dev`)와 배포 서버가 여기에 해당한다. `src/server/llm/config.ts`의 `liveCallBlockReason`이 그 밖(개발 스크립트, 테스트)에서 실제 OpenAI 주소로 가는 호출을 요청 전에 막고 `live_call_blocked` 설정 오류로 끝낸다. 스크립트와 테스트는 `OPENAI_BASE_URL`이 가짜 서버를 가리킬 때만 호출한다. Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을 넣어 주므로 이 값으로 구분한다.
+실제 OpenAI 호출은 Next 서버 안에서만 한다. 사용자가 직접 연 개발 서버(`npm run dev`)와 배포 서버가 여기에 해당한다. `src/server/llm/config.ts`의 `liveCallBlockReason`이 그 밖(개발 스크립트, 테스트)에서 실제 OpenAI 주소로 가는 호출을 요청 전에 막고 `live_call_blocked` 설정 오류로 끝낸다. 스크립트와 테스트는 `OPENAI_BASE_URL`이 가짜 서버를 가리킬 때만 호출한다. Next는 서버 코드를 만들 때 `process.env.NEXT_RUNTIME`을 넣어 주므로 이 값으로 구분한다. Claude Code가 띄운 프로세스(`CLAUDECODE`·`CLAUDE_CODE_ENTRYPOINT` 환경 변수가 있음)는 Next 서버라도 막는다. 그래서 개발 서버는 Claude Code 안(`!npm run dev` 포함)이 아니라 직접 연 터미널에서 실행해야 실제 호출이 된다.
+
+2026-11-10 17:53~18:15(한국 시각)에 찍힌 요청 29회는 에이전트가 실제 키로 실행한 `llm:compare` 6번(4·8·7·6·2·2회)이다. 그 뒤 에이전트는 실제 환경 파일(`.env`)에 접근하지 않고, 브라우저 테스트는 환경 파일 없는 복사본에서 돌린다 (`npm run test:e2e:clean`, CLAUDE.md).
 
 그래서 `npm run llm:check`, `npm run llm:compare`는 실제 키가 있어도 `LIVE_NOT_RUN`을 출력하고 끝난다. 실제 모델 확인은 개발 서버를 직접 열어 화면에서 풀이와 후속 질문을 만들어 보고, 서버 로그의 `[generation] done`·`[followup] done`으로 호출 수와 토큰을 확인한다. 에이전트는 실제 호출을 하지 않는다 (AGENTS.md, CLAUDE.md).
 

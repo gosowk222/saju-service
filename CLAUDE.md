@@ -12,4 +12,10 @@
 
 작업 중에 실제 OpenAI API를 절대 호출하지 않는다. `npm run llm:compare`, `npm run llm:check`, 실제 키로 띄운 앱에서의 풀이 생성·후속 질문이 모두 포함된다. 비용은 사용자가 내므로 실제 모델 확인은 사용자가 직접 실행하고 결과를 알려 준다. 필요하면 실행할 명령과 확인할 항목만 안내하고, 보고에는 `LIVE_NOT_RUN`으로 쓴다. 검증은 단위 테스트와 가짜 서버를 쓰는 브라우저 테스트(`npm run test:e2e`)로 한다.
 
-코드로도 막혀 있다. `src/server/llm/config.ts`의 `liveCallBlockReason`이 Next 서버(사용자가 직접 연 `npm run dev`나 배포 서버) 밖에서 실제 OpenAI 주소로 가는 호출을 막는다. 스크립트와 테스트는 `OPENAI_BASE_URL`이 가짜 서버를 가리킬 때만 호출한다. 이 제한을 풀거나 우회하지 않는다.
+코드로도 막혀 있다. `src/server/llm/config.ts`의 `liveCallBlockReason`이 Next 서버(사용자가 직접 연 `npm run dev`나 배포 서버) 밖에서 실제 OpenAI 주소로 가는 호출을 막는다. Claude Code가 띄운 프로세스(`CLAUDECODE` 환경 변수가 있는 프로세스)는 Next 서버라도 막는다. 스크립트와 테스트는 `OPENAI_BASE_URL`이 가짜 서버를 가리킬 때만 호출한다. 이 제한을 풀거나 우회하지 않는다.
+
+## .env 접근 금지
+
+사용자의 `.env`, `.env.local` 등 실제 환경 파일에 접근하지 않는다. 읽기, 고치기, 복사, `--env-file`로 불러오기가 모두 포함된다. 이름만 확인하는 것(`.env.example`과 구분)은 괜찮다. Next는 빌드와 실행 때 이 파일을 자동으로 읽으므로 `npm run dev`, `npm run build`, `npm run start`를 직접 실행하지 않는다. 브라우저 테스트와 빌드 확인은 환경 파일 없이 임시 폴더에서 돌리는 `npm run test:e2e:clean`으로 한다. 단위 테스트(`npm test`)는 `.env`를 읽지 않도록 설정되어 있다.
+
+이 저장소 상위 폴더의 `.claude/settings.local.json`에 이 파일들과 위 명령을 막는 권한 규칙이 있다. 규칙을 풀거나 우회하지 않는다.
