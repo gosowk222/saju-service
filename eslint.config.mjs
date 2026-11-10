@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 예제와 디자인 자료는 이 앱의 소스가 아니다.
+    "examples/**",
+    "saju-design-system/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

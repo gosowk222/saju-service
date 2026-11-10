@@ -1,26 +1,195 @@
 @import "tailwindcss";
+@import "../../saju-design-system/tokens.css" layer(base);
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Tailwind의 기본 값(색, 간격, 글자 크기 등)은 디자인 토큰과 다르므로 모두 지우고 토큰만 연결한다.
+ * tokens.css가 값의 원본이다. 여기서는 Tailwind 클래스 이름과 토큰을 이어 줄 뿐이다.
+ */
+@theme inline reference {
+  --*: initial;
+
+  --color-white: var(--color-white);
+  --color-primary-50: var(--color-primary-50);
+  --color-primary-100: var(--color-primary-100);
+  --color-primary-200: var(--color-primary-200);
+  --color-primary-300: var(--color-primary-300);
+  --color-primary-500: var(--color-primary-500);
+  --color-primary-600: var(--color-primary-600);
+  --color-primary-700: var(--color-primary-700);
+  --color-primary-900: var(--color-primary-900);
+  --color-gray-50: var(--color-gray-50);
+  --color-gray-100: var(--color-gray-100);
+  --color-gray-200: var(--color-gray-200);
+  --color-gray-300: var(--color-gray-300);
+  --color-gray-400: var(--color-gray-400);
+  --color-gray-500: var(--color-gray-500);
+  --color-gray-600: var(--color-gray-600);
+  --color-gray-700: var(--color-gray-700);
+  --color-gray-800: var(--color-gray-800);
+  --color-gray-900: var(--color-gray-900);
+  --color-rose-50: var(--color-rose-50);
+  --color-rose-600: var(--color-rose-600);
+  --color-gold-50: var(--color-gold-50);
+  --color-gold-700: var(--color-gold-700);
+  --color-green-50: var(--color-green-50);
+  --color-green-600: var(--color-green-600);
+  --color-blue-50: var(--color-blue-50);
+  --color-blue-600: var(--color-blue-600);
+  --color-orange-50: var(--color-orange-50);
+  --color-orange-600: var(--color-orange-600);
+  --color-kakao: var(--color-kakao);
+  --color-kakao-text: var(--color-kakao-text);
+  --color-on-image-muted: var(--color-on-image-muted);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+
+  /* tokens.json의 typography.weight */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --spacing-0: 0px;
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-7: var(--space-7);
+  --spacing-8: var(--space-8);
+  --spacing-9: var(--space-9);
+  --spacing-10: var(--space-10);
+  --spacing-11: var(--space-11);
+  --spacing-button: var(--size-button);
+  --spacing-button-lg: var(--size-button-lg);
+  --spacing-button-sm: var(--size-button-sm);
+  --spacing-input: var(--size-input);
+  --spacing-tab-bar: var(--size-tab-bar);
+  --spacing-header: var(--size-header);
+  --spacing-tile: var(--size-tile);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --shadow-float: var(--shadow-float);
+  --container-content: var(--content-max-width);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@utility type-display {
+  font: var(--text-display);
+  letter-spacing: -0.01em;
+}
+@utility type-h1 {
+  font: var(--text-heading-1);
+}
+@utility type-h2 {
+  font: var(--text-heading-2);
+}
+@utility type-h3 {
+  font: var(--text-heading-3);
+}
+@utility type-title {
+  font: var(--text-title);
+}
+@utility type-body-lg {
+  font: var(--text-body-lg);
+}
+@utility type-body {
+  font: var(--text-body);
+}
+@utility type-label {
+  font: var(--text-label);
+}
+@utility type-caption {
+  font: var(--text-caption);
+}
+@utility type-caption-sm {
+  font: var(--text-caption-sm);
+}
+@utility type-hanja {
+  font: var(--text-hanja);
+  letter-spacing: 0.02em;
+}
+@utility type-poster {
+  font: var(--text-poster);
+}
+/* 가격: Sans 700과 고정폭 숫자 */
+@utility type-price {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+@utility motion-fast {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-standard);
+}
+@utility pressable {
+  &:active {
+    transform: scale(0.98);
+  }
+}
+@utility bg-scrim {
+  background-image: var(--scrim);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  /* 입력과 버튼은 토큰의 본문 글꼴을 그대로 쓴다. */
+  button,
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/*
+ * type-* 유틸리티는 font 축약형이라 굵기까지 함께 정한다.
+ * 같은 요소에 굵기를 따로 줄 때 축약형에 덮이지 않도록 우선순위를 높인다.
+ */
+@layer utilities {
+  .font-normal {
+    font-weight: 400 !important;
+  }
+  .font-medium {
+    font-weight: 500 !important;
+  }
+  .font-semibold {
+    font-weight: 600 !important;
+  }
+}
+
+/* 말풍선이 나타나는 효과. 한 번만 재생하며 reduced-motion에서는 토큰이 0ms가 된다. */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility animate-bubble {
+  animation: bubble-in var(--duration-slow) var(--ease-standard) both;
+}
+
+/* Google 공식 버튼 표기 값. 카카오처럼 브랜드 지침의 고정 값이며 다른 곳에 쓰지 않는다. */
+.google-login {
+  border: 1px solid #747775;
+  color: #1f1f1f;
 }

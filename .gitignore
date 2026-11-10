@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 환경변수 예시는 커밋한다
+!.env.example
+
+# GeoNames 원본 저장본(재현용, 용량이 커서 커밋하지 않음)
+/data/geonames-raw/
+
+# Supabase CLI 임시 파일
+/supabase/.temp/
+
+# 브라우저 테스트 산출물
+/test-results/
+/playwright-report/
