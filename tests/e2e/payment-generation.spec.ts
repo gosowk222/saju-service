@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { createPreview, gatewayStats, login, purchase, setControl, stubTossSdk, waitForCompletedReading } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
-  await setControl(request, { openai: "ok", tossFail: null, loginError: null });
+  await setControl(request, { openai: "ok", tossFail: null, loginError: null, streamDelayMs: 10 });
 });
 
 async function openCheckout(page: import("@playwright/test").Page) {
@@ -113,6 +113,19 @@ test("중복 콜백은 한 번만 처리되고 생성도 한 번만 일어난다
   const stats = await gatewayStats(request);
   expect(stats.tossConfirms).toBe(beforeConfirms + 1);
   expect(stats.openaiCalls).toBe(beforeLlm);
+});
+
+test("주제가 완성될 때마다 말풍선을 먼저 보여 주고, 첫 인사 다음에 사주표 사진을 보낸다", async ({ page, request }) => {
+  await login(page, request);
+  await createPreview(page);
+  // 응답을 천천히 흘려보내 생성이 끝나기 전에 앞 주제가 보이는지 확인한다.
+  await setControl(request, { streamDelayMs: 250 });
+  await purchase(page);
+  await expect(page.getByText("temperament 주제의 첫 설명", { exact: false })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("풀이 완료")).toHaveCount(0);
+  await expect(page.getByLabel("사주원국 표와 오행 비율")).toBeVisible();
+  await waitForCompletedReading(page);
+  await expect(page.getByText("궁금한 점은 편하게 물어봐 주세요", { exact: false })).toBeVisible();
 });
 
 test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", async ({ page, request }) => {

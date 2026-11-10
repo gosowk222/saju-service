@@ -20,6 +20,8 @@ const control = {
   loginError: null as string | null,
   openai: "ok",
   tossFail: null as string | null,
+  /** 스트리밍 응답에서 글자 묶음 사이의 간격. 주제별로 먼저 보이는지 확인할 때 늘린다. */
+  streamDelayMs: 10,
 };
 const stats = { openaiCalls: 0, tossConfirms: 0, lastOpenaiBody: null as unknown, openaiModels: [] as string[] };
 const codes = new Map<string, User>();
@@ -159,7 +161,25 @@ function openaiResponse(text: string, model: string) {
   };
 }
 
-function handleOpenai(body: { model: string; input: string; text: { format: { name: string } } }, res: ServerResponse) {
+/**
+ * 스트리밍 응답(SSE). 실제 서버처럼 글자를 조금씩 나눠 보내 주제가 완성될 때마다 먼저 저장되는 흐름을 확인한다.
+ * 이벤트 형식은 Responses API의 response.output_text.delta, response.completed를 따른다.
+ */
+async function sendStream(res: ServerResponse, text: string, model: string) {
+  res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+  let sequence = 0;
+  const write = (event: Record<string, unknown>) => res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify({ ...event, sequence_number: sequence++ })}\n\n`);
+  write({ type: "response.created", response: { ...openaiResponse("", model), status: "in_progress", output: [] } });
+  const size = 160;
+  for (let index = 0; index < text.length; index += size) {
+    write({ type: "response.output_text.delta", item_id: "m", output_index: 0, content_index: 0, delta: text.slice(index, index + size), logprobs: [] });
+    await new Promise((resolve) => setTimeout(resolve, control.streamDelayMs));
+  }
+  write({ type: "response.completed", response: openaiResponse(text, model) });
+  res.end();
+}
+
+function handleOpenai(body: { model: string; input: string; stream?: boolean; text: { format: { name: string } } }, res: ServerResponse) {
   stats.openaiCalls += 1;
   stats.lastOpenaiBody = body;
   stats.openaiModels.push(body.model);
@@ -177,7 +197,9 @@ function handleOpenai(body: { model: string; input: string; text: { format: { na
     return send(res, 200, openaiResponse(JSON.stringify(fixtureQuestion(input as { text: string })), body.model));
   }
   if (schema === "saju_narration_v2") {
-    return send(res, 200, openaiResponse(JSON.stringify(fixtureNarrationV2(input as unknown as NarrationV2Input)), body.model));
+    const text = JSON.stringify(fixtureNarrationV2(input as unknown as NarrationV2Input));
+    if (body.stream) return void sendStream(res, text, body.model);
+    return send(res, 200, openaiResponse(text, body.model));
   }
   if (schema === "saju_followup_v2") {
     if (mode === "followup-error") return send(res, 400, { error: { message: "fail" } });
@@ -308,6 +330,32 @@ async function main() {
     }
   }
 
+  /** 서버 권한으로 행을 넣는다 (생성 중 완성된 주제의 메시지 저장). Prefer: return=minimal처럼 빈 본문으로 답한다. */
+  async function handleInsert(table: string, body: unknown, req: IncomingMessage, res: ServerResponse) {
+    const { role, userId } = identify(req);
+    const rows = (Array.isArray(body) ? body : [body]) as Record<string, unknown>[];
+    if (!rows.length) return send(res, 201, undefined);
+    const columns = Object.keys(rows[0]!);
+    const params: unknown[] = [];
+    const values = rows.map(
+      (row) =>
+        `(${columns
+          .map((column) => {
+            const value = row[column];
+            params.push(value !== null && typeof value === "object" ? JSON.stringify(value) : value);
+            return `$${params.length}`;
+          })
+          .join(", ")})`,
+    );
+    try {
+      await db.run(role, userId, `insert into public.${table} (${columns.join(", ")}) values ${values.join(", ")}`, params);
+      return send(res, 201, undefined);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return send(res, message.includes("permission denied") ? 403 : 409, { message, code: "23505" });
+    }
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", BASE);
     const { pathname } = url;
@@ -362,6 +410,7 @@ async function main() {
     if (pathname === "/auth/v1/logout") return send(res, 204, undefined);
 
     if (pathname.startsWith("/rest/v1/rpc/")) return handleRpc(pathname.split("/").pop()!, body, req, res);
+    if (pathname.startsWith("/rest/v1/") && req.method === "POST") return handleInsert(pathname.split("/").pop()!, JSON.parse(raw || "[]"), req, res);
     if (pathname.startsWith("/rest/v1/")) return handleSelect(pathname.split("/").pop()!, url, req, res);
 
     if (pathname.startsWith("/openai/v1/responses")) return handleOpenai(body as never, res);
