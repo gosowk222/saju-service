@@ -4,6 +4,8 @@
 
 ## 현재 운영 상태
 
+풀이 상품 이용 범위(관리자만 / 모든 회원)와 관리자 이용권 지급은 `docs/ADMIN.md`에 있다. 이용 범위가 "관리자만"이면 일반 회원은 이용권을 가지고 있어도 쓰지 못한다 (이용권은 그대로 남는다).
+
 | 항목 | 값 |
 | --- | --- |
 | 이용 방식 | `CHECKOUT_MODE` 미설정 = `free_trial` (기본값) |
@@ -16,7 +18,7 @@
 | 항목 | 기준 |
 | --- | --- |
 | 대상 | 이 앱의 정상 카카오 로그인 회원 (`is_kakao_member`) |
-| 지급 수 | 회원 계정당 한 장. 신규·기존 회원 모두 |
+| 지급 수 | 캠페인 이용권은 회원 계정당 한 장 (신규·기존 회원 모두). 관리자가 고른 회원에게 한 장씩 더 줄 수 있다 (`docs/ADMIN.md`) |
 | 다시 지급하지 않는 경우 | 재로그인, 새로고침, 다른 기기, 사용 완료 뒤, 재배포, 문구 변경, 결제 모드 전환 |
 | 만료 | 없음 (이번 단계) |
 | 대상이 아닌 계정 | 구글만 연결된 계정, 탈퇴·익명·이용 정지 계정, 비로그인 |
@@ -67,7 +69,8 @@ select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');
 | --- | --- |
 | 같은 회원에게 두 장 | `free_tickets`의 `unique (user_id, campaign_id)`. 조회 후 생성이 아니라 `insert ... on conflict do nothing`이다 |
 | 새 캠페인으로 재지급 | `campaign_id` 검사 제약 (`free-trial-2026-11`만 허용). 바꾸려면 새 migration이 필요하다 |
-| 한 장을 두 풀이에 사용 | 사용 함수가 이용권 행을 먼저 잠근다(`for update`). 요청 ID가 달라도 같은 회원의 사용은 한 번에 하나씩 처리된다. 이용권 ↔ 풀이는 서로 하나씩만 연결된다 (`free_tickets_one_per_reading`, `entitlements.ticket_id unique`) |
+| 한 장을 두 풀이에 사용 | 사용 함수가 회원 단위 잠금(`pg_advisory_xact_lock`)을 먼저 잡는다. 요청 ID나 탭이 달라도 같은 회원의 사용은 한 번에 하나씩 처리된다. 이용권 ↔ 풀이는 서로 하나씩만 연결된다 (`free_tickets_one_per_reading`, `entitlements.ticket_id unique`) |
+| 관리자 지급 두 번 누르기 | 같은 지급 요청 ID(`grant_request_id` 고유)는 한 번만 반영된다 |
 | 같은 요청 재전송, 다시 열기 | 이미 권한이 있는 풀이면 추가로 쓰지 않고 `already_redeemed`로 같은 풀이를 돌려준다 |
 | 결제와 이용권으로 같은 풀이를 두 번 | 권한은 풀이당 하나(`entitlements` 기본 키). 사용할 때 그 풀이의 대기 주문을 닫는다. 결제 완료가 먼저면 이용권은 그대로 남는다 |
 | 사용 완료 기록 삭제로 재지급 | 앱과 브라우저에는 이용권을 지우는 경로가 없다. 반환도 같은 행을 되돌리고 기록을 남긴다 |
@@ -79,7 +82,7 @@ select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');
 
 `POST /api/readings/{readingId}/redeem` 본문 `{ "requestId": "<uuid>" }`. 서버가 로그인한 카카오 회원, 풀이 소유자, 대상 상품, 이용권 상태를 확인하고 `redeem_free_ticket`을 부른다. 한 트랜잭션 안에서 다음을 한다.
 
-1. 이용권 행 잠금 → 풀이(입력 정보와 맛보기) 소유자 확인 → 이미 권한이 있는지 확인
+1. 회원 단위 잠금 → 풀이(입력 정보와 맛보기) 소유자 확인 → 이미 권한이 있는지 확인 → 사용 가능한 이용권 한 장 고르기 (캠페인 이용권 → 먼저 받은 순)
 2. 이용권을 풀이에 연결 (`status = 'redeemed'`, 사용 시점의 상품·규칙·계산 버전 `binding`)
 3. 이용 권한 (`entitlements`, `source = 'free_ticket'`, 질문 횟수 = 상품 설정)
 4. 생성 작업 (`generation_jobs`, `ticket_id`)
@@ -160,7 +163,7 @@ select public.restore_free_ticket('<ticket_id>', '<사유: 예) 생성 시도 �
 | `is_kakao_member` | `service_role` | `security definer` | `service_role`에 `auth.identities` 읽기 권한이 없다. 참·거짓만 돌려준다 |
 | `grant_free_ticket` | `service_role` | `security invoker` | |
 | `grant_free_tickets_to_kakao_members` | `service_role` | `security definer` | `auth.users` 전체를 훑는다 |
-| `redeem_free_ticket` | `service_role` | `security invoker` | |
+| `redeem_free_ticket` | `service_role` | `security invoker` | 20261111130000에서 여러 장 이용권에 맞게 바뀜 (캠페인 인자 제거) |
 | `restore_free_ticket` | `service_role` | `security invoker` | |
 
 `claim_generation`, `complete_generation`, `create_order`는 기존처럼 `security definer`이고 반환 상태(`cancelled`)와 이용권 완료 기록만 더했다. migration: `supabase/migrations/20261111120000_kakao_only_free_trial.sql`.
@@ -192,13 +195,15 @@ select kind, ticket_id, user_id, reading_id, detail, created_at from public.free
 
 ## 실제 사용자 테스트 시작 절차
 
-1. Supabase에 `supabase/migrations/20261111120000_kakao_only_free_trial.sql`을 적용한다 (앱 배포 전).
+1. Supabase에 `20261111120000_kakao_only_free_trial.sql`과 `20261111130000_admin_roles_and_settings.sql`을 순서대로 적용한다 (앱 배포 전). 두 번째 파일 적용 직후 풀이 상품 이용은 "관리자만"이다.
+   - 본인 계정을 관리자로 지정한다: `select public.set_user_role('<내 회원 ID>', 'admin');`
 2. 기존 회원 일괄 지급을 한 번 실행한다: `select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');`
 3. 배포 환경의 `CHECKOUT_MODE`를 비워 두거나 `free_trial`로 둔다. 토스 키는 없어도 된다.
 4. 이 브랜치를 배포한다.
-5. 실제 카카오 계정으로 확인한다: 첫 로그인 → 홈의 "무료 이용권 1장" → 상품 → 출생정보 → 맛보기 → "무료 이용권 1장으로 풀이받기" → 메신저 풀이 → 후속 질문 → 보관함·PDF. 로그아웃 후 다시 로그인해도 이용권이 늘지 않는지 본다.
-6. 이메일 제공에 동의하지 않은 카카오 계정, 로그인 취소도 한 번씩 확인한다.
-7. 문제가 생긴 회원은 위 "운영 조회"로 상태를 보고, 복구할 수 없는 실패만 반환한다.
+5. 테스트할 사람에게 링크를 줄 때만 마이 → 관리자 화면에서 "모든 회원"으로 켜고, 끝나면 "관리자만"으로 끈다. 특정 회원에게 한 번 더 받게 하려면 관리자 화면에서 무료 이용권을 1장 준다.
+6. 실제 카카오 계정으로 확인한다: 첫 로그인 → 홈의 "무료 이용권 1장" → 상품 → 출생정보 → 맛보기 → "무료 이용권 1장으로 풀이받기" → 메신저 풀이 → 후속 질문 → 보관함·PDF. 로그아웃 후 다시 로그인해도 이용권이 늘지 않는지 본다.
+7. 이메일 제공에 동의하지 않은 카카오 계정, 로그인 취소도 한 번씩 확인한다.
+8. 문제가 생긴 회원은 위 "운영 조회"로 상태를 보고, 복구할 수 없는 실패만 반환한다.
 
 ## 출시 체크리스트 (로그인·이용권 관련)
 
@@ -208,3 +213,5 @@ select kind, ticket_id, user_id, reading_id, detail, created_at from public.free
 - [ ] 결제 모드라면 토스 키와 `PAYMENTS_ALLOW_LIVE` 결정
 - [ ] migration `20261111120000_kakao_only_free_trial.sql`이 앱 배포 전에 적용됨
 - [ ] 실제 카카오 로그인 확인 (첫 로그인, 재로그인, 이메일 없는 계정, 취소)
+- [ ] 관리자 화면의 "풀이 상품 이용"을 출시 때 "모든 회원"으로 켬 (기본은 관리자만)
+- [ ] 관리자 역할 회원 목록 확인 (`select * from public.user_roles where role = 'admin'`)

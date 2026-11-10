@@ -1,5 +1,27 @@
 # 진행 상황
 
+## 회원 역할과 관리자 화면 (feat/kakao-only-free-trial, 2026-11-11)
+
+자세한 내용은 `docs/ADMIN.md`.
+
+| 항목 | 결정 |
+| --- | --- |
+| 역할 | `user`(기본, 행 없음)와 `admin`. `user_roles` 표, DB에서만 바꿈 (`set_user_role`) |
+| 관리자 화면 | `/admin`. 관리자 역할인 카카오 회원만, 다른 사람에게는 404. 마이 화면에 관리자에게만 버튼 |
+| 풀이 상품 이용 범위 | `app_settings.readings_open_to_all`. 끄면(기본) 관리자만, 켜면 모든 회원. 개발 중 테스트 링크가 퍼져도 아무나 받지 못하게 한다 |
+| 막는 범위 | 입력·초안, 맛보기 만들기, 이용권 사용, 결제, 생성·재시도, 후속 질문. 다시 보기·보관함·PDF·상품 둘러보기는 열림 |
+| 관리자 이용권 지급 | 고른 카카오 회원에게 한 장씩 (`source = admin`). 같은 요청 ID는 한 번만. 캠페인 이용권(회원당 한 장)은 그대로 |
+| 여러 장 사용 | 사용 함수를 회원 단위 잠금으로 바꾸고, 캠페인 → 먼저 받은 순으로 한 장씩 쓴다 |
+| migration | `20261111130000_admin_roles_and_settings.sql` (앞 migration 다음). 운영 DB 미적용 |
+
+| 검사 | 결과 |
+| --- | --- |
+| typecheck, lint | 통과 |
+| 단위·권한 테스트 | 395개 통과 (역할·설정·관리자 지급·여러 장 사용 16개 추가) |
+| 실제 Postgres 동시성 | 12개 통과, 3회 반복 같은 결과 (관리자 지급 같은 요청 10건 동시 → 1장, 이용권 3장에 서로 다른 풀이 10건 동시 → 정확히 3건, 설정 동시 변경 → 한 값) |
+| production build + 브라우저 테스트 (가짜 외부 서버) | 64개 중 62개 통과 후, 실패한 관리자 테스트 2개의 찾기 조건(보관함 머리글, "무료 이용권 1장" 글자가 버튼에도 걸림)을 고쳐 관리자 테스트 3개 통과. 앱 동작 문제는 아니었다 |
+| 실제 카카오 로그인, 실제 OpenAI | NOT_RUN, LIVE_NOT_RUN |
+
 ## 카카오 단일 로그인과 무료 테스트 모드 (feat/kakao-only-free-trial, 2026-11-11)
 
 현재 적용되는 정책이다. 로그인 정책은 `docs/AUTH_POLICY.md`, 무료 이용권과 결제 모드 전환은 `docs/FREE_TRIAL.md`에 있다.
@@ -22,8 +44,8 @@
 | Google 제공자 | 이미 꺼져 있음을 확인 (authorize 400 `provider is not enabled`) |
 | Email·Phone·Anonymous | 꺼져 있음을 확인 |
 | Kakao "Allow users without an email" | 꺼져 있던 것을 켬 (이메일을 주지 않는 카카오 회원 가입) |
-| migration `20261111120000_kakao_only_free_trial.sql` | 미적용. 에이전트의 운영 DB 적용이 안전장치로 차단되어 사용자 승인을 기다린다 |
-| 기존 회원 일괄 지급 | 미실행 (migration 적용 뒤 `grant_free_tickets_to_kakao_members` 한 번) |
+| migration `20261111120000_kakao_only_free_trial.sql` | 사용자가 SQL Editor로 적용 (2026-11-11). 운영 DB의 함수 본문이 저장소 파일과 해시까지 같음을 확인. SQL Editor로 적용해 `supabase_migrations` 이력에는 없다 |
+| 기존 회원 일괄 지급 | 미실행 (`grant_free_tickets_to_kakao_members` 한 번) |
 
 적용 전 확인한 사항: 운영 DB의 기존 함수 본문이 저장소 migration과 해시까지 같다(직접 고친 흔적 없음). 새 migration은 열·상태 값만 더해서 지금 배포된 이전 코드와도 함께 동작한다. 새 코드를 배포하기 전에 migration을 먼저 적용해야 한다 (새 코드는 `free_tickets`가 없으면 이용권을 보여 주지 못한다).
 

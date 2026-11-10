@@ -3,6 +3,7 @@
 캐릭터가 메신저로 사주를 풀어 주는 서비스입니다. 계산은 `sajuengine` 패키지가 하고, 상품 규칙과 설명 생성, 로그인, 이용권과 결제, 화면은 이 앱에 있습니다.
 
 - 로그인: 카카오만 지원합니다. 출시 버전까지 유지하는 정책이며 결제 모드와 관계없습니다 ([docs/AUTH_POLICY.md](docs/AUTH_POLICY.md)).
+- 이용 범위: 관리자 화면의 "풀이 상품 이용" 설정으로 관리자만 또는 모든 회원이 이용합니다. 기본은 관리자만입니다 ([docs/ADMIN.md](docs/ADMIN.md)).
 - 이용 방식: 지금은 무료 테스트 모드입니다. 카카오 회원에게 무료 이용권 1장을 드리고, 결제 없이 '묘묘의 사주 참견'을 한 번 받습니다 ([docs/FREE_TRIAL.md](docs/FREE_TRIAL.md)).
 
 ## 기술 구성
@@ -42,9 +43,12 @@ Authentication > Sign In / Providers에서는 Kakao만 켜고 "Allow users witho
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261109120000_first_product_mvp.sql
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261110120000_reading_quality.sql
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261111120000_kakao_only_free_trial.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261111130000_admin_roles_and_settings.sql
 ```
 
 세 번째 파일(카카오 회원 무료 이용권)을 적용한 뒤 기존 회원에게 이용권을 주려면 `select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');`을 한 번 실행합니다. 여러 번 실행해도 회원당 한 장입니다.
+
+네 번째 파일(역할과 서버 설정)을 적용하면 풀이 상품 이용이 "관리자만"으로 시작합니다. 본인 계정을 `select public.set_user_role('<회원 ID>', 'admin');`로 관리자로 지정한 뒤, 마이 → 관리자 화면에서 바꿉니다.
 
 ### 이용 방식 (무료 테스트와 결제)
 
@@ -83,6 +87,7 @@ npm run test:e2e:clean  # .env 없이 임시 복사본에서 브라우저 테스
 | [docs/PROGRESS.md](docs/PROGRESS.md) | 결정 사항과 남은 작업 |
 | [docs/AUTH_POLICY.md](docs/AUTH_POLICY.md) | 로그인 정책(카카오만), 회원 판정, Supabase 설정 |
 | [docs/FREE_TRIAL.md](docs/FREE_TRIAL.md) | 무료 이용권 정책, 실패와 반환, 결제 모드 전환, QA·출시 체크리스트 |
+| [docs/ADMIN.md](docs/ADMIN.md) | 회원 역할(user/admin), 관리자 화면, 풀이 상품 이용 범위, 관리자 이용권 지급 |
 | [docs/LLM_OPERATIONS.md](docs/LLM_OPERATIONS.md) | 모델 설정, 오류 처리, gpt-6-luna 전환 |
 | [docs/GEONAMES_DATA.md](docs/GEONAMES_DATA.md) | 출생지역 자료의 출처와 기준 |
 | [docs/rules/first-overview.md](docs/rules/first-overview.md) | 첫 상품의 해석 규칙 |

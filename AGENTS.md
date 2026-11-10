@@ -12,6 +12,7 @@
 - 사용자 기준은 Supabase `user.id`다. 이메일이나 `user_metadata`로 소유권과 구매 권한을 판단하지 않는다. 회원은 서버가 `getUser()`로 받은 실제 연결(identities)에 카카오가 있는 사용자다 (DB에서는 `is_kakao_member`). 카카오 연결이 없는 예전 세션은 화면·API에서 막는다.
 - LLM: OpenAI Responses API. 호출은 `src/server/llm/client.ts`에서만 한다. 개발 기본은 `gpt-5.6-luna`, 출시 전 검증 후 `gpt-6-luna`로 전환하며 모델은 `OPENAI_MODEL`로만 바꾼다. 절차는 `docs/LLM_OPERATIONS.md`에 있다.
 - 이용 방식: 서버 설정 `CHECKOUT_MODE`로 정한다 (`src/server/checkout/mode.ts`). 현재는 `free_trial`(미설정 시 기본값)로, 카카오 회원에게 무료 이용권 한 장(캠페인 `free-trial-2026-11`, 고정)을 주고 이용권으로만 '묘묘의 사주 참견'을 받는다. 새 결제는 서버에서 막는다. `payment`로 바꾸면 기존 결제를 다시 열고 새 지급만 멈춘다. 이미 받은 이용권과 풀이 권한은 유지한다. 클라이언트가 보낸 `isFree`, `amount` 같은 값을 권한 근거로 쓰지 않는다. 지급·사용·반환은 DB 함수가 한 트랜잭션으로 하며, 무료 이용을 가짜 결제 성공으로 만들지 않는다. 정책과 운영 절차는 `docs/FREE_TRIAL.md`.
+- 역할과 관리자: 회원 역할은 `user`(기본)와 `admin` 두 가지이고 DB(`user_roles`, `set_user_role`)에서만 바꾼다. 관리자 화면(`/admin`)은 관리자에게만 열리고 다른 사람에게는 404다. 관리자 화면의 "풀이 상품 이용" 설정(`app_settings.readings_open_to_all`, 기본 관리자만)이 꺼져 있으면 관리자만 새 입력·이용권 사용·결제·생성·후속 질문을 할 수 있다. 풀이 상품을 쓰는 API는 `requireReadingAccess`(`src/server/access.ts`)로 막는다. 관리자는 고른 회원에게 무료 이용권을 한 장씩 줄 수 있다. 자세한 내용은 `docs/ADMIN.md`.
 - 결제(결제 모드): 토스페이먼츠 테스트 키만 허용한다. 금액은 서버의 상품 설정(`src/domain/products/`)이 기준이다. 모드를 바꾸는 것만으로 실결제가 되지 않는다 (`PAYMENTS_ALLOW_LIVE`).
 - 출생지역: GeoNames 가공 자료 (`docs/GEONAMES_DATA.md`). 실행 중에 GeoNames에 접속하지 않는다.
 - 모의 로그인, 모의 결제, 고정 응답은 앱 코드에 넣지 않는다. `tests/support/fake-gateway.ts`만 사용한다.
