@@ -24,8 +24,13 @@ export const LLM_SETTINGS = {
   tasks: {
     /** 질문 정리. 짧은 구조화 출력이다. */
     classify: { maxOutputTokens: 2_000, reasoningEffort: "low", timeoutMs: 30_000 },
-    /** 최초 풀이 전체. 40~60개 말풍선과 JSON 구조를 한 번에 받는다. */
-    reading: { maxOutputTokens: 24_000, reasoningEffort: "low", timeoutMs: 200_000 },
+    /**
+     * 최초 풀이 전체. 40~60개 말풍선과 JSON 구조를 한 번에 받는다.
+     * 추론 설정은 2026-11-11 사용자 요청으로 low → medium. low에서는 많은 제약 아래 재료를 옮겨 적거나 캐릭터를 약하게 쓰는 쪽으로 기울었다
+     * (docs/READING_QUALITY.md 20·21절, 추정). 추론 토큰은 출력 단가로 과금되고 첫 말풍선까지 시간이 늘어난다.
+     * 작업을 시작할 때 이 값이 고정되므로(claim_generation) 이미 시작한 작업은 그때 값을 쓴다.
+     */
+    reading: { maxOutputTokens: 24_000, reasoningEffort: "medium", timeoutMs: 200_000 },
     /** 후속 질문 답변. 소질문 여러 개를 나눠 답한다. */
     followup: { maxOutputTokens: 6_000, reasoningEffort: "low", timeoutMs: 90_000 },
   } satisfies Record<LlmTask, LlmTaskSettings>,

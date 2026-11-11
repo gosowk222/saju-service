@@ -9,7 +9,7 @@
 | 개발 기본 모델 | `gpt-5.6-luna` | `config.ts` |
 | 호출 모델 | `OPENAI_MODEL` 환경변수 | 서버 환경 |
 | API | Responses API, 구조화 출력 (`json_schema`, strict) | `client.ts` |
-| 추론 설정 | `reasoning.effort = low` (작업별로 설정) | `LLM_SETTINGS.tasks` |
+| 추론 설정 | 최초 풀이 `medium` (2026-11-11 low에서 올림), 질문 정리·후속 답변 `low`. 작업을 시작할 때 고정 | `LLM_SETTINGS.tasks` |
 | 출력 토큰 한도 (추론 포함) | 질문 정리 2,000 · 최초 풀이 24,000 · 후속 답변 6,000 | `LLM_SETTINGS.tasks` |
 | 요청 제한 시간 | 질문 정리 30초 · 최초 풀이 200초 · 후속 답변 90초 | `LLM_SETTINGS.tasks` |
 | 요청 전체 예산 | 생성 280초 (route `maxDuration` 300초) · 후속 질문 170초 (route 180초) | `generationBudgetMs`, `followupBudgetMs` |
@@ -26,23 +26,34 @@
 | --- | --- |
 | `question-1.3.0` | 현재 질문 정리. 1.2.0에 풀이에 대한 반응(`reaction`: 칭찬·놀림/허세 지적·의심)을 더했다. 반응만 있고 묻는 것이 없으면 캐릭터의 고정 반응 문장으로 답하고 차감하지 않는다 (호출은 질문 정리 1회뿐) |
 | `question-1.2.0` | 기록용. 궁금한 점과 후속 질문의 구조화 (분야·의도·선택지·기간·사용자 사실). 1.2.0에서 지쳤다·힘들다 같은 지금 마음 상태도 사용자 사실로 남기게 했다 (출력 형식은 1.1.0과 같다. 1.0.0·1.1.0은 기록용) |
-| `reading-2.5.0` / `narration-2.1.0` | 현재 최초 풀이 (캐릭터 묘묘, 상품 3.2.0). 2.4.0에서 존댓말과 '님' 호칭을 가정한 문구를 빼고 말씨·호칭을 캐릭터 설정에 맡겼다. 캐릭터와 판단의 역할 구분, 진지한 순간, 놀림 뒤 설명을 규칙으로 두었다. 입력에 부르는 말(`address`)을 더했다. 주제별로 먼저 보여 주는 생성을 그대로 쓴다 |
+| `reading-3.1.0` / `narration-2.2.0` | 현재 최초 풀이 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0, 추론 medium). 지시를 역할별로 나눴다: `[캐릭터: 묘묘]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]`(`READING_GUIDE`, `docs/READING_GUIDE.md`) → 출력 조건. 계산값과 판단은 입력 재료, 말투는 캐릭터, 형식은 출력 조건과 스키마를 따른다. 말투 견본, 말버릇 목록과 횟수, '묘묘다운 순간' 의무, 상품 표현 강도 문구를 뺐다. 입력은 2.9.0과 같고 같은 행동 문장은 처음 나온 해석에만 둔다 (`materialInputV2`). 지시 약 11,000자 (2.9.0과 비슷) |
+| `reading-3.0.0` | 쓰지 않음. 되돌린 작업(`refactor/myomyo-persona-rebuild`)에서 쓴 번호라 등록하지 않는다. 그 번호에 고정된 작업은 `prompt_version_unavailable`(재시도 불가)로 정리된다 |
+| `reading-2.9.0` / `narration-2.2.0` | 3.1.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.4.0, 추론 medium). 프롬프트 다이어트: 판단에 묶인 비교 예시와 재료 시범을 빼고 주제와 상관없는 말투 견본만 넣는다 (`personaBlockV5`). 2.8.0 결과에서 예시 문장이 같은 판단의 주제에 옮겨 쓰였다 (`docs/READING_QUALITY.md` 22절). 캐릭터 블록 약 5,900자 → 2,500자. 그 밖은 2.8.0과 같다 |
+| `reading-2.8.0` / `narration-2.2.0` | 2.9.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.3.0, 추론 medium). 2.7.0 결과가 짧아지고 으스대기·놀리기가 없어서 (`docs/READING_QUALITY.md` 21절) 중심 주제·질문 답은 깊게, 설명 말풍선은 세네 문장까지, 반응 말풍선은 목표와 따로, 주제마다 '묘묘다운 순간', 말버릇은 어울리는 자리에 자연스럽게. 입력·출력 형식은 2.7.0과 같고 규칙은 2.7.0에서 구절만 바꿔 만든다 (`revise`) |
+| `reading-2.7.0` / `narration-2.2.0` | 2.8.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.2.0). 2.6.0 결과가 재료 문장을 반말로 옮겨 적은 것이라 (`docs/READING_QUALITY.md` 20절) 재료를 옮겨 적지 않기와 시범, 중복을 덜어 낸 입력(`materialInput`: 같은 근거·이유는 한 번, 공통 주의사항은 `commonCaveats`), light 주제는 핵심 한두 개, 말풍선 한두 문장, 약점은 주제마다 하나 이상. 출력 형식 2.2.0은 주제마다 bubbles 앞에 화면에 나가지 않는 메모 `angle`, 답변 영역 앞에 `focusAngle`을 받는다 (해석기가 버리고 저장하지 않는다) |
+| `reading-2.6.0` / `narration-2.1.0` | 2.7.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.1.0). 캐릭터 설정을 지시 맨 앞에 두고 지시를 사실과 판단 / 답할 내용 / 전달 방식 세 층으로 나눴다. 설명 본문에서도 성격이 드러나게 하는 방식과 같은 판단의 비교 예시, 주제마다 정해진 횟수를 채우게 하던 할당 제거, 상황 맥락과 사용자 감정의 구분(입력 `userContext[].from`), 다시 쓸 때 말투를 순화하지 않기. 재료와 출력 형식은 2.5.0과 같다. 주제별로 먼저 보여 주는 생성을 쓴다 (`docs/READING_QUALITY.md` 19절) |
+| `reading-2.5.0` / `narration-2.1.0` | 2.6.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.0.0, 상품 3.2.0). 2.4.0에서 존댓말과 '님' 호칭을 가정한 문구를 빼고 말씨·호칭을 캐릭터 설정에 맡겼다. 캐릭터와 판단의 역할 구분, 진지한 순간, 놀림 뒤 설명을 규칙으로 두었다. 입력에 부르는 말(`address`)을 더했다 |
 | `reading-2.4.0` / `narration-2.1.0` | 2.5.0 이전에 이 버전으로 시작한 작업만. 2.3.0과 같고 이어서 쓰기 규칙(이미 화면에 보낸 부분은 비워 두고 나머지만 쓰기)을 더했다. 주제가 완성될 때마다 먼저 보여 주는 생성에서 쓴다 (아래 "주제별로 먼저 보여 주기") |
 | `reading-2.3.0` / `narration-2.1.0` | 2.4.0 이전에 이 버전으로 시작한 작업만 (상품 3.1.0, 한 번에 받음). 2.2.0에 명리 설명 재료(lore)를 짧게 소개하기, 약점·강점을 선언하지 않고 알아맞히듯 말하기, 어울리는 직업과 업종을 더했다. 입력은 해석마다 lore가 붙는 것만 다르다 |
 | `reading-2.2.0` / `narration-2.1.0` | 2.3.0 이전에 이 버전으로 시작한 작업만 (상품 3.0.0). 2.1.0에 가족·친구·지역 주제와 행운 값(place 주제의 값만 옮기기), 재미로 과거를 짐작하는 말투, 건강·투자·미래의 완곡한 표현을 더했다 |
 | `reading-2.1.0` / `narration-2.1.0` | 2.2.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만. 시작 → 궁금한 점에 대한 답(`focus`) → 주제별 설명 → 마무리. 메신저 말투, 장면을 가정형으로 녹이기('예를 들면'은 풀이 전체에서 한 번까지), 주제마다 약점 하나 이상을 흐리지 않고 말하기. 출력 형식 2.1.0은 말풍선마다 굵게 보일 구절(`highlight`)을 따로 받는다 |
 | `reading-2.0.0` / `narration-2.0.0` | 2.1.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만 |
 | `reading-1.0.0` / `narration-1.0.0` | 작성 재료 1.0.0으로 만든 이전 풀이를 이어서 생성할 때만 |
-| `followup-2.5.0` / `followup-output-2.1.0` | 현재 후속 질문. 2.4.0에 반응 받기와 이어 쓰기를 더했다. 출력은 질문마다 refs를 text보다 먼저 받아, 근거 연결을 확인한 뒤 문단이 완성될 때마다 먼저 보여 준다 (아래 "후속 답변도 문단마다 먼저 보여 주기") |
+| `followup-3.1.0` / `followup-output-2.2.0` | 현재 후속 질문 (캐릭터 묘묘 2.1.0, guide-1.0.0). reading-3.1.0과 같은 구성. 판단 규칙·입력·출력 형식은 2.9.0과 같다 |
+| `followup-2.9.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.4.0). 2.8.0과 같고 예시·시범 대신 말투 견본 |
+| `followup-2.8.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 문단 3~5개(설명 문단은 두세 문장까지) |
+| `followup-2.7.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범, 중복을 덜어 낸 입력을 더했다. 출력 형식 2.2.0은 질문마다 refs 앞에 화면에 나가지 않는 메모 `angle`을 받는다 |
+| `followup-2.6.0` / `followup-output-2.1.0` | 기록용 (캐릭터 묘묘 1.1.0). 최초 풀이 2.6.0과 같은 세 층 구성. 방금 한 말에 먼저 반응하고 답하기, 칭찬·놀림과 질문이 함께 올 때 짧게 반응한 뒤 본론, 지금의 마음은 이번 메시지(`userContext[].from = "message"`)로만 판단하기. 출력 형식은 2.5.0과 같다 |
+| `followup-2.5.0` / `followup-output-2.1.0` | 기록용. 2.4.0에 반응 받기와 이어 쓰기를 더했다. 출력은 질문마다 refs를 text보다 먼저 받아, 근거 연결을 확인한 뒤 문단이 완성될 때마다 먼저 보여 준다 (아래 "후속 답변도 문단마다 먼저 보여 주기") |
 | `followup-2.4.0` / `followup-output-2.0.0` | 기록용. 최초 풀이와 같은 캐릭터·호칭, 캐릭터와 판단의 구분, 진지한 순간, 실제 오류의 인정과 정정, 말버릇 횟수 |
 | `followup-2.3.0` / `followup-output-2.0.0` | 기록용. 2.2.0에 알아맞히는 말투, 명리 설명 재료 소개, 직업·업종 예시를 더했다 |
 | `followup-2.2.0` / `followup-output-2.0.0` | 기록용. 후속 질문. 2.1.0에 과거 짐작 말투, 행운 값의 일관성, 건강·투자·미래의 완곡한 표현을 더했다 |
 | `followup-2.1.0` / `followup-output-2.0.0` | 기록용. 후속 질문. 소질문마다 답하거나 되묻기(`clarify`). 답을 빈 줄로 나눈 짧은 문단 2~4개로 쓰고, 화면은 문단마다 말풍선 하나로 보여 준다. `N년 후` 같은 기간 숫자 금지 |
 | `followup-2.0.0` | 기록용 (2.1.0 이전 답변) |
 
-굵게 보일 구절은 최초 풀이에서는 `highlight` 필드로 받아 저장 직전에 서버가 문장 안의 `**…**` 표시로 바꾸고, 후속 답변에서는 문장 안에 `**…**`로 받는다. 모델이 구절을 요약해서 적으면 같은 말풍선에서 가장 비슷한 문장을 굵게 만들고, 비슷한 문장이 없으면 표시하지 않는다. 짝이 맞지 않는 표시는 별표를 지운다. 강조 때문에 다시 생성하지 않는다(호출이 늘지 않는다). 경위는 `docs/READING_QUALITY.md` 14절. 생성 기록(`generation_meta.versions`)에는 프롬프트·출력 형식·작성 재료 버전과 함께 실제로 쓴 캐릭터 버전(`personaVersion`)을 남긴다.
+굵게 보일 구절은 최초 풀이에서는 `highlight` 필드로 받아 저장 직전에 서버가 문장 안의 `**…**` 표시로 바꾸고, 후속 답변에서는 문장 안에 `**…**`로 받는다. 모델이 구절을 요약해서 적으면 같은 말풍선에서 가장 비슷한 문장을 굵게 만들고, 비슷한 문장이 없으면 표시하지 않는다. 짝이 맞지 않는 표시는 별표를 지운다. 강조 때문에 다시 생성하지 않는다(호출이 늘지 않는다). 경위는 `docs/READING_QUALITY.md` 14절. 생성 기록(`generation_meta`)에는 프롬프트·출력 형식·작성 재료 버전과 함께 실제로 쓴 캐릭터 버전(`personaVersion`)과 풀이 기록을 만들 때의 캐릭터 버전(`planPersonaVersion`)을 남긴다. 2026-11-11 이전 기록의 `personaVersion`은 작성 재료의 값이 덮어써 풀이 기록을 만들 때의 버전이다.
 
-생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 프롬프트를 바꿀 때는 `prompts.ts`의 기존 항목을 고치지 않고 새 버전을 추가한다. 작업의 프롬프트 버전은 저장된 작성 재료의 버전(`PROMPTS_FOR_PLAN`)으로 고른다.
+생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 캐릭터 설정은 고정된 프롬프트 버전으로 고른다 (`personaVersionFor` → `findPersona(id, version)`). 그래서 이전 프롬프트로 시작한 작업을 새 배포 뒤에 이어 써도 그때의 캐릭터 설정을 쓴다 (reading-2.5.0 → 묘묘 1.0.0, reading-2.6.0 → 1.1.0, reading-2.7.0 → 1.2.0, reading-2.8.0 → 1.3.0, reading-2.9.0 → 1.4.0, reading-3.1.0 → 2.1.0). 추론 설정도 작업을 시작할 때 고정된다 (`claim_generation`의 `reasoning_effort`). 출력 형식도 작업에 고정된다 (2.6.0 작업은 narration-2.1.0). 프롬프트나 캐릭터 설정을 바꿀 때는 기존 항목을 고치지 않고 새 버전을 추가한다. 작업의 프롬프트 버전은 저장된 작성 재료의 버전(`PROMPTS_FOR_PLAN`)으로 고른다. 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트와 그에 맞는 캐릭터 설정을 쓰고, 버전은 `followups.prompt_version`에 남는다.
 
 ## 주제별로 먼저 보여 주기 (reading-2.4.0)
 
@@ -55,11 +66,11 @@
 | 요청이 끊겨 다른 요청이 이어받음 | 새 요청은 저장된 메시지를 읽어 그 뒤부터 이어 쓴다. 이전 요청은 저장 직전에 작업 번호를 확인하고 멈춘다 |
 | 재시도 횟수를 다 씀 | 보낸 말풍선은 남고, 화면에 다시 시도 버튼이 나온다. 다시 시도하면 남은 부분부터 이어 쓴다 |
 
-- 같은 문장 반복, 범위 밖 주제, 원국 글자·신살, 근거 연결은 부분마다 한 번 쓰는 검사기(`narrationChecker`)로 확인한다. 전체 말풍선 수는 이미 보낸 뒤라 고칠 수 없어 범위를 벗어나면 `checked_issue_count`에만 남긴다.
-- 중간에 끊은 호출은 OpenAI가 사용량을 돌려주지 않아 `usage`에 그 호출의 토큰이 빠진다. 호출 수(`llm_calls`)는 그대로 센다.
+- 같은 문장 반복, 말버릇 횟수(1.x로 시작한 작업만. 묘묘 2.1.0은 세지 않는다), 범위 밖 주제, 원국 글자·신살, 근거 연결은 부분마다 검사기(`narrationChecker`)로 확인한다. 검사기는 시도마다 새로 만들고 실제로 보낸 문장만 기억한다. 검사에 걸려 보내지 않은 문장은 다음 시도의 반복·말버릇 기준에 남지 않는다 (2026-11-11 수정. 이전에는 근거 ID만 고친 같은 문장이 '같은 문장 반복'으로 다시 거부되었다). 전체 말풍선 수는 이미 보낸 뒤라 고칠 수 없어 범위를 벗어나면 `checked_issue_count`에만 남긴다.
+- 중간에 끊은 호출은 OpenAI가 사용량을 돌려주지 않는다. 그 호출은 '사용량을 모르는 호출'(`calls_without_usage`)로 세고 합계를 불완전(`usage_complete = false`)으로 표시한다. 0으로 채우지 않는다 (아래 "토큰 사용량 기록").
 - 데이터베이스 구조는 바꾸지 않았다. 서버 권한으로 `reading_messages`에 행을 먼저 넣고, 상태 조회는 생성 중에도 메시지를 돌려준다.
 
-### 후속 답변도 문단마다 먼저 보여 주기 (followup-2.5.0)
+### 후속 답변도 문단마다 먼저 보여 주기 (followup-2.5.0부터)
 
 후속 답변도 호출 한 번을 스트리밍으로 받는다. 질문마다 근거 연결(refs)을 먼저 확인하고, 문단(화면의 말풍선 하나)이 완성될 때마다 검사해서 `followups.answer`에 그때까지의 답을 저장한다. 상태는 `answering` 그대로이고, 횟수 차감과 완료는 끝에 `complete_followup`이 한 번에 한다. 화면은 답을 기다리는 동안 1.5초마다 상태를 읽어 받은 문단을 보여 주고, 다음 문단을 쓰는 동안 입력 중 표시를 띄운다.
 
@@ -88,7 +99,9 @@
 
 2026-11-10 17:53~18:15(한국 시각)에 찍힌 요청 29회는 에이전트가 실제 키로 실행한 `llm:compare` 6번(4·8·7·6·2·2회)이다. 그 뒤 에이전트는 실제 환경 파일(`.env`)에 접근하지 않고, 브라우저 테스트는 환경 파일 없는 복사본에서 돌린다 (`npm run test:e2e:clean`, CLAUDE.md).
 
-그래서 `npm run llm:check`, `npm run llm:compare`는 실제 키가 있어도 `LIVE_NOT_RUN`을 출력하고 끝난다. 실제 모델 확인은 개발 서버를 직접 열어 화면에서 풀이와 후속 질문을 만들어 보고, 서버 로그의 `[generation] done`·`[followup] done`으로 호출 수와 토큰을 확인한다. 에이전트는 실제 호출을 하지 않는다 (AGENTS.md, CLAUDE.md).
+그래서 `npm run llm:check`, `npm run llm:compare`는 실제 키가 있어도 `LIVE_NOT_RUN`을 출력하고 끝난다. 실제 모델 확인은 개발 서버를 직접 열어 화면에서 풀이와 후속 질문을 만들어 보고, 아래 "토큰 사용량 기록"의 SQL(또는 서버 로그 `[generation] done`·`[followup] done`)로 호출 수와 토큰을 확인한다. 에이전트는 실제 호출을 하지 않는다 (AGENTS.md, CLAUDE.md).
+
+같은 입력으로 프롬프트 버전만 바꿔 비교하려면 모델을 부르지 않는 `npm run llm:export`로 지시·입력·출력 형식 파일을 만들어 플레이그라운드에서 실행하고, 결과를 `npm run llm:render`로 말풍선과 검사 결과로 읽는다 (`docs/personas/myomyo-evaluation.md` 0-2절).
 
 ## 호출 구조와 비용
 
@@ -104,6 +117,77 @@ OpenAI 대시보드의 요청 수는 같은 API 키를 쓰는 모든 실행을 �
 말풍선마다 호출하지 않는다. 고전 자료 전체나 대화 전체를 보내지 않는다. 후속 질문에는 질문 주제의 이전 말풍선 최대 14개와 직전 대화 한 번만 보낸다.
 
 가상 사례 8개를 `gpt-5.6-luna`로 실행한 실측(2026-11-10, `npm run llm:compare`)은 `docs/READING_QUALITY.md`와 `docs/model-comparison/`에 있다.
+
+## 토큰 사용량 기록 (2026-11-12, migration `20261112120000_generation_usage.sql`)
+
+최초 풀이의 토큰은 생성 시도(attempt)마다 `generation_attempts`에 한 줄로 남고, 풀이별 합계는 `generation_usage` 뷰로 본다. 후속 질문의 토큰은 질문마다 `followups.usage`에 따로 남는다 (최초 풀이와 섞지 않는다).
+
+이전 구조의 문제와 고친 점:
+
+| 이전 | 지금 |
+| --- | --- |
+| `generation_jobs.usage`에 완료한 시도의 사용량만 남았다. 실패한 시도(검사 실패, 형식 오류, 시간 초과)와 다른 요청이 이어받은 시도의 토큰은 사라졌다 | 시도가 끝나는 방식(완료 `completed`, 실패 `failed`, 이어받음 `handed_over`)과 관계없이 그 시도의 사용량을 `record_generation_attempt`로 남긴다 |
+| 응답을 받은 뒤 JSON 해석·형식 검증에 실패하거나 응답이 미완료면 그 호출의 usage를 버렸다 | 응답을 받으면 형식 확인 전에 usage부터 기록한다 (`client.ts`의 `requestLedger`) |
+| usage를 받지 못한 호출(중간에 끊은 스트림)을 0으로 더했다 | 모르는 값으로 두고 `calls_without_usage`, `usage_complete = false`로 표시한다 |
+| `llm_calls`는 시도를 모두 더하는데 `usage`는 마지막 시도만이라 서로 맞지 않았다 | 시도별 기록의 합이 호출 수와 토큰을 함께 보여 준다 |
+
+집계 규칙 (`src/server/llm/usage.ts`):
+
+- API가 돌려준 usage를 그대로 쓴다. 글자 수로 추정하지 않는다.
+- `cached_input_tokens`는 `input_tokens`에 포함된 값이다. 캐시되지 않은 입력은 `input_tokens - cached_input_tokens`.
+- `reasoning_tokens`는 `output_tokens`에 포함된 값이다.
+- `total_tokens = input_tokens + output_tokens`. 캐시·추론 토큰을 다시 더하지 않는다. 예: input 1000, output 200, cached 600 → total 1200, 캐시되지 않은 입력 400.
+- API가 실제로 돌려준 0과 받지 못한 값(null)을 구분한다. 오류 응답(4xx·5xx)으로 생성하지 않은 호출은 호출 수에만 넣는다.
+- 한 시도 안의 질문 분석, 본문 작성, 검사 실패 뒤 재작성 호출을 모두 더한다. 새 시도(다시 시도하기, 점유 시간이 지나 이어받기)는 시도 번호가 달라 다른 줄로 남는다. 같은 시도를 다시 기록하면(재전송) 처음 기록을 둔다.
+- 저장된 질문 분석을 다시 쓰거나, 끝난 풀이를 다시 열거나 PDF로 내보내면 호출이 없어 기록할 것도 없다.
+- 기록이 실패해도(예: migration 미적용) 풀이 생성 결과는 바뀌지 않고 서버 로그에 `[generation] usage not recorded`만 남는다.
+
+`generation_attempts` 칸: `reading_id`, `attempt`, `outcome`, `error_code`, `issues`(마지막 검사에서 걸린 문제의 종류. 생성 문장과 질문 원문은 빼고 남긴다), `model_id`(요청 모델), `actual_model`(응답의 실제 모델), `prompt_version`, `schema_version`, `persona_version`, `reasoning_effort`, `llm_calls`, `calls_without_usage`, `input_tokens`, `cached_input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens`(자동 계산), `usage_complete`, `duration_ms`, `created_at`.
+
+권한: 테이블·뷰·함수 모두 서버 전용이다. 브라우저 역할(anon, authenticated)은 본인 것도 읽을 수 없다 (테스트로 확인). 출생정보, 대화, 프롬프트 원문은 넣지 않는다. Supabase 대시보드의 SQL Editor(관리자 권한)에서 아래 SQL로 본다.
+
+```sql
+-- 1) 풀이 하나의 최초 풀이 합계 (모든 시도 포함)
+select reading_id, status, attempts, recorded_attempts, model_id, actual_model, prompt_version, persona_version, reasoning_effort,
+       llm_calls, calls_without_usage, input_tokens, cached_input_tokens, uncached_input_tokens, output_tokens, reasoning_tokens,
+       total_tokens, usage_complete
+from public.generation_usage
+where reading_id = '<풀이 ID>';
+
+-- 2) 시도별 내역 (실패 이유와 검사 문제 종류 포함)
+select attempt, outcome, error_code, issues, prompt_version, persona_version, llm_calls, calls_without_usage,
+       input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, total_tokens, usage_complete, duration_ms, created_at
+from public.generation_attempts
+where reading_id = '<풀이 ID>'
+order by attempt;
+
+-- 3) 최근 풀이 20개
+select u.reading_id, r.created_at, u.status, u.prompt_version, u.attempts, u.llm_calls, u.input_tokens, u.cached_input_tokens,
+       u.output_tokens, u.total_tokens, u.usage_complete
+from public.generation_usage u join public.readings r on r.id = u.reading_id
+order by r.created_at desc
+limit 20;
+
+-- 4) 후속 질문 토큰 (질문마다, 최초 풀이와 별도)
+select id, status, prompt_version, usage ->> 'inputTokens' as input_tokens, usage ->> 'cachedInputTokens' as cached_input_tokens,
+       usage ->> 'outputTokens' as output_tokens, usage ->> 'totalTokens' as total_tokens, usage ->> 'complete' as usage_complete,
+       usage ->> 'calls' as llm_calls, created_at
+from public.followups
+where reading_id = '<풀이 ID>'
+order by created_at;
+```
+
+이 migration 전에 끝난 풀이는 시도 기록이 없어 `recorded_attempts = 0`, `usage_complete = false`로 보인다. 그 풀이는 `generation_jobs.usage`(완료한 시도 하나의 값. 예전 규칙이라 받지 못한 호출이 0으로 더해졌을 수 있다)만 있다. 없는 값을 0으로 채우거나 다시 생성하지 않는다.
+
+```sql
+-- 5) 이전 풀이: 완료한 시도의 사용량만
+select reading_id, status, attempts, llm_calls, usage ->> 'inputTokens' as input_tokens, usage ->> 'cachedInputTokens' as cached_input_tokens,
+       usage ->> 'outputTokens' as output_tokens, usage ->> 'totalTokens' as total_tokens
+from public.generation_jobs
+where reading_id = '<풀이 ID>';
+```
+
+적용: 이 migration을 먼저 적용하고 새 코드를 띄운다 (`supabase db push` 또는 SQL Editor에서 파일 내용 실행). 순서가 바뀌어도 풀이 생성은 되지만 그동안의 사용량 기록은 남지 않는다. 실제 운영 DB에 적용했는지는 이 문서의 작성 시점에 확인하지 않았다 (`NOT_RUN`).
 
 ## 공식 문서 확인 결과 (2026-11-09)
 
@@ -143,7 +227,7 @@ ChatGPT나 코딩 도구 구독은 API 사용 권한과 별개다.
 
 ## 저장되는 정보
 
-풀이는 `generation_jobs`에 요청 모델, 응답의 실제 모델, 프롬프트 버전, 출력 형식 버전, 추론 설정, 토큰 사용량, 처리 시간, 호출 수, 그리고 `generation_meta`(작성 재료·규칙·상품·캐릭터 버전, 질문 분석 버전과 질문 수, 기간 분석 버전과 기간)를 남긴다. 후속 질문은 답변마다 `followups`에 모델·버전·사용량과 질문 분석 요약(`analysis`: 분야, 의도, 범위, 기간)을 남긴다. 서버 로그에는 풀이 ID, 버전, 호출 수, 처리 시간, 토큰 수만 남기고 출생정보, 질문 원문, 답변 원문, 키는 남기지 않는다.
+풀이는 `generation_jobs`에 요청 모델, 응답의 실제 모델, 프롬프트 버전, 출력 형식 버전, 추론 설정, 토큰 사용량(완료한 시도), 처리 시간, 호출 수(모든 시도), 그리고 `generation_meta`(작성 재료·규칙·상품·캐릭터 버전, 질문 분석 버전과 질문 수, 기간 분석 버전과 기간)를 남긴다. 생성 시도마다의 토큰 사용량은 `generation_attempts`에 남는다 (위 "토큰 사용량 기록"). 후속 질문은 답변마다 `followups`에 모델·버전·사용량(실패한 질문도 이미 쓴 사용량은 남긴다)과 질문 분석 요약(`analysis`: 분야, 의도, 범위, 기간)을 남긴다. 서버 로그에는 풀이 ID, 버전, 호출 수, 처리 시간, 토큰 수만 남기고 출생정보, 질문 원문, 답변 원문, 키는 남기지 않는다.
 
 저장된 풀이는 모델을 바꿔도 다시 생성하거나 덮어쓰지 않는다.
 

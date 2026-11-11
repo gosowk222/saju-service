@@ -115,4 +115,27 @@ describe("PDF", () => {
     expect(written.find((item) => item.text === "먼저 묻는 연습")?.font).toMatch(/Bold/);
     expect(written.some((item) => item.text === "두 번째 문단이에요.")).toBe(true);
   }, 30_000);
+
+  it("캐릭터의 장난과 놀림은 순화하지 않고 그대로 쓴다 (글꼴에 없는 그림 이모티콘만 뺀다)", async () => {
+    const original = PDFDocument.prototype.text;
+    const written: string[] = [];
+    const spy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (this: PDFKit.PDFDocument, ...args: unknown[]) {
+      written.push(String(args[0]));
+      return (original as (...rest: unknown[]) => PDFKit.PDFDocument).apply(this, args);
+    });
+    const lines = [
+      "어라~? 일 얘기할 땐 신나더니 보수 얘기만 나오면 왜 얌전해져? 허접~.",
+      "흥, 그건 인정. 으이구, 바보야. 그걸 남 좋은 일에만 쓰면 아깝잖아 ♡",
+    ];
+    try {
+      const messages: StoredMessage[] = lines.map((text, index) => ({ seq: index + 1, topicId: "money", kind: "explanation", text, refs: ["s1"] }));
+      const followups = [{ question: "오 좀 맞히는데? 먼저 연락해도 돼?", answer: "흐, 흐응. 이제 알아봤어? 😏\n\n먼저 연락하면 지는 것 같아서 휴대폰만 들었다 놨다 하지?" }];
+      await renderReadingPdf(input(0, { messages, topicTitles: { money: "돈을 다루는 경향" }, followups }));
+    } finally {
+      spy.mockRestore();
+    }
+    for (const line of lines) expect(written).toContain(line);
+    expect(written).toContain("흐, 흐응. 이제 알아봤어?");
+    expect(written).toContain("먼저 연락하면 지는 것 같아서 휴대폰만 들었다 놨다 하지?");
+  }, 30_000);
 });

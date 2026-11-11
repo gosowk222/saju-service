@@ -20,9 +20,10 @@ import type { NarrationOutputV2, StoredMessage } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { analyzeBirth, toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
 import { analyzeTiming } from "@/server/engine/timing";
-import { LlmError, type LlmUsage } from "@/server/llm/client";
+import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, liveCallBlockReason } from "@/server/llm/config";
-import { classifyQuestion, mergeUsage, narrateReading, toStoredMessages } from "@/server/llm/narrate";
+import { classifyQuestion, narrateReading, toStoredMessages } from "@/server/llm/narrate";
+import { UsageMeter, type UsageSummary } from "@/server/llm/usage";
 import { renderReadingPdf } from "@/server/pdf/render";
 import { applyHighlight } from "@/domain/reading/emphasis";
 import { CURRENT_READING_PROMPT, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
@@ -173,7 +174,7 @@ interface CaseResult {
   readonly pdfPages?: number;
   readonly calls?: number;
   readonly durationMs?: number;
-  readonly usage?: LlmUsage;
+  readonly usage?: UsageSummary;
   readonly text?: string;
   readonly followups?: readonly FollowupResult[];
 }
@@ -226,14 +227,13 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
   const birth = toPublicBirthInput(entry.birth);
   const base = analyzeBirth({ birth, product, nickname: entry.nickname, situationId: entry.situationId });
   const startedAt = Date.now();
-  let usage: LlmUsage | null = null;
+  const meter = new UsageMeter();
   let calls = 0;
   try {
     let analysis = emptyAnalysis(referenceDate);
     if (entry.concern.trim()) {
-      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: entry.concern, lastTurn: null, modelId: model });
+      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: entry.concern, lastTurn: null, modelId: model, meter });
       analysis = classified.analysis;
-      usage = mergeUsage(usage, classified.meta.usage);
       calls += classified.meta.llmCalls;
     }
     const timing = timingFor(analysis, birth, referenceDate);
@@ -244,8 +244,8 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
       chart: base.chart,
       persona,
       config: { modelId: model, promptVersion: CURRENT_READING_PROMPT, schemaVersion: NARRATION_SCHEMA_VERSION, reasoningEffort: LLM_SETTINGS.tasks.reading.reasoningEffort },
+      meter,
     });
-    usage = mergeUsage(usage, meta.usage);
     calls += meta.llmCalls;
     const messages = toStoredMessages(output, product.focusSection.id);
     const rawBubbles = "focus" in output ? [...output.focus, ...output.topics.flatMap((topic) => topic.bubbles)] : [];
@@ -255,9 +255,8 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
     const followups: FollowupResult[] = [];
     let lastTurn: { question: string; answer: string } | null = null;
     for (const followup of skipFollowups ? [] : entry.followups) {
-      const raw = await classifyQuestion({ product, referenceDate, mode: "followup", text: followup.question, lastTurn, modelId: model });
+      const raw = await classifyQuestion({ product, referenceDate, mode: "followup", text: followup.question, lastTurn, modelId: model, meter });
       const classified = { ...raw, analysis: limitToTopics(raw.analysis, new Set(base.plan.topics.map((topic) => topic.inquiryDomain))) };
-      usage = mergeUsage(usage, classified.meta.usage);
       let followupCalls = classified.meta.llmCalls;
       let status: string;
       let answer: string;
@@ -275,8 +274,8 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
           messages,
           lastTurn,
           modelId: model,
+          meter,
         });
-        usage = mergeUsage(usage, answered.meta.usage);
         followupCalls += answered.meta.llmCalls;
         status = answered.status;
         answer = answered.answer;
@@ -316,7 +315,7 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
       pdfPages: pageCount(pdf),
       calls,
       durationMs: Date.now() - startedAt,
-      usage: usage ?? undefined,
+      usage: meter.summary(),
       text: messages.map((message) => `- (${message.kind}${message.topicId ? `/${message.topicId}` : ""}) ${message.text}`).join("\n"),
       followups,
     };
