@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MYOMYO, MYOMYO_1_0_0, MYOMYO_1_1_0, MYOMYO_1_2_0, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
+import { MYOMYO, MYOMYO_1_0_0, MYOMYO_1_1_0, MYOMYO_1_2_0, MYOMYO_1_3_0, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { catchphraseCounter, checkFollowupV2 } from "@/domain/reading/check";
 import { buildNarrationPlan } from "@/domain/reading/focus";
@@ -36,26 +36,34 @@ describe("캐릭터 등록", () => {
   });
 
   it("작업에 고정된 프롬프트 버전에 맞는 캐릭터 설정을 고른다 (이어 쓰는 작업에 새 설정이 섞이지 않게)", () => {
-    expect(MYOMYO.version).toBe("1.3.0");
+    expect(MYOMYO.version).toBe("1.4.0");
     expect(personaVersionFor(CURRENT_READING_PROMPT)).toBe(MYOMYO.version);
     expect(personaVersionFor(CURRENT_FOLLOWUP_PROMPT)).toBe(MYOMYO.version);
+    expect(findPersona("myomyo", personaVersionFor("reading-2.8.0"))).toBe(MYOMYO_1_3_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.7.0"))).toBe(MYOMYO_1_2_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.6.0"))).toBe(MYOMYO_1_1_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.5.0"))).toBe(MYOMYO_1_0_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.4.0"))).toBe(MYOMYO_1_0_0);
-    expect(findPersona("myomyo", "1.3.0")).toBe(MYOMYO);
+    expect(findPersona("myomyo", "1.4.0")).toBe(MYOMYO);
     // 1.1.0에는 시범이 없고, 1.2.0은 시범만 더했다. 1.3.0은 '묘묘다운 순간'과 그 순간이 들어간 시범을 더했다. 성격·예시·말버릇 상한은 같다.
     expect(MYOMYO_1_1_0.demonstrations).toBeUndefined();
     expect(MYOMYO_1_2_0.demonstrations?.map((item) => item.use)).toEqual(["reading", "followup"]);
-    for (const persona of [MYOMYO_1_2_0, MYOMYO]) {
+    for (const persona of [MYOMYO_1_2_0, MYOMYO_1_3_0]) {
       expect(persona.tone).toBe(MYOMYO_1_1_0.tone);
       expect(persona.examples).toBe(MYOMYO_1_1_0.examples);
       expect(persona.catchphrases).toBe(MYOMYO_1_1_0.catchphrases);
     }
     expect(MYOMYO_1_2_0.delivery?.map((item) => item.what)).not.toContain("묘묘다운 순간");
+    expect(MYOMYO_1_3_0.delivery?.map((item) => item.what)).toContain("묘묘다운 순간");
+    expect(MYOMYO_1_3_0.demonstrations![0]!.lines.join(" ")).toContain("봐, 맞지?");
+    // 1.4.0은 판단에 묶인 예시와 시범을 빼고 말투 견본만 둔다. 말버릇 상한과 모델 없이 보내는 문장은 같다.
+    expect(MYOMYO.examples).toEqual([]);
+    expect(MYOMYO.demonstrations).toBeUndefined();
+    expect(MYOMYO.voiceSamples!.length).toBeGreaterThan(5);
+    expect(MYOMYO.catchphrases).toBe(MYOMYO_1_1_0.catchphrases);
     expect(MYOMYO.delivery?.map((item) => item.what)).toContain("묘묘다운 순간");
-    expect(MYOMYO.demonstrations?.map((item) => item.use)).toEqual(["reading", "followup"]);
-    expect(MYOMYO.demonstrations![0]!.lines.join(" ")).toContain("봐, 맞지?");
+    // 견본은 특정 주제의 판단 내용을 담지 않는다 (돈·연애·면접·지역 같은 주제어가 없다).
+    for (const line of MYOMYO.voiceSamples!) expect(line).not.toMatch(/보수|돈|연애|호감|면접|이사|물가|강|바다|가족|친구/);
     // 따로 남긴 설정이 없는 버전이면 현재 설정을 준다.
     expect(findPersona("myomyo", "9.9.9")).toBe(MYOMYO);
     // 이전 설정은 그대로다 (설명에서 장난을 줄이라던 문구도 그 버전에는 남아 있다).
@@ -216,9 +224,46 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(parsed.commonCaveats.length).toBeGreaterThan(0);
   });
 
-  it("최초 풀이(reading-2.8.0): 중심 주제와 질문 답은 깊게, 설명 말풍선은 세네 문장까지, 반응 말풍선은 목표와 따로, 주제마다 묘묘다운 순간", () => {
+  it("최초 풀이(reading-2.9.0): 판단에 묶인 예시와 시범을 빼고 말투 견본만 넣는다. 분량·재료 규칙은 2.8.0 그대로", () => {
     const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.8.0");
+    const before = getReadingPrompt("reading-2.8.0")({ plan, persona: MYOMYO_1_3_0, previousIssues: [] });
+    expect(CURRENT_READING_PROMPT).toBe("reading-2.9.0");
+    expect(instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
+    for (const text of [
+      "말투 견본 (어떤 주제에도 묶이지 않은",
+      ...MYOMYO.voiceSamples!,
+      "묘묘다운 순간: 설명 사이사이에",
+      "[캐릭터]의 말투 견본은 말투만 보여 준다",
+      "특정 주제에서만 캐릭터가 나오고 다른 주제에서 꺼지면 실패다",
+      // 2.8.0에서 이어받은 것
+      "[재료를 옮겨 적지 않는다]",
+      "weight가 focus·lead인 주제는 풀이의 중심이다",
+      "이유와 방법을 푸는 설명은 세네 문장(bubbleChars자 안팎)까지 쓴다",
+      "말버릇과 이모티콘도 묘묘의 일부다",
+    ]) {
+      expect(instructions).toContain(text);
+    }
+    // 판단·주제에 묶인 예시와 그 문장, 재료 시범, 그것을 가리키던 문구가 없다.
+    for (const text of [
+      "같은 판단, 다른 말",
+      "밋밋한 말",
+      "재료를 묘묘의 말로 바꾸는 시범",
+      "일 얘기할 땐 그렇게 신나더니",
+      "하나 붙잡으면 끝장 볼 때까지",
+      "답할 자리도 남겨 둬",
+      "머리 복잡할 때",
+      "〈",
+      "비교 예시와 시범",
+      "예시나 시범과 같은 주제에서만",
+    ]) {
+      expect(instructions).not.toContain(text);
+    }
+    expect(instructions.length).toBeLessThan(before.instructions.length);
+    expect(input).toBe(before.input);
+  });
+
+  it("최초 풀이(reading-2.8.0, 그 버전으로 시작한 작업): 중심 주제와 질문 답은 깊게, 설명 말풍선은 세네 문장까지, 반응 말풍선은 목표와 따로, 주제마다 묘묘다운 순간", () => {
+    const { instructions, input } = getReadingPrompt("reading-2.8.0")({ plan, persona: MYOMYO_1_3_0, previousIssues: [] });
     expect(instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
     for (const text of [
       // 2.7.0에서 이어받은 것
@@ -244,8 +289,8 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(JSON.parse(input)).toHaveProperty("commonCaveats");
   });
 
-  it("후속 답변(followup-2.8.0): 같은 캐릭터와 호칭, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기, 재료를 옮겨 적지 않기, 묘묘다운 순간", () => {
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.8.0");
+  it("후속 답변(followup-2.9.0): 같은 캐릭터와 호칭, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기, 재료를 옮겨 적지 않기, 묘묘다운 순간, 말투 견본만", () => {
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.9.0");
     const prompt = buildFollowupPrompt({
       persona: MYOMYO,
       nickname: "하나",
@@ -272,17 +317,21 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
       "후속 답변:",
       "지금의 마음은 이번 메시지로 판단한다",
       "lastTurn.answer의 말투를 따라 하지 않는다",
-      "흐, 흐응. 이제 알아봤어?",
-      "매번 면접까지 갔다가 떨어지면 속상하지.",
+      "흐, 흐응. 뭐, 당연하지.",
       "으…… 그 부분은 내가 잘못 짚었네.",
       "[재료를 옮겨 적지 않는다]",
-      "돈 관리 물어볼 줄 알았어",
       "sections[].angle: 답을 쓰기 전에",
       "답마다 [캐릭터]의 '묘묘다운 순간'",
       "이유와 방법을 푸는 문단은 두세 문장까지 쓴다",
       "말버릇과 이모티콘도 묘묘의 일부다",
+      "말투 견본 (어떤 주제에도 묶이지 않은",
+      "[캐릭터]의 말투 견본은 말투만 보여 준다",
     ]) {
       expect(prompt.instructions).toContain(text);
+    }
+    // 판단·상황에 묶인 예시와 시범은 넣지 않는다 (1.4.0).
+    for (const text of ["같은 판단, 다른 말", "밋밋한 말", "재료를 묘묘의 말로 바꾸는 시범", "매번 면접까지 갔다가", "돈 관리 물어볼 줄 알았어", "휴대폰만 들었다 놨다"]) {
+      expect(prompt.instructions).not.toContain(text);
     }
     // 2.5.0의 "lastTurn에 힘들다는 말이 있으면 놀림을 멈춘다"가 없다.
     expect(prompt.instructions).not.toContain("question 요약, userContext, lastTurn에 사용자가 진지하게");

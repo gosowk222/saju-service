@@ -233,9 +233,10 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 
-  it("새 작업은 현재 프롬프트(reading-2.8.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+  it("새 작업은 현재 프롬프트(reading-2.9.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
     expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.8.0");
+    expect(CURRENT_READING_PROMPT).toBe("reading-2.9.0");
+    expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
     expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
     expect(isProgressivePrompt(CURRENT_READING_PROMPT)).toBe(true);
     // 작업을 시작할 때 이 값을 고정한다 (generate.ts → claim_generation의 p_reasoning_effort). 질문 정리와 후속 답변은 low 그대로다.

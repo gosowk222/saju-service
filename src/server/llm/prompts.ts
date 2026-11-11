@@ -24,7 +24,9 @@ import type {
  * - reading-2.0.0 / narration-2.0.0: 계획 2.0.0의 첫 풀이 프롬프트 (이미 이 버전으로 시작한 작업에만).
  * - reading-2.1.0 / narration-2.1.0: 채팅 말투, 장면을 녹이는 방식, 직설적인 약점, 말풍선마다 굵게 보일 구절(highlight).
  * - reading-2.2.0 / narration-2.1.0: 가족·친구·지역 주제와 행운 표, 과거 짐작 말투, 건강·투자·미래의 완곡한 표현.
- * - reading-2.8.0 / narration-2.2.0: 현재 풀이 (캐릭터 묘묘 1.3.0, 추론 설정 medium). 2.7.0 결과가 짧아지고 으스대기·놀리기가 없었다.
+ * - reading-2.9.0 / narration-2.2.0: 현재 풀이 (캐릭터 묘묘 1.4.0, 추론 설정 medium). 프롬프트 다이어트: 판단에 묶인 비교 예시와 재료 시범을
+ *   빼고 말투 견본만 넣는다(personaBlockV5). 2.8.0 결과에서 예시 문장이 같은 판단의 주제에 옮겨 쓰였다 (docs/READING_QUALITY.md 22절).
+ * - reading-2.8.0 / narration-2.2.0: 2.9.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.3.0, 추론 설정 medium). 2.7.0 결과가 짧아지고 으스대기·놀리기가 없었다.
  *   설명 말풍선은 다시 세네 문장까지, 반응 말풍선은 target과 따로, 중심 주제와 질문 답은 더 깊게, 주제마다 '묘묘다운 순간',
  *   말버릇 안내를 natural로 (docs/READING_QUALITY.md 21절). 입력과 출력 형식은 2.7.0과 같다. 규칙은 2.7.0에서 구절만 바꿔 만든다 (revise).
  * - reading-2.7.0 / narration-2.2.0: 2.8.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.2.0). 2.6.0 결과에서 구체적인 조언 대부분이 재료 문장을 반말로 옮긴 것이었다.
@@ -40,7 +42,8 @@ import type {
  *   주제가 완성될 때마다 화면에 먼저 보여 주는 생성에서 쓴다.
  * - reading-2.3.0 / narration-2.1.0: 상품 3.1.0. 명리 설명 재료(lore)를 짧게 소개하기,
  *   약점·강점을 선언하지 않고 알아맞히듯 말하기, 어울리는 직업과 업종. 입력 형식은 2.2.0과 같고 lore만 더한다.
- * - followup-2.8.0 / followup-output-2.2.0: 현재 후속 질문 답변 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 설명 문단은 두세 문장까지.
+ * - followup-2.9.0 / followup-output-2.2.0: 현재 후속 질문 답변 (캐릭터 묘묘 1.4.0). 2.8.0과 같고, 예시·시범 대신 말투 견본.
+ * - followup-2.8.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 설명 문단은 두세 문장까지.
  * - followup-2.7.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범,
  *   답마다 먼저 반응하고 짚을 점을 메모(angle)로 쓰고 시작하기, 중복을 덜어 낸 입력을 더했다.
  * - followup-2.6.0 / followup-output-2.1.0: 기록용 (캐릭터 묘묘 1.1.0). 최초 풀이 2.6.0과 같은 세 층 구성.
@@ -984,6 +987,24 @@ function personaBlockV4(
 }
 
 /**
+ * 캐릭터 블록 (reading-2.9.0, followup-2.9.0, 묘묘 1.4.0부터). 판단에 묶인 비교 예시와 재료 시범을 넣지 않고,
+ * 내용과 상관없는 말투 견본만 목록으로 넣는다. 예시마다 '언제 → 밋밋한 말 → 캐릭터의 말'을 붙이면 모델이 같은 판단이 나온 주제에
+ * 그 문장을 옮겨 썼다 (docs/READING_QUALITY.md 22절). 말버릇 안내는 natural.
+ */
+function personaBlockV5(persona: Persona, expression: NarrationPlanV2["expression"], use: "reading" | "followup"): string {
+  const samples = persona.voiceSamples ?? [];
+  return [
+    personaBlockV3(persona, expression, use, "natural"),
+    ...(samples.length
+      ? [
+          "말투 견본 (어떤 주제에도 묶이지 않은, 말투만 보여 주는 문장이다. 그대로 옮기지 말고 이런 결로 새로 말한다):",
+          ...samples.map((line) => `- ${line}`),
+        ]
+      : []),
+  ].join("\n");
+}
+
+/**
  * 작성 재료의 중복을 덜어 낸다 (reading-2.7.0, followup-2.7.0). 뜻은 그대로다.
  * - 같은 명리 근거(lore)와 이유(basis)는 처음 나온 해석에만 넣는다. 한 사주에서 같은 근거 한 줄이 열 번 넘게 들어가
  *   여러 주제가 같은 비율·글자 설명을 되풀이하게 만들었다 (2026-11-11 실제 사례: 같은 lore 15번).
@@ -1176,6 +1197,19 @@ const READING_RULES_2_8_0 = revise(READING_RULES_2_7_0, [
   ],
 ]);
 
+/**
+ * reading-2.9.0: 2.8.0과 같은 재료·입력·출력 형식·분량 (캐릭터 묘묘 1.4.0). 캐릭터 블록에서 판단에 묶인 예시와 시범을 빼고
+ * 말투 견본만 남겼으므로(personaBlockV5), 예시·시범을 가리키던 문구를 견본 기준으로 바꿨다.
+ */
+const READING_RULES_2_9_0 = revise(READING_RULES_2_8_0, [
+  ["- [캐릭터]의 '재료를 묘묘의 말로 바꾸는 시범'이 기준이다.", "- 재료 문장 대신, [캐릭터]의 말투로 이 사람을 직접 보며 하는 말로 쓴다."],
+  ["예시나 시범과 같은 주제에서만 캐릭터가 나오고 다른 주제에서 꺼지면 실패다.", "특정 주제에서만 캐릭터가 나오고 다른 주제에서 꺼지면 실패다."],
+  [
+    "- [캐릭터]의 비교 예시와 시범은 방향을 보여 준다. 문장과 문장 틀을 그대로 쓰지 말고, 이 사람의 재료와 상황으로 같은 방식을 쓴다.",
+    "- [캐릭터]의 말투 견본은 말투만 보여 준다. 견본 문장이나 그 문장 틀을 풀이에 그대로 옮기지 않고, 같은 견본에서 나온 말을 두 번 쓰지 않는다.",
+  ],
+]);
+
 /** reading-2.7.0의 입력. 2.6.0과 같은 재료에서 근거·주의사항의 중복을 덜어 낸다 (materialInput). */
 function readingInput3(args: ReadingPromptV2Args): string {
   const base = JSON.parse(readingInput2(args, true)) as Record<string, unknown> & { topics: Record<string, unknown>[] };
@@ -1363,6 +1397,14 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
       input: readingInput3(v2),
     };
   },
+  // 2.8.0과 같은 입력과 출력 형식. 캐릭터 블록은 말투 견본만 (personaBlockV5).
+  "reading-2.9.0": (args) => {
+    const v2 = args as ReadingPromptV2Args;
+    return {
+      instructions: `${personaBlockV5(v2.persona, v2.plan.expression, "reading")}\n\n${READING_RULES_2_9_0}`,
+      input: readingInput3(v2),
+    };
+  },
 };
 
 /**
@@ -1372,12 +1414,12 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
  */
 export const PROMPTS_FOR_PLAN: Readonly<Record<string, { readonly prompt: string; readonly schema: string }>> = {
   "1.0.0": { prompt: "reading-1.0.0", schema: "narration-1.0.0" },
-  "2.0.0": { prompt: "reading-2.8.0", schema: "narration-2.2.0" },
+  "2.0.0": { prompt: "reading-2.9.0", schema: "narration-2.2.0" },
 };
-export const CURRENT_READING_PROMPT = "reading-2.8.0";
+export const CURRENT_READING_PROMPT = "reading-2.9.0";
 
 /** 주제가 완성될 때마다 먼저 보여 주고, 검사에 걸리면 남은 부분만 이어 쓰는 프롬프트. 이전 버전으로 시작한 작업은 한 번에 받는다. */
-const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set(["reading-2.4.0", "reading-2.5.0", "reading-2.6.0", "reading-2.7.0", "reading-2.8.0"]);
+const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set(["reading-2.4.0", "reading-2.5.0", "reading-2.6.0", "reading-2.7.0", "reading-2.8.0", "reading-2.9.0"]);
 export const isProgressivePrompt = (version: string) => PROGRESSIVE_PROMPTS.has(version);
 /** 현재 프롬프트와 함께 쓰는 출력 형식 (PROMPTS_FOR_PLAN의 계획 2.0.0 값과 같다). */
 export const NARRATION_SCHEMA_VERSION = "narration-2.2.0";
@@ -1403,6 +1445,8 @@ const PERSONA_VERSION_FOR_PROMPT: Readonly<Record<string, string>> = {
   "followup-2.7.0": "1.2.0",
   "reading-2.8.0": "1.3.0",
   "followup-2.8.0": "1.3.0",
+  "reading-2.9.0": "1.4.0",
+  "followup-2.9.0": "1.4.0",
 };
 export const personaVersionFor = (promptVersion: string): string => PERSONA_VERSION_FOR_PROMPT[promptVersion] ?? "1.0.0";
 
@@ -1594,7 +1638,7 @@ export function buildQuestionPrompt(args: {
 
 // ─── followup-2.0.0 / 2.1.0 ─────────────────────────────────
 
-export const CURRENT_FOLLOWUP_PROMPT = "followup-2.8.0";
+export const CURRENT_FOLLOWUP_PROMPT = "followup-2.9.0";
 export const FOLLOWUP_SCHEMA_VERSION = "followup-output-2.2.0";
 
 const FOLLOWUP_RULES_2_0_0 = `
@@ -2017,6 +2061,15 @@ const FOLLOWUP_RULES_2_8_0 = revise(FOLLOWUP_RULES_2_7_0, [
   ],
 ]);
 
+/** followup-2.9.0: 2.8.0과 같은 판단 규칙·입력·출력 형식 (캐릭터 묘묘 1.4.0). 예시·시범 대신 말투 견본을 가리킨다. */
+const FOLLOWUP_RULES_2_9_0 = revise(FOLLOWUP_RULES_2_8_0, [
+  ["- 문단을 쓴 뒤 재료 문장에서 어미만 바꾼 문장이면 다시 쓴다. [캐릭터]의 '재료를 묘묘의 말로 바꾸는 시범'이 기준이다.", "- 문단을 쓴 뒤 재료 문장에서 어미만 바꾼 문장이면 다시 쓴다."],
+  [
+    "- [캐릭터]의 비교 예시와 시범은 방향만 보여 준다. 문장과 문장 틀을 그대로 쓰지 않는다.",
+    "- [캐릭터]의 말투 견본은 말투만 보여 준다. 견본 문장이나 그 문장 틀을 그대로 옮기지 않는다.",
+  ],
+]);
+
 const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-2.0.0": FOLLOWUP_RULES_2_0_0,
   "followup-2.1.0": FOLLOWUP_RULES_2_1_0,
@@ -2027,6 +2080,7 @@ const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-2.6.0": FOLLOWUP_RULES_2_6_0,
   "followup-2.7.0": FOLLOWUP_RULES_2_7_0,
   "followup-2.8.0": FOLLOWUP_RULES_2_8_0,
+  "followup-2.9.0": FOLLOWUP_RULES_2_9_0,
 };
 
 const FOLLOWUP_V2_JSON_SCHEMA = {
@@ -2102,7 +2156,7 @@ export interface FollowupPromptArgs {
 export function buildFollowupPrompt(args: FollowupPromptArgs) {
   const material = materialInput([args.statements]);
   return {
-    instructions: `${personaBlockV4(args.persona, args.expression, "followup", "natural")}\n\n${FOLLOWUP_RULES[CURRENT_FOLLOWUP_PROMPT]}`,
+    instructions: `${personaBlockV5(args.persona, args.expression, "followup")}\n\n${FOLLOWUP_RULES[CURRENT_FOLLOWUP_PROMPT]}`,
     input: JSON.stringify({
       nickname: args.nickname,
       address: addressFor(args.persona, args.nickname),
