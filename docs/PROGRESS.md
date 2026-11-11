@@ -1,5 +1,28 @@
 # 진행 상황
 
+## 명리 해석 지침, 묘묘 2.1.0, 최초 풀이 토큰 기록 (feat/myomyo-guide-token-usage, 2026-11-12)
+
+페르소나를 처음부터 다시 만든 작업(`refactor/myomyo-persona-rebuild`, reading-3.0.0)이 실제 생성에서 재시도까지 모두 실패해 되돌리고, 그 앞 상태(reading-2.9.0)에서 다시 시작했다. 진단과 변경은 `docs/READING_QUALITY.md` 23절, 지침과 원문 대응표는 `docs/READING_GUIDE.md`, 캐릭터는 `docs/personas/myomyo.md`, 평가는 `docs/personas/myomyo-evaluation.md`, 토큰은 `docs/LLM_OPERATIONS.md` "토큰 사용량 기록".
+
+| 항목 | 결정 |
+| --- | --- |
+| 해석 지침 | 사용자가 준 시스템 프롬프트 원문에서 해석 관점만 정리한 guide-1.0.0 (`src/domain/reading/guide.ts`). 직접 계산, 고정 날짜, 존댓말 전문가 화자, 짧은 답 금지, 보고서 형식, 단일 요소 단정, 성별 고정, 건강 진단은 제외 |
+| 지시 구성 | reading-3.1.0, followup-3.1.0. [캐릭터] → [역할과 우선순위] → [명리 해석 지침] → 출력 조건. 호출은 그대로 한 번 |
+| 캐릭터 | 묘묘 2.1.0. 정체성·관계·성격·말하는 방식·상황에 따른 반응·놀림의 기준만. 견본, 판단별 예시, 말버릇 목록과 횟수, 이모티콘 개수, '묘묘다운 순간' 의무 제거. 말버릇 횟수 검사도 2.1.0에는 없음 |
+| 재료 | 칸 구조는 2.9.0과 같다. 같은 행동 문장은 처음 나온 해석에만 |
+| 그대로 둔 것 | 추론 설정(최초 풀이 medium), 모델, 출력 형식, 정확성 검사, 엔진·규칙, 상품, 로그인·이용권·결제, 저장·다시 보기·PDF |
+| 토큰 | 시도마다 `generation_attempts`, 풀이별 합계 `generation_usage` 뷰 (migration 20261112120000). 실패한 시도, 응답 뒤 형식 오류, 재작성 호출까지 더하고, usage를 받지 못한 호출은 0이 아니라 불완전으로 표시. 실패한 후속 질문도 쓴 사용량을 `followups.usage`에 남김 |
+| 버전 번호 | reading-3.0.0, 묘묘 2.0.0은 되돌린 작업의 번호라 쓰지 않음. 그 번호에 고정된 작업은 `prompt_version_unavailable`로 정리 |
+| 비교 도구 | `npm run llm:export`(모델 호출 없음)로 같은 사례의 버전별 지시·입력 파일, `npm run llm:render`로 플레이그라운드 결과 읽기 |
+
+| 검사 | 결과 |
+| --- | --- |
+| typecheck, lint | 통과 |
+| 단위 테스트 | 449개 통과 (토큰 집계·DB 기록·권한·문서 SQL 실행, 지시 구성, 버전 선택 추가) |
+| 브라우저 테스트 (`test:e2e:clean`, 빌드 포함) | 64개 통과 (실패 뒤 재시도한 풀이의 시도별 사용량 기록 확인 추가) |
+| 실제 모델 | LIVE_NOT_RUN |
+| 운영 DB의 migration 적용과 실제 사용량 저장 | NOT_RUN (에이전트는 운영 DB에 접근하지 않음) |
+
 ## 묘묘의 성격을 본문과 후속 답변까지 (fix/myomyo-persona-consistency, 2026-11-11)
 
 실제 풀이(사용자 공유, 원문 미보관)가 인사 한 줄만 캐릭터이고 본문과 후속 답변은 밋밋한 반말 상담문이었다. 진단(확인된 사실과 추정)과 변경은 `docs/READING_QUALITY.md` 19절, 설정은 `docs/personas/myomyo.md`, 비교 예시·평가 기준·직접 확인 순서는 `docs/personas/myomyo-evaluation.md`.
