@@ -83,11 +83,18 @@ export async function answerAnalyzedFollowup(input: {
     .filter((message) => message.topicId !== null && (!domains.size || relevantIds.has(message.topicId)))
     .slice(-LLM_SETTINGS.followupDeliveredMessages);
 
-  const facts = [...(input.initialAnalysis ? inScopeFacts(product, input.initialAnalysis) : []), ...inScopeFacts(product, analysis)];
+  // 처음 궁금한 점에서 알려 준 사실(fact)과 이번 메시지에서 알려 준 사실(message)을 나눠 둔다.
+  // 생성 입력에서 출처(from)로 구분해, 예전에 한 '힘들다'는 말 때문에 지금 답의 말투가 바뀌지 않게 한다.
+  const earlier = input.initialAnalysis ? inScopeFacts(product, input.initialAnalysis) : [];
+  const current = inScopeFacts(product, analysis);
   const base = baseContext(plan);
+  const added: Pick<UserContextStatement, "text" | "source">[] = [
+    ...earlier.map((text) => ({ text: `사용자가 직접 알려 준 상황: ${text}`, source: "fact" as const })),
+    ...current.map((text) => ({ text: `이번 메시지에서 사용자가 알려 준 상황: ${text}`, source: "message" as const })),
+  ];
   const userContext: UserContextStatement[] = [
     ...base,
-    ...facts.map((text, index) => ({ ref: `u${base.length + index + 1}`, kind: "user-context" as const, text: `사용자가 직접 알려 준 상황: ${text}`, source: "fact" as const })),
+    ...added.map((item, index) => ({ ref: `u${base.length + index + 1}`, kind: "user-context" as const, ...item })),
   ];
   const timingAll = timing.flatMap((entry) => [...entry.months, ...entry.years]);
 

@@ -18,7 +18,7 @@ import {
   type NarrationInput,
   type NewMessage,
 } from "@/server/llm/narrate";
-import { isPlanV2Prompt, isProgressivePrompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { isPlanV2Prompt, isProgressivePrompt, personaVersionFor, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
@@ -108,7 +108,8 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     };
     if (config.modelId === "unconfigured") throw new LlmError("model_not_configured", "모델이 설정되지 않았습니다.", 0);
 
-    const persona = findPersona(reading.persona_id as string);
+    // 캐릭터 설정은 작업에 고정된 프롬프트 버전에 맞춘다. 이전 프롬프트로 이어 쓰는 작업에 새 캐릭터 설정이 섞이지 않게 한다.
+    const persona = findPersona(reading.persona_id as string, personaVersionFor(config.promptVersion));
     if (!persona) throw new Error("persona_unavailable");
     const product = findProduct(reading.product_id as string);
     const chart = reading.chart as ChartView;
@@ -190,7 +191,15 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
         usage,
         llmCalls,
         durationMs,
-        versions: { promptVersion: config.promptVersion, schemaVersion: config.schemaVersion, personaVersion: persona.version, ...(prepared?.versions ?? { planVersion: plan.planVersion }) },
+        // personaVersion은 실제로 쓴 캐릭터 설정이다. 풀이 기록을 만들 때의 캐릭터 버전(작성 재료의 값)은 planPersonaVersion으로 따로 남긴다.
+        // (이전에는 작성 재료의 값이 뒤에서 덮어써서 실제로 쓴 버전이 남지 않았다.)
+        versions: {
+          ...(prepared?.versions ?? { planVersion: plan.planVersion }),
+          promptVersion: config.promptVersion,
+          schemaVersion: config.schemaVersion,
+          personaVersion: persona.version,
+          planPersonaVersion: plan.personaVersion,
+        },
       },
     });
     console.info("[generation] done", {

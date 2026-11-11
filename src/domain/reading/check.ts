@@ -239,9 +239,21 @@ const STRONG_PROFANITY = /씨발|시발(?!점)|ㅅㅂ|존나|좆|병신|ㅂㅅ|�
 /** 그림 이모티콘(😏처럼 기본 문자 영역 밖의 것). ♡는 말버릇으로 따로 센다. */
 const EMOJI = /(?=\p{Extended_Pictographic})[\u{10000}-\u{10FFFF}]/gu;
 
+/** 말버릇이 문장에 나온 횟수. wordStart면 앞 글자가 한글이 아닐 때만 센다 ('어라~?'는 세고 '들어라'는 세지 않는다). */
+function occurrences(text: string, phrase: { readonly pattern: string; readonly wordStart?: boolean }): number {
+  if (!phrase.wordStart) return text.split(phrase.pattern).length - 1;
+  let found = 0;
+  for (let index = text.indexOf(phrase.pattern); index !== -1; index = text.indexOf(phrase.pattern, index + phrase.pattern.length)) {
+    if (!/[가-힣]/.test(text[index - 1] ?? "")) found += 1;
+  }
+  return found;
+}
+
 /**
  * 말버릇과 이모티콘을 센다. 설정(personas)의 횟수를 처음 넘는 순간 한 번만 알린다.
  * scope가 reading이면 최초 풀이 전체, answer면 후속 답변 하나 기준이다 (questions는 질문 수).
+ * 이 상한은 같은 말이 반복되는 것을 막을 뿐, 캐릭터가 잘 드러났는지는 판단하지 않는다.
+ * 다시 쓰게 할 때는 그 말만 바꾸게 하고, 장난이나 지적까지 줄이라고 하지 않는다.
  */
 export function catchphraseCounter(persona: Persona | undefined, scope: "reading" | "answer", questions = 1) {
   const counts = new Map<string, number>();
@@ -256,11 +268,11 @@ export function catchphraseCounter(persona: Persona | undefined, scope: "reading
       counts.set(key, total);
       if (total > max && !reported.has(key)) {
         reported.add(key);
-        issues.push(`말버릇 '${label}'을(를) 너무 자주 썼습니다 (${max}번까지). 같은 말버릇과 놀림을 반복하지 않는다.`);
+        issues.push(`말버릇 '${label}'을(를) ${max}번보다 많이 썼습니다. 아직 보내지 않은 부분에서는 이 말 대신 다른 반응을 쓴다 (장난, 지적, 비유는 그대로 둔다).`);
       }
     };
     for (const phrase of persona.catchphrases) {
-      bump(phrase.pattern, phrase.text, text.split(phrase.pattern).length - 1, limitOf(phrase.maxPerReading, phrase.maxPerAnswer));
+      bump(phrase.pattern, phrase.text, occurrences(text, phrase), limitOf(phrase.maxPerReading, phrase.maxPerAnswer));
     }
     bump("emoji", "그림 이모티콘", (text.match(EMOJI) ?? []).length, limitOf(persona.emojiLimit.perReading, persona.emojiLimit.perAnswer));
     return issues;
@@ -339,7 +351,8 @@ const CITES = /^[sft]\d+$/;
 
 /**
  * 풀이를 부분마다 검사하는 도구. 전체 검사(checkNarrationV2)와, 주제가 완성될 때마다 먼저 보여 주는 생성이 함께 쓴다.
- * 같은 문장 반복은 한 검사기 안에서 이어서 확인한다.
+ * 같은 문장 반복과 말버릇 횟수는 한 검사기 안에서 이어서 센다. 검사한 문장은 통과 여부와 관계없이 세므로,
+ * 먼저 보여 주는 생성은 시도마다 새 검사기를 만들고 실제로 보낸 문장만 remember로 넣는다.
  */
 export interface NarrationChecker {
   /** 시작이나 마무리 말풍선. */
@@ -354,7 +367,16 @@ export interface NarrationChecker {
   readonly remember: (text: string) => void;
 }
 
-export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, excluded: readonly ExcludedQuestion[] = []): NarrationChecker {
+/**
+ * persona는 이 작업이 실제로 쓰는 캐릭터 설정이다 (작업에 고정된 프롬프트 버전에 맞춘 설정).
+ * 없으면 풀이 기록의 캐릭터 현재 설정으로 센다.
+ */
+export function narrationChecker(
+  plan: NarrationPlanV2,
+  chart: ChartView,
+  excluded: readonly ExcludedQuestion[] = [],
+  persona: Persona | undefined = findPersona(plan.base.personaId),
+): NarrationChecker {
   const timing = timingStatements(plan);
   const dates = allowedDates(timing);
   const percents = planPercents(plan);
@@ -363,7 +385,7 @@ export function narrationChecker(plan: NarrationPlanV2, chart: ChartView, exclud
   const shared = [...plan.base.facts.map((fact) => fact.ref), ...plan.userContext.map((item) => item.ref)];
   const questionRefs = plan.questions.map((question) => question.ref);
   const hardMax = plan.length.bubbleHardMax;
-  const tics = catchphraseCounter(findPersona(plan.base.personaId), "reading");
+  const tics = catchphraseCounter(persona, "reading");
 
   const bubbleIssues = (bubble: NarrationBubble, where: string, allowed: ReadonlySet<string>, scenesAllowed: boolean): string[] => {
     const issues: string[] = [];
@@ -447,9 +469,10 @@ export function checkNarrationV2(
   plan: NarrationPlanV2,
   chart: ChartView,
   excluded: readonly ExcludedQuestion[] = [],
+  persona?: Persona,
 ): string[] {
   const issues: string[] = [];
-  const check = narrationChecker(plan, chart, excluded);
+  const check = narrationChecker(plan, chart, excluded, persona ?? findPersona(plan.base.personaId));
 
   const expected = plan.topics.map((topic) => topic.topicId).join(",");
   const actual = output.topics.map((topic) => topic.topicId).join(",");

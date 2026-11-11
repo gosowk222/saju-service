@@ -10,7 +10,7 @@ import { ApiError } from "@/server/api";
 import { LlmError, type LlmUsage } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
-import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, personaVersionFor, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems, type FollowupStatus } from "./followup-core";
@@ -114,7 +114,8 @@ export async function askFollowup(input: {
     ]);
     if (internals.error || reading.error || messages.error || previous.error) throw new Error("load_failed");
 
-    const persona = findPersona(reading.data.persona_id as string);
+    // 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트에 맞는 캐릭터 설정을 쓴다 (followups.prompt_version으로 버전을 알 수 있다).
+    const persona = findPersona(reading.data.persona_id as string, personaVersionFor(CURRENT_FOLLOWUP_PROMPT));
     const product = findProduct(reading.data.product_id as string);
     if (!persona || !product) throw new Error("configuration_unavailable");
     const plan = internals.data.plan as AnyReadingPlan;

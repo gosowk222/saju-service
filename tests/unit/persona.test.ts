@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { MYOMYO, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
+import { MYOMYO, MYOMYO_1_0_0, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { catchphraseCounter, checkFollowupV2 } from "@/domain/reading/check";
 import { buildNarrationPlan } from "@/domain/reading/focus";
 import { emptyAnalysis } from "@/domain/reading/question";
 import { analyzeBirth, toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
-import { CURRENT_FOLLOWUP_PROMPT, CURRENT_READING_PROMPT, buildFollowupPrompt, getReadingPrompt } from "@/server/llm/prompts";
+import { CURRENT_FOLLOWUP_PROMPT, CURRENT_READING_PROMPT, buildFollowupPrompt, getReadingPrompt, personaVersionFor } from "@/server/llm/prompts";
 import { withoutEmoji } from "@/server/pdf/render";
 
-/** 캐릭터 묘묘 (persona myomyo 1.0.0). 설정은 src/domain/personas 한곳에서 읽는다. */
+/** 캐릭터 묘묘 (persona myomyo 1.1.0, 이전 설정 1.0.0은 그 프롬프트로 시작한 작업용). 설정은 src/domain/personas 한곳에서 읽는다. */
 
 const place = { timezoneId: "Asia/Seoul", longitudeDeg: 126.9784, latitudeDeg: 37.566, label: "서울특별시", source: "geonames:1835848" };
 const base: AnalyzeInput = {
@@ -33,6 +33,22 @@ describe("캐릭터 등록", () => {
     const { plan, persona } = analyze();
     expect([plan.personaId, plan.personaVersion]).toEqual(["myomyo", MYOMYO.version]);
     expect(persona.id).toBe("myomyo");
+  });
+
+  it("작업에 고정된 프롬프트 버전에 맞는 캐릭터 설정을 고른다 (이어 쓰는 작업에 새 설정이 섞이지 않게)", () => {
+    expect(MYOMYO.version).toBe("1.1.0");
+    expect(personaVersionFor(CURRENT_READING_PROMPT)).toBe(MYOMYO.version);
+    expect(personaVersionFor(CURRENT_FOLLOWUP_PROMPT)).toBe(MYOMYO.version);
+    expect(findPersona("myomyo", personaVersionFor("reading-2.5.0"))).toBe(MYOMYO_1_0_0);
+    expect(findPersona("myomyo", personaVersionFor("reading-2.4.0"))).toBe(MYOMYO_1_0_0);
+    expect(findPersona("myomyo", "1.1.0")).toBe(MYOMYO);
+    // 따로 남긴 설정이 없는 버전이면 현재 설정을 준다.
+    expect(findPersona("myomyo", "9.9.9")).toBe(MYOMYO);
+    // 이전 설정은 그대로다 (설명에서 장난을 줄이라던 문구도 그 버전에는 남아 있다).
+    expect(MYOMYO_1_0_0.tone.join()).toContain("설명하는 부분은 장난을 줄이고");
+    expect(MYOMYO_1_0_0.catchphrases.find((phrase) => phrase.pattern === "허접")?.maxPerReading).toBe(1);
+    // 모델 없이 보내는 문장은 두 설정이 같다.
+    expect(MYOMYO_1_0_0.lines).toBe(MYOMYO.lines);
   });
 });
 
@@ -103,30 +119,57 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
   const { plan: basePlan } = analyze();
   const plan = buildNarrationPlan({ base: basePlan, product: FIRST_OVERVIEW, analysis: emptyAnalysis("2026-11-11"), timing: [] });
 
-  it("최초 풀이: 말씨, 상황별 반응, 말버릇 횟수, 말투 예시가 들어가고 판단은 재료를 따르게 한다", () => {
+  it("최초 풀이(reading-2.6.0): 캐릭터 설정이 지시 맨 앞에 오고, 설명 본문에서 성격을 드러내는 방식과 비교 예시가 들어간다", () => {
     const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.5.0");
+    expect(CURRENT_READING_PROMPT).toBe("reading-2.6.0");
+    expect(instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
     for (const text of [
-      "캐릭터 이름: 묘묘",
       MYOMYO.intro,
       "말씨: 반말",
-      "장난칠 얘기가 아니네",
+      "내용을 전달하는 방식",
+      "주제 넘기기:",
+      "밋밋한 말 (이렇게 쓰지 않는다)",
+      "일 얘기할 땐 그렇게 신나더니",
+      "흥, 하나 붙잡으면 끝장 볼 때까지 안 놓는 건 인정",
       "잘못 짚었네",
-      "허접~.(1/1)",
-      "그림 이모티콘: 3개 / 1개까지",
-      "[캐릭터와 판단]",
-      "놀림이나 장난 뒤에는 반드시 설명과 해결 방법이 이어진다",
+      "허접~.(2)",
+      "그림 이모티콘: 3개까지",
+      "1층. 사실과 판단",
+      "2층. 답할 내용",
+      "3층. 전달 방식",
+      "설명하는 동안 캐릭터를 끄고 앞뒤에만 농담을 붙이지 않는다",
+      "이름, 감탄사, 이모티콘, 말버릇을 지워도 캐릭터가 한 말처럼 읽혀야 한다",
     ]) {
       expect(instructions).toContain(text);
     }
-    // 존댓말과 '님' 호칭을 가정한 문구가 규칙에 남아 있지 않고, 상품 표현 강도가 캐릭터의 약한 놀림을 막지 않는다.
+    // 1.0.0·2.5.0에서 성격을 약하게 만들던 지시와, 주제마다 정해진 횟수를 채우게 하던 할당이 없다.
+    for (const text of [
+      "설명하는 부분은 장난을 줄이고",
+      "놀림은 약하게만",
+      "캐릭터는 말씨, 호칭, 어미, 비유, 반응, 설명의 리듬만 정한다",
+      "주제마다 한두 번, 판단의 이유를",
+      "과거를 짐작해 맞히는 말을 주제마다 한 번",
+      "넘기면 검사에서 다시 쓰게 된다",
+    ]) {
+      expect(instructions).not.toContain(text);
+    }
+    // 후속 답변 전용 예시와 방식은 최초 풀이에 넣지 않는다 (입력을 늘리지 않게 대표 예시만).
+    expect(instructions).not.toContain("후속 답변:");
+    expect(instructions).not.toContain("휴대폰만 들었다 놨다");
     expect(instructions).not.toMatch(/nickname 님|○○ 님/);
-    expect(instructions).not.toContain("사용자를 놀리지는 않는다");
     expect(JSON.parse(input).address).toEqual({ call: "달빛아", name: "달빛" });
   });
 
-  it("후속 답변: 같은 캐릭터와 호칭, 진지한 순간과 오류 정정 규칙이 들어간다", () => {
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.5.0");
+  it("이전 프롬프트(reading-2.5.0)는 이전 설정과 함께 예전 지시 그대로 만든다", () => {
+    const { instructions, input } = getReadingPrompt("reading-2.5.0")({ plan, persona: MYOMYO_1_0_0, previousIssues: [] });
+    expect(instructions.startsWith("당신은 사주 상담 메신저에서")).toBe(true);
+    for (const text of ["[캐릭터와 판단]", "허접~.(1/1)", "그림 이모티콘: 3개 / 1개까지", "장난칠 얘기가 아니네"]) expect(instructions).toContain(text);
+    // 입력도 예전 모양 그대로다 (출처 칸 없음).
+    expect(JSON.parse(input).userContext.every((item: Record<string, unknown>) => !("from" in item))).toBe(true);
+  });
+
+  it("후속 답변(followup-2.6.0): 같은 캐릭터와 호칭, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기", () => {
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.6.0");
     const prompt = buildFollowupPrompt({
       persona: MYOMYO,
       nickname: "하나",
@@ -134,30 +177,65 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
       expression: FIRST_OVERVIEW.expression,
       situation: null,
       facts: [],
-      userContext: [{ ref: "u1", kind: "user-context", text: "사용자가 직접 알려 준 상황: 요즘 많이 지쳐 있다고 말함", source: "fact" }],
+      userContext: [
+        { ref: "u1", kind: "user-context", text: "사용자가 고른 현재 상황: 취업 준비 중", source: "situation" },
+        { ref: "u2", kind: "user-context", text: "사용자가 직접 알려 준 상황: 요즘 많이 지쳐 있다고 말함", source: "fact" },
+        { ref: "u3", kind: "user-context", text: "이번 메시지에서 사용자가 알려 준 상황: 좋아하는 사람이 생김", source: "message" },
+      ],
       questions: [],
       statements: [],
       timing: [],
       delivered: [],
-      lastTurn: null,
+      lastTurn: { question: "요즘 취업 너무 힘들어", answer: "속상하지." },
       previousIssues: [],
     });
-    expect(prompt.instructions).toContain("최초 풀이와 같은 캐릭터로");
-    expect(prompt.instructions).toContain("실제로 어긋났으면 캐릭터 설정대로 짧게 인정하고 바로잡는다");
-    expect(prompt.instructions).toContain("진지하게 지쳤다·힘들다·불안하다");
-    expect(JSON.parse(prompt.input).address.call).toBe("하나야");
+    expect(prompt.instructions.startsWith("[캐릭터]")).toBe(true);
+    for (const text of [
+      "최초 풀이와 같은 캐릭터로",
+      "[먼저 반응하고 답하기]",
+      "후속 답변:",
+      "지금의 마음은 이번 메시지로 판단한다",
+      "lastTurn.answer의 말투를 따라 하지 않는다",
+      "흐, 흐응. 이제 알아봤어?",
+      "매번 면접까지 갔다가 떨어지면 속상하지.",
+      "으…… 그 부분은 내가 잘못 짚었네.",
+    ]) {
+      expect(prompt.instructions).toContain(text);
+    }
+    // 2.5.0의 "lastTurn에 힘들다는 말이 있으면 놀림을 멈춘다"가 없다.
+    expect(prompt.instructions).not.toContain("question 요약, userContext, lastTurn에 사용자가 진지하게");
+    const input = JSON.parse(prompt.input);
+    expect(input.address.call).toBe("하나야");
+    expect(input.userContext.map((item: { from: string }) => item.from)).toEqual(["situation", "concern", "message"]);
+    expect(input.lastTurn).toEqual({ question: "요즘 취업 너무 힘들어", answer: "속상하지." });
   });
 });
 
 describe("묘묘 말투 검사", () => {
-  it("가끔 쓰는 놀림과 이모티콘이 횟수를 넘으면 다시 쓰게 하고, 약한 놀림 한 번은 통과한다", () => {
+  it("가끔 쓰는 놀림과 이모티콘이 상한을 넘으면 다시 쓰게 하고, 상한 안에서는 통과한다", () => {
     const reading = catchphraseCounter(MYOMYO, "reading");
     expect(reading.count("바보야. 그건 아니지.")).toEqual([]);
     expect(reading.count("허접~. 또 미뤘어?")).toEqual([]);
-    expect(reading.count("허접~. 이번에도?").join()).toContain("허접");
+    expect(reading.count("허접~. 이번에도?")).toEqual([]);
+    const third = reading.count("허접~. 또야?").join();
+    expect(third).toContain("허접");
+    // 다시 쓸 때 그 말만 바꾸게 하고, 장난이나 지적까지 줄이라고 하지 않는다.
+    expect(third).toContain("장난, 지적, 비유는 그대로 둔다");
+    expect(third).not.toContain("놀림을 반복하지 않는다");
     const emoji = catchphraseCounter(MYOMYO, "reading");
     expect(emoji.count("😏 😏 😏")).toEqual([]);
     expect(emoji.count("😏").join()).toContain("이모티콘");
+    // 이전 설정(1.0.0)으로 이어 쓰는 작업은 이전 상한을 쓴다.
+    const earlier = catchphraseCounter(MYOMYO_1_0_0, "reading");
+    expect(earlier.count("허접~.")).toEqual([]);
+    expect(earlier.count("허접~.").join()).toContain("허접");
+  });
+
+  it("'어라'는 말버릇으로 쓸 때만 세고 '들어라', '적어라' 같은 말끝은 세지 않는다", () => {
+    const answer = catchphraseCounter(MYOMYO, "answer");
+    expect(answer.count("일단 적어라. 귀담아 들어라. 먹어라.")).toEqual([]);
+    expect(answer.count("어라~? 또 미뤘어?")).toEqual([]);
+    expect(answer.count("(어라) 이번에도?").join()).toContain("어라");
   });
 
   it("후속 답변 하나에서는 말버릇을 질문 수만큼만 허용하고, 강한 욕설은 거부한다", () => {
