@@ -171,7 +171,26 @@ describe("주제가 완성될 때마다 먼저 보여 주는 생성", () => {
   });
 });
 
-describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는다 (reading-2.6.0)", () => {
+describe("메모 칸이 있는 출력 (narration-2.2.0)", () => {
+  it("focusAngle과 주제마다 angle을 먼저 써도 완성된 주제를 같은 순서로 저장하고, 메모는 저장하지 않는다", async () => {
+    // 구조화 출력은 형식의 속성 순서대로 나온다: opening → focusAngle → focus → topics[topicId → angle → bubbles] → closing
+    const plain = output();
+    const withNotes = {
+      opening: plain.opening,
+      focusAngle: "",
+      focus: plain.focus,
+      topics: plain.topics.map((topic) => ({ topicId: topic.topicId, angle: `${topic.topicId}: 먼저 짚을 장면`, bubbles: topic.bubbles })),
+      closing: plain.closing,
+    } as unknown as NarrationOutputV2;
+    const { result, commits } = await run([withNotes]);
+    expect(commits.map((batch) => batch[0]!.topicId)).toEqual([null, ...topicIds]);
+    expect(commits.flat().some((message) => message.text.includes("먼저 짚을 장면"))).toBe(false);
+    expect(commits[1]!.map((message) => message.text)).toEqual(topicBubbles(topicIds[0]!).map((bubble) => bubble.text));
+    expect(result.closing.text).toBe(plain.closing);
+  });
+});
+
+describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는다 (reading-2.6.0부터)", () => {
   /** 3번 주제의 두 번째 말풍선만 없는 근거를 가리키는 첫 응답. 문장과 말투는 정상이다. */
   function brokenAtThird(texts: (topicId: string) => string[]) {
     return output({
@@ -415,6 +434,21 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
       expect(input.reaction).toBe("praise");
       expect((input.questions as { ref: string }[]).map((item) => item.ref)).toEqual(["q1"]);
     }
+  });
+
+  it("질문마다 메모(angle)를 근거 연결보다 먼저 써도 문단을 같은 방식으로 보내고, 메모는 답에 넣지 않는다 (followup-output-2.2.0)", async () => {
+    const text = JSON.stringify({
+      mode: "answer",
+      sections: [
+        { questionRef: "q1", angle: "칭찬에 으스대고, 먼저 연락 못 하는 이유를 짚기", refs: ["s1"], text: "흐, 흐응. 이제 알아봤어?\n\n먼저 연락하면 지는 것 같지?" },
+        { questionRef: "q2", angle: "", refs: ["s2"], text: "두 번째 답이야." },
+      ],
+      clarifyQuestion: "",
+    });
+    const { result, published } = await runFollowup([text]);
+    expect(published.at(-1)).toEqual(["흐, 흐응. 이제 알아봤어?", "먼저 연락하면 지는 것 같지?", "두 번째 답이야."]);
+    expect(result.output.sections.map((section) => section.text)).toEqual(["흐, 흐응. 이제 알아봤어?\n\n먼저 연락하면 지는 것 같지?", "두 번째 답이야."]);
+    expect(JSON.stringify(result.output)).not.toContain("칭찬에 으스대고");
   });
 
   it("되묻기는 끝까지 받은 뒤 한 번에 돌려주고 문단을 보내지 않는다", async () => {

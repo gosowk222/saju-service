@@ -10,7 +10,7 @@ import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import { callStructured, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
-import { CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, NARRATION_SCHEMA_VERSION, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
@@ -233,11 +233,13 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 
-  it("새 작업은 현재 프롬프트(reading-2.6.0)로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
-    expect(PROMPTS_FOR_PLAN["2.0.0"]!.prompt).toBe(CURRENT_READING_PROMPT);
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.6.0");
+  it("새 작업은 현재 프롬프트(reading-2.7.0)와 출력 형식(narration-2.2.0)으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+    expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
+    expect(CURRENT_READING_PROMPT).toBe("reading-2.7.0");
+    expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
     expect(isProgressivePrompt(CURRENT_READING_PROMPT)).toBe(true);
     // 이미 이전 버전으로 시작한 작업도 그 버전 그대로 스트리밍 생성을 이어 간다.
+    expect(isProgressivePrompt("reading-2.6.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.5.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.3.0")).toBe(false);
   });

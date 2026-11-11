@@ -8,7 +8,7 @@ import { buildQuestionAnalysis, emptyAnalysis } from "@/domain/reading/question"
 import type { NarrationOutputV2 } from "@/domain/reading/types";
 import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import { toStoredMessages } from "@/server/llm/narrate";
-import { CURRENT_READING_PROMPT, getReadingPrompt } from "@/server/llm/prompts";
+import { buildFollowupPrompt, CURRENT_READING_PROMPT, getNarrationSchema, getReadingPrompt, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
 
 /**
  * 묘묘 1.1.0 / reading-2.6.0의 코드 경로 확인. 가짜 입력과 정해 둔 문장으로 확인하며, 실제 모델의 문장 품질과는 무관하다
@@ -56,6 +56,68 @@ describe("여섯 상황 모두 같은 캐릭터 지시와, 상황과 감정을 �
     expect(parsed.userContext.map((item) => item.from)).toEqual(["situation", "concern"]);
     expect(parsed.userContext[0]!.text).not.toContain("불안");
     expect(parsed.userContext[1]!.text).toContain("지쳐");
+  });
+});
+
+describe("작성 재료의 중복 덜어 내기 (reading-2.7.0, followup-2.7.0)", () => {
+  const { plan: base } = analyze("job-seeking");
+  const plan = buildNarrationPlan({ base, product: FIRST_OVERVIEW, analysis: emptyAnalysis("2026-11-11"), timing: [] });
+  type InputStatement = { ref: string; text: string; weakness: unknown; action: unknown; basis: string[]; caveats: string[]; lore?: string[] };
+  const input = JSON.parse(getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] }).input) as {
+    commonCaveats: string[];
+    topics: { topicId: string; statements: InputStatement[] }[];
+  };
+  const original = plan.topics.flatMap((topic) => topic.statements);
+  const given = input.topics.flatMap((topic) => topic.statements);
+
+  it("같은 명리 근거와 이유는 한 번만 넣는다 (원래는 여러 해석에 반복된다)", () => {
+    const originalLore = original.flatMap((statement) => statement.lore ?? []);
+    expect(originalLore.length).toBeGreaterThan(new Set(originalLore).size);
+    const givenLore = given.flatMap((statement) => statement.lore ?? []);
+    expect(givenLore.length).toBe(new Set(givenLore).size);
+    const givenBasis = given.flatMap((statement) => statement.basis);
+    expect(givenBasis.length).toBe(new Set(givenBasis).size);
+  });
+
+  it("뜻은 그대로다: 모든 근거·이유·주의사항이 어딘가에 한 번은 들어가고, 판단·약점·행동 제안은 바뀌지 않는다", () => {
+    expect(new Set(given.flatMap((statement) => statement.lore ?? []))).toEqual(new Set(original.flatMap((statement) => statement.lore ?? [])));
+    expect(new Set(given.flatMap((statement) => statement.basis))).toEqual(new Set(original.flatMap((statement) => statement.basis ?? [])));
+    for (const statement of original) {
+      const item = given.find((entry) => entry.ref === statement.ref)!;
+      expect([item.text, item.weakness, item.action]).toEqual([statement.text, statement.weakness ?? null, statement.action ?? null]);
+      for (const caveat of statement.caveats) expect([...input.commonCaveats, ...item.caveats]).toContain(caveat);
+    }
+    expect(given).toHaveLength(original.length);
+  });
+
+  it("후속 답변 입력도 같은 방식으로 덜어 낸다", () => {
+    const statements = plan.topics.flatMap((topic) => topic.statements);
+    const prompt = buildFollowupPrompt({ persona: MYOMYO, nickname: "달빛", hourKnown: true, expression: FIRST_OVERVIEW.expression, situation: null, facts: [], userContext: [], questions: [], statements, timing: [], delivered: [], lastTurn: null, previousIssues: [] });
+    const parsed = JSON.parse(prompt.input) as { commonCaveats: string[]; statements: InputStatement[] };
+    const lore = parsed.statements.flatMap((statement) => statement.lore ?? []);
+    expect(lore.length).toBe(new Set(lore).size);
+    expect(parsed.commonCaveats.length).toBeGreaterThan(0);
+    expect(parsed.statements).toHaveLength(statements.length);
+  });
+});
+
+describe("출력 형식 narration-2.2.0 (화면에 나가지 않는 메모 칸)", () => {
+  it("메모 칸을 말풍선보다 먼저 쓰게 하고, 해석할 때는 버린다", () => {
+    const schema = getNarrationSchema(NARRATION_SCHEMA_VERSION);
+    const json = schema.jsonSchema as { properties: Record<string, { items?: { properties: Record<string, unknown>; required: string[] } }> };
+    expect(Object.keys(json.properties)).toEqual(["opening", "focusAngle", "focus", "topics", "closing"]);
+    expect(Object.keys(json.properties.topics!.items!.properties)).toEqual(["topicId", "angle", "bubbles"]);
+    expect(json.properties.topics!.items!.required).toContain("angle");
+    const parsed = schema.parser.parse({
+      opening: "안녕",
+      focusAngle: "큰돈 바라면서 정산 얘기는 피함",
+      focus: [],
+      topics: [{ topicId: "money", angle: "보수 얘기만 나오면 조용해짐", bubbles: [{ kind: "explanation", refs: ["s1"], text: "보수 얘기만 나오면 왜 얌전해져?", highlight: "" }] }],
+      closing: "끝",
+    }) as unknown as Record<string, unknown> & { topics: Record<string, unknown>[] };
+    expect(parsed).not.toHaveProperty("focusAngle");
+    expect(parsed.topics[0]).not.toHaveProperty("angle");
+    expect(parsed.topics[0]!.bubbles).toHaveLength(1);
   });
 });
 

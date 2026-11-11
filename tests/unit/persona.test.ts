@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MYOMYO, MYOMYO_1_0_0, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
+import { MYOMYO, MYOMYO_1_0_0, MYOMYO_1_1_0, addressFor, findPersona, toCasual, withSubject } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { catchphraseCounter, checkFollowupV2 } from "@/domain/reading/check";
 import { buildNarrationPlan } from "@/domain/reading/focus";
@@ -36,12 +36,19 @@ describe("캐릭터 등록", () => {
   });
 
   it("작업에 고정된 프롬프트 버전에 맞는 캐릭터 설정을 고른다 (이어 쓰는 작업에 새 설정이 섞이지 않게)", () => {
-    expect(MYOMYO.version).toBe("1.1.0");
+    expect(MYOMYO.version).toBe("1.2.0");
     expect(personaVersionFor(CURRENT_READING_PROMPT)).toBe(MYOMYO.version);
     expect(personaVersionFor(CURRENT_FOLLOWUP_PROMPT)).toBe(MYOMYO.version);
+    expect(findPersona("myomyo", personaVersionFor("reading-2.6.0"))).toBe(MYOMYO_1_1_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.5.0"))).toBe(MYOMYO_1_0_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.4.0"))).toBe(MYOMYO_1_0_0);
-    expect(findPersona("myomyo", "1.1.0")).toBe(MYOMYO);
+    expect(findPersona("myomyo", "1.2.0")).toBe(MYOMYO);
+    // 1.1.0에는 시범이 없고, 1.2.0은 시범만 더했다 (성격·예시·말버릇은 같다).
+    expect(MYOMYO_1_1_0.demonstrations).toBeUndefined();
+    expect(MYOMYO.tone).toBe(MYOMYO_1_1_0.tone);
+    expect(MYOMYO.examples).toBe(MYOMYO_1_1_0.examples);
+    expect(MYOMYO.catchphrases).toBe(MYOMYO_1_1_0.catchphrases);
+    expect(MYOMYO.demonstrations?.map((item) => item.use)).toEqual(["reading", "followup"]);
     // 따로 남긴 설정이 없는 버전이면 현재 설정을 준다.
     expect(findPersona("myomyo", "9.9.9")).toBe(MYOMYO);
     // 이전 설정은 그대로다 (설명에서 장난을 줄이라던 문구도 그 버전에는 남아 있다).
@@ -119,10 +126,13 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
   const { plan: basePlan } = analyze();
   const plan = buildNarrationPlan({ base: basePlan, product: FIRST_OVERVIEW, analysis: emptyAnalysis("2026-11-11"), timing: [] });
 
-  it("최초 풀이(reading-2.6.0): 캐릭터 설정이 지시 맨 앞에 오고, 설명 본문에서 성격을 드러내는 방식과 비교 예시가 들어간다", () => {
-    const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.6.0");
+  it("최초 풀이(reading-2.6.0, 그 버전으로 시작한 작업): 캐릭터 설정이 지시 맨 앞에 오고, 설명 본문에서 성격을 드러내는 방식과 비교 예시가 들어간다", () => {
+    const { instructions, input } = getReadingPrompt("reading-2.6.0")({ plan, persona: MYOMYO_1_1_0, previousIssues: [] });
     expect(instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
+    // 2.7.0에서 더한 시범과 메모 칸은 2.6.0 작업에 섞이지 않는다.
+    expect(instructions).not.toContain("재료를 묘묘의 말로 바꾸는 시범");
+    expect(instructions).not.toContain("angle: bubbles를 쓰기 전에");
+    expect(JSON.parse(input)).not.toHaveProperty("commonCaveats");
     for (const text of [
       MYOMYO.intro,
       "말씨: 반말",
@@ -168,8 +178,37 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(JSON.parse(input).userContext.every((item: Record<string, unknown>) => !("from" in item))).toBe(true);
   });
 
-  it("후속 답변(followup-2.6.0): 같은 캐릭터와 호칭, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기", () => {
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.6.0");
+  it("최초 풀이(reading-2.7.0): 재료를 옮겨 적지 않기와 시범, 주제마다 먼저 짚을 장면 메모, light 주제의 선택, 약점은 하나 이상", () => {
+    const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
+    expect(CURRENT_READING_PROMPT).toBe("reading-2.7.0");
+    expect(instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
+    for (const text of [
+      "재료를 묘묘의 말로 바꾸는 시범",
+      "그대로 옮겨 적은 말 (이렇게 쓰지 않는다)",
+      "할 일 쌓인 날, 너 메일 답장이랑 자잘한 정리부터 싹 해치우지?",
+      "[재료를 옮겨 적지 않는다]",
+      "말풍선을 쓴 뒤 재료 문장에서 어미만 바꾼 문장이면 다시 쓴다",
+      "angle: bubbles를 쓰기 전에",
+      "focusAngle: questions가 있으면 focus를 쓰기 전에",
+      "light는 이 사람의 질문·상황에 가장 걸리는 해석 한두 개를 골라",
+      "weakness가 있는 해석이 있으면 주제마다 약점을 하나 이상 다룬다",
+      "말풍선 하나에는 한두 문장만 담고",
+      "예시나 시범과 같은 주제에서만 캐릭터가 나오고 다른 주제에서 꺼지면 실패다",
+    ]) {
+      expect(instructions).toContain(text);
+    }
+    // 2.6.0에서 의무를 늘렸던 문구와, 말풍선을 길게 채우게 하던 문구가 없다.
+    expect(instructions).not.toContain("weakness가 있는 해석은 주제마다 빠뜨리지 않는다");
+    expect(instructions).not.toContain("설명 말풍선은 bubbleChars자 안팎으로 쓰고");
+    // 후속 답변용 시범은 넣지 않는다.
+    expect(instructions).not.toContain("돈 관리 물어볼 줄 알았어");
+    const parsed = JSON.parse(input) as { commonCaveats: string[]; address: unknown };
+    expect(parsed.address).toEqual({ call: "달빛아", name: "달빛" });
+    expect(parsed.commonCaveats.length).toBeGreaterThan(0);
+  });
+
+  it("후속 답변(followup-2.7.0): 같은 캐릭터와 호칭, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기, 재료를 옮겨 적지 않기", () => {
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-2.7.0");
     const prompt = buildFollowupPrompt({
       persona: MYOMYO,
       nickname: "하나",
@@ -199,6 +238,9 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
       "흐, 흐응. 이제 알아봤어?",
       "매번 면접까지 갔다가 떨어지면 속상하지.",
       "으…… 그 부분은 내가 잘못 짚었네.",
+      "[재료를 옮겨 적지 않는다]",
+      "돈 관리 물어볼 줄 알았어",
+      "sections[].angle: 답을 쓰기 전에",
     ]) {
       expect(prompt.instructions).toContain(text);
     }
