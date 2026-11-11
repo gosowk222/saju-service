@@ -5,18 +5,12 @@
  *   npm run llm:compare -- --models=gpt-5.6-luna --cases=career-jobseeker,romance-mixed
  *   npm run llm:compare -- --date=2026-11-10 --out=docs/model-comparison --tag=retry   (파일 이름 뒤에 붙일 표시)
  *
- * 같은 입력에서 한 조건씩 바꿔 보기 (최초 풀이만, 검사에 걸려도 다시 생성하지 않고 문제 목록만 남긴다. 후속 질문은 건너뛴다):
- *   --rules=minimal      캐릭터 블록과 출력 형식만, 재료는 판단 문장만 (기본 app: 운영 지시 전체)
- *   --material=consult   2.7.0~2.9.0의 상담 문장 묶음 (기본 meaning: 작성 재료 3.0.0)
- *   --topics=first       첫 주제 하나와 질문 답만 (기본 all: 아홉 주제)
- *   --prompt=reading-2.9.0   이전 지시로 운영과 같은 경로 실행 (이전 캐릭터 설정을 함께 쓴다. 조건 옵션과 함께 쓰지 않는다)
- * 예: npm run llm:compare -- --models=gpt-5.6-luna --cases=career-jobseeker --material=consult --tag=consult
- *
  * 실제 API를 호출해 비용이 발생한다. 키가 없으면 LIVE_NOT_RUN을 출력하고 끝낸다.
  * 모든 입력은 가상의 정보다. 자동 집계 외의 품질 평가는 사람이 본문을 읽고 채운다.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { findPersona } from "@/domain/personas";
 import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { checkNarrationV2 } from "@/domain/reading/check";
@@ -26,23 +20,12 @@ import type { NarrationOutputV2, StoredMessage } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { analyzeBirth, toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
 import { analyzeTiming } from "@/server/engine/timing";
-import { callStructured, LlmError, type LlmUsage } from "@/server/llm/client";
+import { LlmError, type LlmUsage } from "@/server/llm/client";
 import { LLM_SETTINGS, liveCallBlockReason } from "@/server/llm/config";
 import { classifyQuestion, mergeUsage, narrateReading, toStoredMessages } from "@/server/llm/narrate";
 import { renderReadingPdf } from "@/server/pdf/render";
 import { applyHighlight } from "@/domain/reading/emphasis";
-import {
-  buildReadingExperiment,
-  CURRENT_READING_PROMPT,
-  DEFAULT_EXPERIMENT,
-  experimentPlan,
-  getNarrationSchema,
-  NARRATION_SCHEMA_VERSION,
-  isPlanV2Prompt,
-  promptPersona,
-  type ReadingExperiment,
-} from "@/server/llm/prompts";
-import { findPersona } from "@/domain/personas";
+import { CURRENT_READING_PROMPT, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
 import { answerAnalyzedFollowup, routeWithoutItems } from "@/server/readings/followup-core";
 
 const SEOUL = { timezoneId: "Asia/Seoul", longitudeDeg: 126.9784, latitudeDeg: 37.566, label: "서울특별시", source: "geonames:1835848" };
@@ -237,39 +220,8 @@ function timingFor(analysis: QuestionAnalysis, birth: ReturnType<typeof toPublic
   return entries.map(([requestKey], index) => ({ requestKey, analysis: analyses[index]! }));
 }
 
-interface RunOptions {
-  readonly promptVersion: string;
-  readonly experiment: ReadingExperiment;
-  readonly skipFollowups: boolean;
-}
-
-const isDefaultExperiment = (experiment: ReadingExperiment) =>
-  experiment.rules === DEFAULT_EXPERIMENT.rules && experiment.material === DEFAULT_EXPERIMENT.material && experiment.topics === DEFAULT_EXPERIMENT.topics;
-
-/** 조건을 바꾼 최초 풀이 한 번. 재시도 없이 한 번만 부르고 검사 결과를 기록한다. */
-async function narrateExperiment(input: { plan: Parameters<typeof experimentPlan>[0]; experiment: ReadingExperiment; model: string }) {
+async function runCase(entry: QualityCase, model: string, referenceDate: string, skipFollowups: boolean): Promise<CaseResult> {
   const persona = findPersona(FIRST_OVERVIEW.personaId)!;
-  const schema = getNarrationSchema(NARRATION_SCHEMA_VERSION);
-  const { instructions, input: promptInput } = buildReadingExperiment({ plan: input.plan, persona, previousIssues: [] }, input.experiment);
-  const task = LLM_SETTINGS.tasks.reading;
-  const result = await callStructured({
-    model: input.model,
-    instructions,
-    input: promptInput,
-    schemaName: schema.name,
-    jsonSchema: schema.jsonSchema,
-    parser: schema.parser,
-    maxOutputTokens: task.maxOutputTokens,
-    reasoningEffort: task.reasoningEffort,
-    timeoutMs: task.timeoutMs,
-  });
-  return { output: result.parsed as NarrationOutputV2, meta: { usage: result.meta.usage, llmCalls: result.meta.calls } };
-}
-
-async function runCase(entry: QualityCase, model: string, referenceDate: string, options: RunOptions): Promise<CaseResult> {
-  const persona = findPersona(FIRST_OVERVIEW.personaId)!;
-  const experimenting = !isDefaultExperiment(options.experiment);
-  const skipFollowups = options.skipFollowups || experimenting;
   const product = FIRST_OVERVIEW;
   const birth = toPublicBirthInput(entry.birth);
   const base = analyzeBirth({ birth, product, nickname: entry.nickname, situationId: entry.situationId });
@@ -285,17 +237,14 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
       calls += classified.meta.llmCalls;
     }
     const timing = timingFor(analysis, birth, referenceDate);
-    const fullPlan = buildNarrationPlan({ base: base.plan, product, analysis, timing });
-    const plan = experimentPlan(fullPlan, options.experiment);
+    const plan = buildNarrationPlan({ base: base.plan, product, analysis, timing });
     const excluded = excludedItems(analysis).map(({ summary, domain }) => ({ summary, domain }));
-    const { output, meta } = experimenting
-      ? await narrateExperiment({ plan: fullPlan, experiment: options.experiment, model })
-      : await narrateReading({
-          narration: { version: "2.0.0", plan, excluded },
-          chart: base.chart,
-          persona: promptPersona(FIRST_OVERVIEW.personaId, options.promptVersion)!,
-          config: { modelId: model, promptVersion: options.promptVersion, schemaVersion: NARRATION_SCHEMA_VERSION, reasoningEffort: LLM_SETTINGS.tasks.reading.reasoningEffort },
-        });
+    const { output, meta } = await narrateReading({
+      narration: { version: "2.0.0", plan, excluded },
+      chart: base.chart,
+      persona,
+      config: { modelId: model, promptVersion: CURRENT_READING_PROMPT, schemaVersion: NARRATION_SCHEMA_VERSION, reasoningEffort: LLM_SETTINGS.tasks.reading.reasoningEffort },
+    });
     usage = mergeUsage(usage, meta.usage);
     calls += meta.llmCalls;
     const messages = toStoredMessages(output, product.focusSection.id);
@@ -384,14 +333,11 @@ async function runCase(entry: QualityCase, model: string, referenceDate: string,
   }
 }
 
-function report(results: readonly CaseResult[], models: readonly string[], referenceDate: string, options: RunOptions): string {
-  const condition = isDefaultExperiment(options.experiment)
-    ? `프롬프트 ${options.promptVersion}`
-    : `조건 rules=${options.experiment.rules} material=${options.experiment.material} topics=${options.experiment.topics} (재시도 없이 한 번, 후속 질문 없음)`;
+function report(results: readonly CaseResult[], models: readonly string[], referenceDate: string): string {
   const lines = [
     `# 풀이 품질 확인 ${referenceDate}`,
     "",
-    `모델: ${models.join(", ")} · ${condition} · 출력 형식 ${NARRATION_SCHEMA_VERSION} · 추론 ${LLM_SETTINGS.tasks.reading.reasoningEffort} · 기준일 ${referenceDate} (Asia/Seoul)`,
+    `모델: ${models.join(", ")} · 프롬프트 ${CURRENT_READING_PROMPT} · 출력 형식 ${NARRATION_SCHEMA_VERSION} · 기준일 ${referenceDate} (Asia/Seoul)`,
     "",
     "가상 입력으로 생성했다. 자동 항목은 실행 결과이고, 체크리스트는 사람이 본문을 읽고 채운다.",
     "",
@@ -431,7 +377,7 @@ function report(results: readonly CaseResult[], models: readonly string[], refer
     "- [ ] 근거 있는 약점이 지나치게 순화되지 않았다",
     "- [ ] 근거 없는 과거·미래를 만들지 않았다",
     "- [ ] 창작 장면이 판단 문장 바꿔 쓰기에 그치지 않는다",
-    "- [ ] 묘묘 평가 기준(docs/personas/myomyo-evaluation.md 1절)을 따로 채운다: 반말을 넘는 건방짐·장난기, 판단·상황과 연결된 장난, 강점 인정과 조언의 성격, 중간·후반 유지, 고정 문구·같은 비유 반복 없음",
+    "- [ ] 캐릭터 말투가 유지된다",
     "- [ ] 시기 답변이 살펴본 기간과 근거를 밝히고 사건을 확정하지 않는다",
     "- [ ] 범위 밖 질문이 본문에 다시 나오지 않는다",
     "",
@@ -456,21 +402,7 @@ async function main() {
   const selected = readArg("cases")?.split(",");
   const cases = QUALITY_CASES.filter((entry) => !selected || selected.includes(entry.id));
   const referenceDate = readArg("date") ?? seoulDate();
-  const experiment: ReadingExperiment = {
-    rules: readArg("rules") === "minimal" ? "minimal" : "app",
-    material: readArg("material") === "consult" ? "consult" : "meaning",
-    topics: readArg("topics") === "first" ? "first" : "all",
-  };
-  const promptVersion = readArg("prompt") ?? CURRENT_READING_PROMPT;
-  if (!isPlanV2Prompt(promptVersion) || !promptPersona(FIRST_OVERVIEW.personaId, promptVersion)) {
-    console.log(JSON.stringify({ result: "INVALID_OPTION", reason: `알 수 없는 프롬프트 ${promptVersion}` }));
-    return;
-  }
-  if (promptVersion !== CURRENT_READING_PROMPT && !isDefaultExperiment(experiment)) {
-    console.log(JSON.stringify({ result: "INVALID_OPTION", reason: "--prompt는 조건 옵션(--rules, --material, --topics)과 함께 쓰지 않는다" }));
-    return;
-  }
-  const options: RunOptions = { promptVersion, experiment, skipFollowups: process.argv.includes("--skip-followups") };
+  const skipFollowups = process.argv.includes("--skip-followups");
   if (!process.env.OPENAI_API_KEY?.trim()) {
     console.log(JSON.stringify({ result: "LIVE_NOT_RUN", reason: "OPENAI_API_KEY 없음", models, cases: cases.length }));
     return;
@@ -484,7 +416,7 @@ async function main() {
   for (const entry of cases) {
     for (const model of models) {
       console.log(`실행: ${entry.id} / ${model}`);
-      const result = await runCase(entry, model, referenceDate, options);
+      const result = await runCase(entry, model, referenceDate, skipFollowups);
       console.log(`  ${result.status} 말풍선 ${result.bubbles ?? "-"} 검사 ${result.checkIssues?.length ?? "-"} 호출 ${result.calls ?? "-"} ${result.durationMs ?? "-"}ms ${result.errorCode ?? ""}`);
       if (result.highlights) console.log(`  강조 구절: 채움 ${result.highlights.filled}, 적용 ${result.highlights.applied}, 못 찾음 ${JSON.stringify(result.highlights.missed)}`);
       results.push(result);
@@ -495,7 +427,7 @@ async function main() {
   const tag = readArg("tag");
   const stamp = `${referenceDate}-${models.join("+")}${tag ? `-${tag}` : ""}`;
   const file = path.join(dir, `${stamp}.md`);
-  writeFileSync(file, report(results, models, referenceDate, options));
+  writeFileSync(file, report(results, models, referenceDate));
   writeFileSync(path.join(dir, `${stamp}.json`), JSON.stringify(results, null, 2));
   console.log(`결과 저장: ${file}`);
 }

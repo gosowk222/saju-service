@@ -213,13 +213,14 @@ test.describe("후속 질문", () => {
     await completed(page, request);
     await page.getByRole("textbox", { name: "후속 질문" }).fill("소름 돋게 맞췄네");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/흐|어라|흐흥/).last()).toBeVisible();
+    // 고정 반응 문장(묘묘 2.0.0)은 말버릇으로 시작하지 않는다. 고르는 문장마다 칭찬을 받아 우쭐하는 말이 있다.
+    await expect(page.getByText(/칭찬|잘 보거든/).last()).toBeVisible();
     await expect(page.getByText(/이번 건 봐줄게/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/남은 질문 3회/)).toBeVisible();
 
     await page.getByRole("textbox", { name: "후속 질문" }).fill("허세 좀 그만 부려");
     await page.getByRole("button", { name: "보내기" }).click();
-    await expect(page.getByText(/허세.*(아니거든|라니)/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/허세( 아니거든|를 부렸다고)/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/질문 1회로 셌어/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
   });
