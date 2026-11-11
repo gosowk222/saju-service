@@ -24,7 +24,10 @@ import type {
  * - reading-2.0.0 / narration-2.0.0: 계획 2.0.0의 첫 풀이 프롬프트 (이미 이 버전으로 시작한 작업에만).
  * - reading-2.1.0 / narration-2.1.0: 채팅 말투, 장면을 녹이는 방식, 직설적인 약점, 말풍선마다 굵게 보일 구절(highlight).
  * - reading-2.2.0 / narration-2.1.0: 가족·친구·지역 주제와 행운 표, 과거 짐작 말투, 건강·투자·미래의 완곡한 표현.
- * - reading-2.7.0 / narration-2.2.0: 현재 풀이 (캐릭터 묘묘 1.2.0). 2.6.0 결과에서 구체적인 조언 대부분이 재료 문장을 반말로 옮긴 것이었다.
+ * - reading-2.8.0 / narration-2.2.0: 현재 풀이 (캐릭터 묘묘 1.3.0, 추론 설정 medium). 2.7.0 결과가 짧아지고 으스대기·놀리기가 없었다.
+ *   설명 말풍선은 다시 세네 문장까지, 반응 말풍선은 target과 따로, 중심 주제와 질문 답은 더 깊게, 주제마다 '묘묘다운 순간',
+ *   말버릇 안내를 natural로 (docs/READING_QUALITY.md 21절). 입력과 출력 형식은 2.7.0과 같다. 규칙은 2.7.0에서 구절만 바꿔 만든다 (revise).
+ * - reading-2.7.0 / narration-2.2.0: 2.8.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.2.0). 2.6.0 결과에서 구체적인 조언 대부분이 재료 문장을 반말로 옮긴 것이었다.
  *   재료를 옮겨 적지 않기와 그 시범, 주제마다 먼저 짚을 장면을 메모(angle)로 쓰고 시작하기(출력 형식 2.2.0),
  *   light 주제는 가장 걸리는 해석 한두 개만, 말풍선은 한두 문장, 약점은 주제마다 하나 이상(2.6.0의 '빠뜨리지 않는다'를 되돌림),
  *   근거·주의사항의 중복을 덜어 낸 입력(materialInput). 재료와 판단은 2.6.0과 같다 (docs/READING_QUALITY.md 20절).
@@ -37,7 +40,8 @@ import type {
  *   주제가 완성될 때마다 화면에 먼저 보여 주는 생성에서 쓴다.
  * - reading-2.3.0 / narration-2.1.0: 상품 3.1.0. 명리 설명 재료(lore)를 짧게 소개하기,
  *   약점·강점을 선언하지 않고 알아맞히듯 말하기, 어울리는 직업과 업종. 입력 형식은 2.2.0과 같고 lore만 더한다.
- * - followup-2.7.0 / followup-output-2.2.0: 현재 후속 질문 답변 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범,
+ * - followup-2.8.0 / followup-output-2.2.0: 현재 후속 질문 답변 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 설명 문단은 두세 문장까지.
+ * - followup-2.7.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범,
  *   답마다 먼저 반응하고 짚을 점을 메모(angle)로 쓰고 시작하기, 중복을 덜어 낸 입력을 더했다.
  * - followup-2.6.0 / followup-output-2.1.0: 기록용 (캐릭터 묘묘 1.1.0). 최초 풀이 2.6.0과 같은 세 층 구성.
  *   방금 한 말에 먼저 반응하고 답하기, 칭찬·놀림과 질문이 함께 올 때의 반응, 지금의 마음을 이번 메시지로만 판단하기
@@ -784,7 +788,23 @@ const EXPRESSION_TEXT_V3 = {
  * 이전 블록과 달리 말버릇 상한을 '넘기면 다시 쓰게 된다'는 경고 대신 반복을 막는 상한으로만 알리고,
  * 성격이 드러나는 자리(delivery)와 같은 판단의 비교 예시를 넣는다. 예시는 그 프롬프트에 해당하는 대표 예시만 넣는다.
  */
-function personaBlockV3(persona: Persona, expression: NarrationPlanV2["expression"], use: "reading" | "followup"): string {
+/**
+ * 말버릇 안내 문구. limit(2.6.0·2.7.0)은 '넣으려고 문장을 만들지 않는다, 채울 목표가 아니다'로 막아, 실제 풀이에서
+ * 말버릇과 이모티콘이 한 번도 나오지 않았다. natural(2.8.0)은 캐릭터의 일부로 어울리는 자리에 쓰되 반복하지 않게 한다.
+ */
+const CATCHPHRASE_NOTE = {
+  limit: (scope: string) =>
+    `말버릇: 가끔 섞는 말이다. 성격은 말버릇이 아니라 무엇을 짚고 어떻게 반응하는지에서 나온다. 말버릇을 넣으려고 문장을 만들지 않는다. 괄호 안은 ${scope} 같은 말을 쓸 수 있는 상한이며 채울 목표가 아니다.`,
+  natural: (scope: string) =>
+    `말버릇과 이모티콘도 묘묘의 일부다. 놀릴 때, 으스댈 때, 당황할 때처럼 어울리는 자리에 자연스럽게 섞는다. 같은 말을 이어서 쓰지 않고, 괄호 안(${scope} 같은 말을 쓸 수 있는 횟수)을 넘기지 않는다. 말버릇이 없어도 묘묘다워야 하는 것은 그대로다.`,
+} as const;
+
+function personaBlockV3(
+  persona: Persona,
+  expression: NarrationPlanV2["expression"],
+  use: "reading" | "followup",
+  catchphraseNote: keyof typeof CATCHPHRASE_NOTE = "limit",
+): string {
   const reading = use === "reading";
   const phrases = (kind: "frequent" | "occasional") =>
     persona.catchphrases
@@ -807,7 +827,7 @@ function personaBlockV3(persona: Persona, expression: NarrationPlanV2["expressio
     ...(persona.sceneStyle.length ? ["장면을 쓰는 방식:", ...persona.sceneStyle.map((line) => `- ${line}`)] : []),
     ...(persona.catchphrases.length
       ? [
-          `말버릇: 가끔 섞는 말이다. 성격은 말버릇이 아니라 무엇을 짚고 어떻게 반응하는지에서 나온다. 말버릇을 넣으려고 문장을 만들지 않는다. 괄호 안은 ${reading ? "최초 풀이 전체에서" : "후속 답변에서 질문 하나에"} 같은 말을 쓸 수 있는 상한이며 채울 목표가 아니다.`,
+          CATCHPHRASE_NOTE[catchphraseNote](reading ? "최초 풀이 전체에서" : "후속 답변에서 질문 하나에"),
           `- 자주 쓰는 말: ${phrases("frequent")}`,
           `- 가끔 쓰는 놀림: ${phrases("occasional")}`,
           `- 그림 이모티콘: ${reading ? persona.emojiLimit.perReading : persona.emojiLimit.perAnswer}개까지`,
@@ -939,10 +959,15 @@ const contextInputWithSource = (items: readonly UserContextStatement[]) => items
 // ─── reading-2.7.0 / followup-2.7.0 (캐릭터 묘묘 1.2.0) ─────────────────────
 
 /** 2.6.0 캐릭터 블록에 재료를 캐릭터의 말로 바꾸는 시범을 더한다. 그 프롬프트에 해당하는 시범만 넣는다. */
-function personaBlockV4(persona: Persona, expression: NarrationPlanV2["expression"], use: "reading" | "followup"): string {
+function personaBlockV4(
+  persona: Persona,
+  expression: NarrationPlanV2["expression"],
+  use: "reading" | "followup",
+  catchphraseNote: keyof typeof CATCHPHRASE_NOTE = "limit",
+): string {
   const demonstrations = (persona.demonstrations ?? []).filter((item) => item.use === use);
   return [
-    personaBlockV3(persona, expression, use),
+    personaBlockV3(persona, expression, use, catchphraseNote),
     ...(demonstrations.length
       ? [
           "재료를 묘묘의 말로 바꾸는 시범 (입력 재료 → 그대로 옮겨 적은 말 → 묘묘의 말). 문장과 문장 틀을 그대로 쓰지 않는다. 〈 〉 자리는 이 사람의 재료 값으로 바꾼다:",
@@ -1100,6 +1125,56 @@ const READING_RULES_2_7_0 = `
 - 입력에 alreadySent가 있으면 그 부분은 이미 사용자 화면에 나간 말이다. 고치거나 다시 쓰지 않는다. alreadySent.opening이 있으면 opening은 빈 문자열로, alreadySent.focus가 비어 있지 않으면 focusAngle은 빈 문자열로, focus는 빈 배열로, alreadySent.topics에 있는 주제는 topics에 순서대로 topicId만 두고 angle은 빈 문자열, bubbles는 빈 배열로 둔다. 나머지는 보낸 말에 이어지게 쓰고, 보낸 설명·비유·조언·장면·말버릇을 되풀이하지 않는다.
 - fixTheseProblemsFromPreviousAttempt가 있으면 거기 적힌 문제만, 아직 보내지 않은 부분에서 고친다. 근거 연결, 날짜, 비율 같은 사실 문제를 고칠 때 문장의 장난, 비유, 직설적인 지적까지 순화하지 않는다. 지적받지 않은 부분은 같은 성격과 같은 깊이로 쓴다.
 `.trim();
+
+/**
+ * 기존 규칙에서 정확히 일치하는 구절만 바꿔 새 버전을 만든다. 바뀐 부분만 코드에 남아 버전 차이를 읽기 쉽다.
+ * 구절을 찾지 못하면 모듈을 불러올 때 오류를 내, 바꿨다고 생각한 지시가 조용히 빠지지 않게 한다.
+ */
+function revise(base: string, edits: readonly (readonly [string, string])[]): string {
+  return edits.reduce((text, [from, to]) => {
+    if (!text.includes(from)) throw new Error(`prompt_revision_missing: ${from.slice(0, 60)}`);
+    return text.replace(from, () => to);
+  }, base);
+}
+
+/**
+ * reading-2.8.0: 2.7.0과 같은 재료·입력·출력 형식 (캐릭터 묘묘 1.3.0, 최초 풀이 추론 설정 medium).
+ * 2.7.0 실제 풀이는 재료를 옮겨 적지 않았지만 (1) 풀이 길이가 크게 줄었고 (2) 으스대기·놀리기가 한 번도 없었다 (docs/READING_QUALITY.md 21절).
+ * (1)은 목표를 말풍선 수로 세면서 말풍선을 한두 문장으로 줄인 탓이다. 설명 말풍선은 다시 세네 문장까지, 반응 말풍선은 target과 따로,
+ * 중심 주제(focus·lead)와 질문 답은 더 깊게 쓰게 했다. (2)는 '묘묘다운 순간'을 주제마다 설명 사이에 넣게 했다.
+ */
+const READING_RULES_2_8_0 = revise(READING_RULES_2_7_0, [
+  [
+    "1. opening: 인사 1개. address.call로 부르고,",
+    "1. opening: 인사 1개. address.call로 부르고 묘묘답게 자신만만하게 시작하며,",
+  ],
+  [
+    "질문 하나에 focusBubbles개 안팎을 쓴다.",
+    "질문 하나에 focusBubbles개 안팎을 쓴다. focus는 풀이에서 가장 중요한 부분이다. 결론, 이유, 시기나 비교, 이 사람 쪽 약점, 구체적인 행동까지 충분히 풀어 쓴다.",
+  ],
+  [
+    "   - 비중: weight가 focus인 주제는 질문과 연결해 깊게, lead·standard는 충분히 쓴다. light는 이 사람의 질문·상황에 가장 걸리는 해석 한두 개를 골라 제대로 말하고, 나머지 해석은 빼도 된다. 재료를 다 담으려고 말풍선 하나에 해석을 두세 개씩 몰아넣지 않는다. target은 말풍선 수의 목표이며 설명이 더 필요하면 넘어도 된다.",
+    [
+      "   - 비중: weight가 focus·lead인 주제는 풀이의 중심이다. 해석마다 장면, 이유, 그래서 잃거나 얻는 것, 바꾸거나 써먹을 행동까지 충분히 풀고, 이 사람의 상황에 맞는 예시나 장면을 하나 더 든다. standard는 해석마다 핵심과 행동까지 쓴다. light는 이 사람의 질문·상황에 가장 걸리는 해석 한두 개를 골라 제대로 말하고, 나머지 해석은 빼도 된다. 재료를 다 담으려고 말풍선 하나에 해석을 두세 개씩 몰아넣지 않는다.",
+      "   - target은 설명 말풍선 수의 목표다. 짧은 반응·전환 말풍선은 target과 따로 더한다. 설명이 더 필요하면 target을 넘어도 된다. 짧게 끝내도 되는 곳은 인사, 마무리, 행운 값처럼 정해진 값을 전하는 부분이다.",
+    ].join("\n"),
+  ],
+  [
+    "- 이름, 감탄사, 이모티콘, 말버릇을 지워도 캐릭터가 한 말처럼 읽혀야 한다.",
+    [
+      "- 이름, 감탄사, 이모티콘, 말버릇을 지워도 캐릭터가 한 말처럼 읽혀야 한다.",
+      "- 주제마다 [캐릭터]의 '묘묘다운 순간'(으스대기, 놀리기, 얄미운 한마디, 마지못한 다정함)이 한두 번 들어간다. 인사나 마무리가 아니라 설명 사이에 넣고, 주제마다 종류와 말을 바꾼다. 건방지고 장난스럽고 자신만만하고 얄미운 느낌이 풀이 처음부터 끝까지 이어져야 한다. 사용자가 지금 고통을 호소한 부분에서만 놀리지 않는다.",
+    ].join("\n"),
+  ],
+  [
+    "- 보고서가 아니라 메신저 대화다. 말풍선 하나에는 한두 문장만 담고, 긴 설명은 여러 말풍선으로 끊어 보낸다. 한 줄짜리 반응 말풍선을 섞는다.",
+    "- 보고서가 아니라 메신저 대화다. 반응·알아맞히기·으스대기·한마디 참견은 한두 문장의 짧은 말풍선으로, 이유와 방법을 푸는 설명은 세네 문장(bubbleChars자 안팎)까지 쓴다. 짧은 말풍선과 설명 말풍선을 섞는다.",
+  ],
+  [
+    "- 설명 말풍선은 한두 문장으로 쓰고, 길어도 bubbleChars자를 넘기지 않는다.",
+    "- 설명 말풍선은 bubbleChars자 안팎까지 쓰고, 그보다 길어지면 나눈다. 반응 말풍선은 짧게 쓴다.",
+  ],
+]);
 
 /** reading-2.7.0의 입력. 2.6.0과 같은 재료에서 근거·주의사항의 중복을 덜어 낸다 (materialInput). */
 function readingInput3(args: ReadingPromptV2Args): string {
@@ -1280,6 +1355,14 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
       input: readingInput3(v2),
     };
   },
+  // 2.7.0과 같은 입력과 출력 형식(narration-2.2.0). 말버릇 안내는 natural.
+  "reading-2.8.0": (args) => {
+    const v2 = args as ReadingPromptV2Args;
+    return {
+      instructions: `${personaBlockV4(v2.persona, v2.plan.expression, "reading", "natural")}\n\n${READING_RULES_2_8_0}`,
+      input: readingInput3(v2),
+    };
+  },
 };
 
 /**
@@ -1289,12 +1372,12 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
  */
 export const PROMPTS_FOR_PLAN: Readonly<Record<string, { readonly prompt: string; readonly schema: string }>> = {
   "1.0.0": { prompt: "reading-1.0.0", schema: "narration-1.0.0" },
-  "2.0.0": { prompt: "reading-2.7.0", schema: "narration-2.2.0" },
+  "2.0.0": { prompt: "reading-2.8.0", schema: "narration-2.2.0" },
 };
-export const CURRENT_READING_PROMPT = "reading-2.7.0";
+export const CURRENT_READING_PROMPT = "reading-2.8.0";
 
 /** 주제가 완성될 때마다 먼저 보여 주고, 검사에 걸리면 남은 부분만 이어 쓰는 프롬프트. 이전 버전으로 시작한 작업은 한 번에 받는다. */
-const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set(["reading-2.4.0", "reading-2.5.0", "reading-2.6.0", "reading-2.7.0"]);
+const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set(["reading-2.4.0", "reading-2.5.0", "reading-2.6.0", "reading-2.7.0", "reading-2.8.0"]);
 export const isProgressivePrompt = (version: string) => PROGRESSIVE_PROMPTS.has(version);
 /** 현재 프롬프트와 함께 쓰는 출력 형식 (PROMPTS_FOR_PLAN의 계획 2.0.0 값과 같다). */
 export const NARRATION_SCHEMA_VERSION = "narration-2.2.0";
@@ -1318,6 +1401,8 @@ const PERSONA_VERSION_FOR_PROMPT: Readonly<Record<string, string>> = {
   "followup-2.6.0": "1.1.0",
   "reading-2.7.0": "1.2.0",
   "followup-2.7.0": "1.2.0",
+  "reading-2.8.0": "1.3.0",
+  "followup-2.8.0": "1.3.0",
 };
 export const personaVersionFor = (promptVersion: string): string => PERSONA_VERSION_FOR_PROMPT[promptVersion] ?? "1.0.0";
 
@@ -1509,7 +1594,7 @@ export function buildQuestionPrompt(args: {
 
 // ─── followup-2.0.0 / 2.1.0 ─────────────────────────────────
 
-export const CURRENT_FOLLOWUP_PROMPT = "followup-2.7.0";
+export const CURRENT_FOLLOWUP_PROMPT = "followup-2.8.0";
 export const FOLLOWUP_SCHEMA_VERSION = "followup-output-2.2.0";
 
 const FOLLOWUP_RULES_2_0_0 = `
@@ -1914,6 +1999,24 @@ questions는 서버가 사용자의 메시지를 나누고 상품 범위 안의 
 - fixTheseProblemsFromPreviousAttempt가 있으면 거기 적힌 문제만, 아직 보내지 않은 문단에서 고친다. 근거 연결, 날짜, 비율 같은 사실 문제를 고칠 때 문장의 장난, 비유, 직설적인 지적까지 순화하지 않는다.
 `.trim();
 
+/**
+ * followup-2.8.0: 2.7.0과 같은 판단 규칙·입력·출력 형식 (캐릭터 묘묘 1.3.0). 최초 풀이 2.8.0과 같은 이유로
+ * 답마다 '묘묘다운 순간'을 설명 사이에 넣게 하고, 문단을 한두 문장으로 줄이던 지시를 반응은 짧게·설명은 두세 문장까지로 바꿨다.
+ */
+const FOLLOWUP_RULES_2_8_0 = revise(FOLLOWUP_RULES_2_7_0, [
+  [
+    "- 1층의 제한은 내용에 대한 것이다. 직설적인 지적, 얄미운 질문, 상황에 맞는 비유, 능청스러운 참견은 1층을 어기지 않는다. 설명하는 동안 캐릭터를 끄고 첫머리에만 반응을 붙이지 않는다.",
+    [
+      "- 1층의 제한은 내용에 대한 것이다. 직설적인 지적, 얄미운 질문, 상황에 맞는 비유, 능청스러운 참견은 1층을 어기지 않는다. 설명하는 동안 캐릭터를 끄고 첫머리에만 반응을 붙이지 않는다.",
+      "- 답마다 [캐릭터]의 '묘묘다운 순간'(으스대기, 놀리기, 얄미운 한마디, 마지못한 다정함)이 한두 번 들어간다. 첫머리 반응에만 몰지 말고 설명 사이에 넣고, 같은 말을 반복하지 않는다. 사용자가 이번 메시지에서 고통을 호소한 부분에서는 놀리지 않는다.",
+    ].join("\n"),
+  ],
+  [
+    "질문 하나의 답을 짧은 문단 2~4개로 나누고, 문단 하나에는 한두 문장만 담는다. 첫 문단은 반응과 결론을 한두 문장으로 말한다.",
+    "질문 하나의 답을 문단 3~5개로 나눈다. 첫 문단은 반응과 결론을 한두 문장으로 짧게 말하고, 이유와 방법을 푸는 문단은 두세 문장까지 쓴다.",
+  ],
+]);
+
 const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-2.0.0": FOLLOWUP_RULES_2_0_0,
   "followup-2.1.0": FOLLOWUP_RULES_2_1_0,
@@ -1923,6 +2026,7 @@ const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-2.5.0": FOLLOWUP_RULES_2_5_0,
   "followup-2.6.0": FOLLOWUP_RULES_2_6_0,
   "followup-2.7.0": FOLLOWUP_RULES_2_7_0,
+  "followup-2.8.0": FOLLOWUP_RULES_2_8_0,
 };
 
 const FOLLOWUP_V2_JSON_SCHEMA = {
@@ -1998,7 +2102,7 @@ export interface FollowupPromptArgs {
 export function buildFollowupPrompt(args: FollowupPromptArgs) {
   const material = materialInput([args.statements]);
   return {
-    instructions: `${personaBlockV4(args.persona, args.expression, "followup")}\n\n${FOLLOWUP_RULES[CURRENT_FOLLOWUP_PROMPT]}`,
+    instructions: `${personaBlockV4(args.persona, args.expression, "followup", "natural")}\n\n${FOLLOWUP_RULES[CURRENT_FOLLOWUP_PROMPT]}`,
     input: JSON.stringify({
       nickname: args.nickname,
       address: addressFor(args.persona, args.nickname),
