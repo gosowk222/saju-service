@@ -24,10 +24,11 @@ import type {
   ReadingPlan,
   StoredMessage,
 } from "@/domain/reading/types";
-import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmUsage, type StreamedResult } from "./client";
+import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type StreamedResult } from "./client";
 import { LLM_SETTINGS } from "./config";
 import { buildFollowupPrompt, buildQuestionPrompt, getNarrationSchema, getReadingPrompt, type FollowupPromptArgs } from "./prompts";
 import { completedParts, followupParts, type StreamedFollowup, type StreamedParts } from "./stream-parts";
+import { UsageMeter, type UsageSummary } from "./usage";
 
 export interface GenerationConfig {
   readonly modelId: string;
@@ -38,22 +39,11 @@ export interface GenerationConfig {
 
 export interface GenerationMeta {
   readonly actualModel: string | null;
-  readonly usage: LlmUsage;
+  /** 이 함수가 보낸 호출만의 사용량 (usage.ts). 한 생성 시도 전체는 호출한 쪽이 넘긴 meter에 함께 쌓인다. */
+  readonly usage: UsageSummary;
   readonly durationMs: number;
   readonly llmCalls: number;
   readonly issueCount: number;
-}
-
-export function mergeUsage(total: LlmUsage | null, next: LlmUsage): LlmUsage {
-  if (!total) return next;
-  const add = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
-  return {
-    inputTokens: add(total.inputTokens, next.inputTokens),
-    outputTokens: add(total.outputTokens, next.outputTokens),
-    totalTokens: add(total.totalTokens, next.totalTokens),
-    reasoningTokens: add(total.reasoningTokens, next.reasoningTokens),
-    cachedInputTokens: add(total.cachedInputTokens, next.cachedInputTokens),
-  };
 }
 
 export type NarrationInput =
@@ -70,14 +60,16 @@ export async function narrateReading(input: {
   readonly persona: Persona;
   readonly config: GenerationConfig;
   readonly deadlineAt?: number;
+  /** 생성 시도 전체의 사용량. 이 함수의 호출도 함께 기록된다. */
+  readonly meter?: UsageMeter;
 }): Promise<{ readonly output: NarrationOutput | NarrationOutputV2; readonly meta: GenerationMeta }> {
   const { narration, chart, persona, config, deadlineAt } = input;
+  const meter = new UsageMeter(input.meter);
   const prompt = getReadingPrompt(config.promptVersion);
   const schema = getNarrationSchema(config.schemaVersion);
   const task = LLM_SETTINGS.tasks.reading;
   const startedAt = Date.now();
   let previousIssues: string[] = [];
-  let usage: LlmUsage | null = null;
   let calls = 0;
   let issueCount = 0;
 
@@ -97,13 +89,13 @@ export async function narrateReading(input: {
         reasoningEffort: config.reasoningEffort,
         timeoutMs: task.timeoutMs,
         deadlineAt,
+        meter,
       });
     } catch (error) {
       if (error instanceof LlmError) throw new LlmError(error.code, error.message, calls + error.calls, error.details);
       throw error;
     }
     calls += result.meta.calls;
-    usage = mergeUsage(usage, result.meta.usage);
 
     const issues =
       narration.version === "2.0.0"
@@ -113,7 +105,7 @@ export async function narrateReading(input: {
     if (issues.length === 0) {
       return {
         output: result.parsed,
-        meta: { actualModel: result.meta.actualModel, usage, durationMs: Date.now() - startedAt, llmCalls: calls, issueCount },
+        meta: { actualModel: result.meta.actualModel, usage: meter.summary(), durationMs: Date.now() - startedAt, llmCalls: calls, issueCount },
       };
     }
     previousIssues = issues;
@@ -205,8 +197,11 @@ export async function narrateReadingProgressive(input: {
   /** 검사를 통과한 부분을 저장한다. 이 작업이 더는 이 풀이를 맡지 않으면 오류를 던진다. */
   readonly commit: (messages: readonly NewMessage[]) => Promise<void>;
   readonly stream?: typeof callStructuredStream;
+  /** 생성 시도 전체의 사용량. 중간에 끊은 호출은 usage를 모르는 호출로 남는다. */
+  readonly meter?: UsageMeter;
 }): Promise<{ readonly closing: NewMessage; readonly meta: GenerationMeta }> {
   const { plan, excluded, chart, persona, config, deadlineAt } = input;
+  const meter = new UsageMeter(input.meter);
   const callStream = input.stream ?? callStructuredStream;
   const prompt = getReadingPrompt(config.promptVersion);
   const schema = getNarrationSchema(config.schemaVersion);
@@ -227,7 +222,6 @@ export async function narrateReadingProgressive(input: {
   const nextTopic = () => plan.topics.find((topic) => !isSent(topic.topicId))?.topicId ?? null;
 
   let previousIssues: string[] = [];
-  let usage: LlmUsage | null = null;
   let actualModel: string | null = null;
   let calls = 0;
   let issueCount = 0;
@@ -305,6 +299,7 @@ export async function narrateReadingProgressive(input: {
         reasoningEffort: config.reasoningEffort,
         timeoutMs: task.timeoutMs,
         deadlineAt,
+        meter,
         // 닫는 따옴표나 괄호가 들어온 때만 다시 읽는다.
         onDelta: (text, delta) => (/["}\]]/.test(delta) ? handle(completedParts(text)) : Promise.resolve("continue")),
       });
@@ -316,7 +311,6 @@ export async function narrateReadingProgressive(input: {
       throw new LlmError(error.code, error.message, calls, error.details);
     }
     calls += result.meta.calls;
-    usage = mergeUsage(usage, result.meta.usage);
     actualModel = result.meta.actualModel ?? actualModel;
 
     if (!result.stopped && !issues.length) await handle(completedParts(result.text));
@@ -338,7 +332,7 @@ export async function narrateReadingProgressive(input: {
         const outside = total < plan.length.totalBubbles.min || total > plan.length.totalBubbles.max ? 1 : 0;
         return {
           closing: closingMessage(closing),
-          meta: { actualModel, usage: usage!, durationMs: Date.now() - startedAt, llmCalls: calls, issueCount: issueCount + outside },
+          meta: { actualModel, usage: meter.summary(), durationMs: Date.now() - startedAt, llmCalls: calls, issueCount: issueCount + outside },
         };
       }
     }
@@ -360,8 +354,10 @@ export async function classifyQuestion(input: {
   readonly lastTurn: { readonly question: string; readonly answer: string } | null;
   readonly modelId: string;
   readonly deadlineAt?: number;
+  readonly meter?: UsageMeter;
 }): Promise<{ readonly analysis: QuestionAnalysis; readonly meta: GenerationMeta }> {
   const startedAt = Date.now();
+  const meter = new UsageMeter(input.meter);
   const task = LLM_SETTINGS.tasks.classify;
   const prompt = buildQuestionPrompt(input);
   const result = await callStructured({
@@ -375,10 +371,11 @@ export async function classifyQuestion(input: {
     reasoningEffort: task.reasoningEffort,
     timeoutMs: task.timeoutMs,
     deadlineAt: input.deadlineAt,
+    meter,
   });
   return {
     analysis: buildQuestionAnalysis(input.product, input.referenceDate, result.parsed),
-    meta: { actualModel: result.meta.actualModel, usage: result.meta.usage, durationMs: Date.now() - startedAt, llmCalls: result.meta.calls, issueCount: 0 },
+    meta: { actualModel: result.meta.actualModel, usage: meter.summary(), durationMs: Date.now() - startedAt, llmCalls: result.meta.calls, issueCount: 0 },
   };
 }
 
@@ -401,9 +398,11 @@ export async function answerFollowupProgressive(
     /** 질문 순서대로, 그때까지 보낸 문단 전체. */
     readonly publish: (sections: readonly PublishedSection[]) => Promise<void>;
     readonly stream?: typeof callStructuredStream;
+    readonly meter?: UsageMeter;
   },
 ): Promise<{ readonly output: FollowupOutputV2; readonly meta: GenerationMeta }> {
   const callStream = input.stream ?? callStructuredStream;
+  const meter = new UsageMeter(input.meter);
   const task = LLM_SETTINGS.tasks.followup;
   const startedAt = Date.now();
   const order = input.check.questionRefs;
@@ -412,13 +411,12 @@ export async function answerFollowupProgressive(
   const snapshot = (): PublishedSection[] => order.filter((ref) => sent.get(ref)?.length).map((ref) => ({ questionRef: ref, paragraphs: [...sent.get(ref)!] }));
 
   let previousIssues: string[] = [];
-  let usage: LlmUsage | null = null;
   let actualModel: string | null = null;
   let calls = 0;
   let issueCount = 0;
   const metaOf = (extraIssues = 0): GenerationMeta => ({
     actualModel,
-    usage: usage!,
+    usage: meter.summary(),
     durationMs: Date.now() - startedAt,
     llmCalls: calls,
     issueCount: issueCount + extraIssues,
@@ -474,6 +472,7 @@ export async function answerFollowupProgressive(
         reasoningEffort: task.reasoningEffort,
         timeoutMs: task.timeoutMs,
         deadlineAt: input.deadlineAt,
+        meter,
         // 문단 경계(\n)나 닫는 따옴표·괄호가 들어온 때만 다시 읽는다.
         onDelta: (text, delta) => (/["\]\\]/.test(delta) ? handle(followupParts(text)) : Promise.resolve("continue")),
       });
@@ -484,7 +483,6 @@ export async function answerFollowupProgressive(
       throw new LlmError(error.code, error.message, calls, error.details);
     }
     calls += result.meta.calls;
-    usage = mergeUsage(usage, result.meta.usage);
     actualModel = result.meta.actualModel ?? actualModel;
 
     if (!result.stopped && !issues.length) await handle(followupParts(result.text));
@@ -525,12 +523,13 @@ export async function answerFollowup(
     readonly modelId: string;
     readonly check: FollowupCheckContext;
     readonly deadlineAt?: number;
+    readonly meter?: UsageMeter;
   },
 ): Promise<{ readonly output: FollowupOutputV2; readonly meta: GenerationMeta }> {
   const startedAt = Date.now();
+  const meter = new UsageMeter(input.meter);
   const task = LLM_SETTINGS.tasks.followup;
   let previousIssues: string[] = [];
-  let usage: LlmUsage | null = null;
   let calls = 0;
   let issueCount = 0;
 
@@ -548,16 +547,16 @@ export async function answerFollowup(
       reasoningEffort: task.reasoningEffort,
       timeoutMs: task.timeoutMs,
       deadlineAt: input.deadlineAt,
+      meter,
     });
     calls += result.meta.calls;
-    usage = mergeUsage(usage, result.meta.usage);
 
     const issues = checkFollowupV2(result.parsed, input.check, input.chart);
     issueCount += issues.length;
     if (issues.length === 0) {
       return {
         output: result.parsed,
-        meta: { actualModel: result.meta.actualModel, usage, durationMs: Date.now() - startedAt, llmCalls: calls, issueCount },
+        meta: { actualModel: result.meta.actualModel, usage: meter.summary(), durationMs: Date.now() - startedAt, llmCalls: calls, issueCount },
       };
     }
     previousIssues = issues;

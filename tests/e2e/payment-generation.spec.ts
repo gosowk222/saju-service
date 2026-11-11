@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { createPreview, gatewayStats, login, purchase, setControl, stubTossSdk, waitForCompletedReading } from "./helpers";
+import { createPreview, gatewaySql, gatewayStats, login, purchase, setControl, stubTossSdk, waitForCompletedReading } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await setControl(request, { openai: "ok", tossFail: null, loginError: null, streamDelayMs: 10 });
@@ -144,6 +144,27 @@ test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", as
   await page.getByRole("button", { name: "다시 시도하기" }).click();
   await waitForCompletedReading(page);
   await expect(page.getByText("풀이 완료")).toBeVisible();
+
+  // 토큰 사용량: 실패한 시도와 성공한 시도가 각각 한 줄씩 남고, 합계는 모든 시도를 더한다 (generation_attempts, generation_usage).
+  const readingId = new URL(page.url()).pathname.split("/").filter(Boolean).at(-1)!;
+  const attempts = await gatewaySql<{ attempt: number; outcome: string; error_code: string | null; input_tokens: string | null; output_tokens: string | null; total_tokens: string | null; usage_complete: boolean; prompt_version: string; persona_version: string | null }>(
+    request,
+    "select attempt, outcome, error_code, input_tokens, output_tokens, total_tokens, usage_complete, prompt_version, persona_version from public.generation_attempts where reading_id = $1 order by attempt",
+    [readingId],
+  );
+  expect(attempts.map((row) => row.outcome)).toEqual(["failed", "completed"]);
+  expect(attempts[0]!.error_code).toBeTruthy();
+  const done = attempts[1]!;
+  expect(done).toMatchObject({ prompt_version: "reading-3.1.0", persona_version: "2.1.0", usage_complete: true });
+  expect(Number(done.total_tokens)).toBe(Number(done.input_tokens) + Number(done.output_tokens));
+  expect(Number(done.input_tokens)).toBeGreaterThan(0);
+  const [sum] = await gatewaySql<{ recorded_attempts: number; attempts: number; total_tokens: string; usage_complete: boolean }>(
+    request,
+    "select recorded_attempts, attempts, total_tokens, usage_complete from public.generation_usage where reading_id = $1",
+    [readingId],
+  );
+  expect(sum!.recorded_attempts).toBe(sum!.attempts);
+  expect(Number(sum!.total_tokens)).toBe(attempts.reduce((total, row) => total + Number(row.total_tokens ?? 0), 0));
 });
 
 test("입력을 수정하면 새 계산으로 갱신되고 이전 주문과 섞이지 않는다", async ({ page, request }) => {

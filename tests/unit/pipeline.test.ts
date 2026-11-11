@@ -11,6 +11,7 @@ import { callStructured, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
 import { CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, NARRATION_SCHEMA_VERSION, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { UsageMeter } from "@/server/llm/usage";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
@@ -233,9 +234,10 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 
-  it("새 작업은 현재 프롬프트(reading-2.9.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+  it("새 작업은 현재 프롬프트(reading-3.1.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
     expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.9.0");
+    expect(CURRENT_READING_PROMPT).toBe("reading-3.1.0");
+    expect(isProgressivePrompt("reading-2.9.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
     expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
     expect(isProgressivePrompt(CURRENT_READING_PROMPT)).toBe(true);
@@ -279,7 +281,25 @@ describe("최초 풀이 생성", () => {
     // 다시 생성할 때도 캐릭터 지시가 그대로 들어간다.
     const [first, second] = requests.filter((item) => item.schema === "saju_narration_v2");
     expect(second!.instructions).toBe(first!.instructions);
-    expect(second!.instructions.startsWith("[캐릭터]")).toBe(true);
+    expect(second!.instructions.startsWith("[캐릭터: 묘묘]")).toBe(true);
+  });
+
+  it("한 생성 시도의 사용량은 질문 분석과 본문 작성·재작성을 모두 더하고, 다음 시도에서 저장된 분석을 다시 쓰면 더하지 않는다", async () => {
+    const { admin } = fakeAdmin();
+    const args = { admin, readingId: "r-usage", base: base.plan, product: FIRST_OVERVIEW, birth, concern: "언제 취업할까요?", modelId: "gpt-5.6-luna", deadlineAt: Date.now() + 60_000 };
+    const attempt = new UsageMeter();
+    const prepared = await prepareNarration({ ...args, meter: attempt });
+    mode = { narration: "invalid-once" };
+    const { meta } = await narrateReading({ narration: { version: "2.0.0", plan: prepared.plan, excluded: prepared.excluded }, chart: base.chart, persona, config, meter: attempt });
+    // 가짜 서버는 호출마다 input 100, output 50, cached 0, reasoning 5를 돌려준다.
+    expect(meta.usage).toMatchObject({ calls: 2, inputTokens: 200, outputTokens: 100, complete: true });
+    expect(attempt.summary()).toMatchObject({ calls: 3, inputTokens: 300, outputTokens: 150, cachedInputTokens: 0, reasoningTokens: 15, totalTokens: 450, complete: true });
+    expect(meta.llmCalls + prepared.llmCalls).toBe(attempt.calls);
+
+    const next = new UsageMeter();
+    const reused = await prepareNarration({ ...args, meter: next });
+    expect(reused.llmCalls).toBe(0);
+    expect(next.summary()).toMatchObject({ calls: 0, inputTokens: 0, complete: true });
   });
 
   it("계속 실패하면 설정한 횟수에서 멈춘다", async () => {
@@ -358,8 +378,8 @@ describe("후속 질문 답변 조립", () => {
     expect(input.userContext.find((item) => item.from === "message")!.text).toContain("물이 많은 곳");
     expect(input.lastTurn).toEqual(lastTurn);
     // 실제 후속 답변 프롬프트와 그 버전에 맞는 캐릭터 설정을 쓴다.
-    expect(sent.instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
-    expect(sent.instructions).toContain("[먼저 반응하고 답하기]");
+    expect(sent.instructions.startsWith("[캐릭터: 묘묘]\n누가 말하는가: 묘묘.")).toBe(true);
+    expect(sent.instructions).toContain("[캐릭터로 답하기]");
   });
 
   it("범위 안 질문이 없으면 답변을 만들지 않고 범위 안내나 되묻기로 끝낸다", () => {

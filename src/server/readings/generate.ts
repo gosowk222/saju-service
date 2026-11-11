@@ -2,13 +2,13 @@ import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
+import { issueSummary } from "@/domain/reading/check";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan, type StoredMessage } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
 import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import {
-  mergeUsage,
   narrateReading,
   narrateReadingProgressive,
   sentPartsFrom,
@@ -18,7 +18,8 @@ import {
   type NarrationInput,
   type NewMessage,
 } from "@/server/llm/narrate";
-import { isPlanV2Prompt, isProgressivePrompt, personaVersionFor, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { hasReadingPrompt, isPlanV2Prompt, isProgressivePrompt, personaVersionFor, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { UsageMeter } from "@/server/llm/usage";
 import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
@@ -48,6 +49,10 @@ class GenerationHandedOver extends Error {}
  *
  * 저장된 작성 재료의 버전에 맞는 프롬프트를 고른다. 이전 형식(1.0.0)으로 만든 풀이는 이전 프롬프트로 생성해
  * 저장된 재료와 출력 형식이 섞이지 않게 한다. 메시지와 완료 상태는 한 트랜잭션으로 저장된다.
+ *
+ * 토큰 사용량: 이 시도(attempt)에서 실제로 보낸 질문 분석·본문 작성·재작성 호출을 모두 한 meter에 기록하고,
+ * 끝나는 방식(완료, 실패, 다른 요청이 이어받음)과 관계없이 generation_attempts에 시도마다 한 줄로 남긴다 (record_generation_attempt).
+ * 같은 시도를 두 번 기록해도 한 줄만 남는다. 저장된 질문 분석을 다시 쓰거나 이미 끝난 풀이를 열면 호출이 없으므로 기록할 것도 없다.
  */
 export async function runGeneration(userId: string, readingId: string, retry: boolean): Promise<ClaimResult["reason"]> {
   const admin = createSupabaseAdminClient();
@@ -88,15 +93,48 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
   if (!claim.claimed) return claim.reason;
 
   const attempt = claim.job.attempts;
-  let preparedCalls = 0;
-  const fail = async (code: string, isRetryable: boolean, calls: number) => {
+  /** 이 시도에서 보낸 모든 호출의 사용량과 호출 수. */
+  const meter = new UsageMeter();
+  let personaVersion: string | null = null;
+  const fail = async (code: string, isRetryable: boolean) => {
     await admin.rpc("fail_generation", {
       p_reading_id: readingId,
       p_attempt: attempt,
       p_code: code,
       p_retryable: isRetryable,
-      p_llm_calls: calls + preparedCalls,
+      p_llm_calls: meter.calls,
     });
+  };
+  /** 이 시도의 사용량을 남긴다. 기록이 실패해도(예: migration 미적용) 풀이 생성 결과는 바꾸지 않고 로그만 남긴다. */
+  const recordAttempt = async (
+    outcome: "completed" | "failed" | "handed_over",
+    errorCode: string | null,
+    actualModel: string | null,
+    issues: readonly string[] = [],
+  ) => {
+    try {
+      const { error: recordError } = await admin.rpc("record_generation_attempt", {
+        p_reading_id: readingId,
+        p_attempt: attempt,
+        p_outcome: outcome,
+        p_record: {
+          errorCode,
+          modelId: claim.job.model_id,
+          actualModel,
+          promptVersion: claim.job.prompt_version,
+          schemaVersion: claim.job.schema_version,
+          personaVersion,
+          reasoningEffort: claim.job.reasoning_effort,
+          usage: meter.summary(),
+          durationMs: Date.now() - startedAt,
+          // 마지막 검사에서 걸린 문제의 종류. 생성 문장과 질문 원문은 빼고 남긴다 (issueSummary).
+          issues: [...new Set(issues.map(issueSummary))].slice(0, 15),
+        },
+      });
+      if (recordError) console.warn("[generation] usage not recorded", { readingId, attempt, code: recordError.code ?? "unknown" });
+    } catch (error) {
+      console.warn("[generation] usage not recorded", { readingId, attempt, reason: internalReason(error) });
+    }
   };
 
   try {
@@ -107,10 +145,19 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
       reasoningEffort: claim.job.reasoning_effort!,
     };
     if (config.modelId === "unconfigured") throw new LlmError("model_not_configured", "모델이 설정되지 않았습니다.", 0);
+    // 이 코드가 모르는 프롬프트에 고정된 작업 (예: 되돌린 작업에서 시작한 reading-3.0.0). 다시 시도해도 같으므로 재시도할 수 없는 실패로 정리한다.
+    // 다른 버전으로 바꿔 이어 쓰지 않는다 (이미 보낸 말풍선과 지시가 섞이지 않게).
+    if (!hasReadingPrompt(config.promptVersion)) {
+      console.error("[generation] failed", { readingId, code: "prompt_version_unavailable", prompt: config.promptVersion });
+      await fail("prompt_version_unavailable", false);
+      await recordAttempt("failed", "prompt_version_unavailable", null);
+      return "failed";
+    }
 
     // 캐릭터 설정은 작업에 고정된 프롬프트 버전에 맞춘다. 이전 프롬프트로 이어 쓰는 작업에 새 캐릭터 설정이 섞이지 않게 한다.
     const persona = findPersona(reading.persona_id as string, personaVersionFor(config.promptVersion));
     if (!persona) throw new Error("persona_unavailable");
+    personaVersion = persona.version;
     const product = findProduct(reading.product_id as string);
     const chart = reading.chart as ChartView;
 
@@ -128,8 +175,8 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
         concern: (reading.concern as string | null) ?? "",
         modelId: config.modelId,
         deadlineAt,
+        meter,
       });
-      preparedCalls = prepared.llmCalls;
       narration = { version: "2.0.0", plan: prepared.plan, excluded: prepared.excluded };
     } else {
       narration = { version: "1.0.0", plan: plan as ReadingPlan };
@@ -170,16 +217,18 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
         deadlineAt,
         sent: sentPartsFrom(rows.map((row) => ({ topicId: row.topic_id, text: row.text })), focusSectionId),
         commit,
+        meter,
       });
       messages = [{ ...progressive.closing, seq: nextSeq }];
       meta = progressive.meta;
     } else {
-      const whole = await narrateReading({ narration, chart, persona, config, deadlineAt });
+      const whole = await narrateReading({ narration, chart, persona, config, deadlineAt, meter });
       messages = toStoredMessages(whole.output, product?.focusSection.id);
       meta = whole.meta;
     }
-    const usage = prepared?.usage ? mergeUsage(prepared.usage, meta.usage) : meta.usage;
-    const llmCalls = meta.llmCalls + preparedCalls;
+    // 질문 분석과 본문 작성(재작성 포함)을 합친 이 시도의 사용량. usage를 받지 못한 호출이 있으면 complete=false.
+    const usage = meter.summary();
+    const llmCalls = meter.calls;
     const durationMs = Date.now() - startedAt;
 
     const { data: saved, error: saveError } = await admin.rpc("complete_generation", {
@@ -208,25 +257,33 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
       calls: llmCalls,
       durationMs,
       inputTokens: usage.inputTokens,
+      cachedInputTokens: usage.cachedInputTokens,
       outputTokens: usage.outputTokens,
+      usageComplete: usage.complete,
       issues: meta.issueCount,
     });
     if (saveError) {
-      await fail("save_failed", true, meta.llmCalls);
+      await fail("save_failed", true);
+      await recordAttempt("failed", "save_failed", meta.actualModel);
       return "failed";
     }
+    await recordAttempt(saved ? "completed" : "handed_over", null, meta.actualModel);
     return saved ? "completed" : "running";
   } catch (error) {
     if (error instanceof GenerationHandedOver) {
       console.info("[generation] handed over", { readingId, attempt });
+      await recordAttempt("handed_over", null, null);
       return "running";
     }
     if (error instanceof LlmError) {
-      console.error("[generation] failed", { readingId, code: error.code });
-      await fail(error.code, retryable(error), error.calls);
+      // 검사 실패 내용(error.details)에는 생성 문장 일부가 들어 있어 남기지 않는다. 문제 수만 남긴다.
+      console.error("[generation] failed", { readingId, code: error.code, issues: error.details.length });
+      await fail(error.code, retryable(error));
+      await recordAttempt("failed", error.code, null, error.details);
     } else {
       console.error("[generation] failed", { readingId, code: "internal", reason: internalReason(error) });
-      await fail("internal", true, 0);
+      await fail("internal", true);
+      await recordAttempt("failed", "internal", null);
     }
     return "failed";
   }

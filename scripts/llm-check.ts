@@ -20,7 +20,7 @@ async function main() {
   }
   try {
     const { actualModel, usage } = await pingModel(model);
-    console.log(JSON.stringify({ model, result: "ok", actualModel, totalTokens: usage.totalTokens }));
+    console.log(JSON.stringify({ model, result: "ok", actualModel, totalTokens: usage?.totalTokens ?? null }));
   } catch (error) {
     const classified = error instanceof LlmError ? error : classifyProviderError(error);
     console.log(JSON.stringify({ model, result: "failed", code: classified.code }));

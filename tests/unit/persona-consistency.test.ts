@@ -11,7 +11,7 @@ import { toStoredMessages } from "@/server/llm/narrate";
 import { buildFollowupPrompt, CURRENT_READING_PROMPT, getNarrationSchema, getReadingPrompt, NARRATION_SCHEMA_VERSION } from "@/server/llm/prompts";
 
 /**
- * 묘묘 1.1.0 / reading-2.6.0의 코드 경로 확인. 가짜 입력과 정해 둔 문장으로 확인하며, 실제 모델의 문장 품질과는 무관하다
+ * 묘묘 캐릭터 코드 경로 확인 (2.6.0부터, 현재 묘묘 2.1.0 / reading-3.1.0). 가짜 입력과 정해 둔 문장으로 확인하며, 실제 모델의 문장 품질과는 무관하다
  * (실제 모델 확인은 LIVE_NOT_RUN, 사용자가 docs/personas/myomyo-evaluation.md의 순서로 직접 확인한다).
  */
 
@@ -32,8 +32,10 @@ describe("여섯 상황 모두 같은 캐릭터 지시와, 상황과 감정을 �
     const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
     const parsed = JSON.parse(input) as { situation: { label: string; context: string }; userContext: { from: string; text: string }[]; topics: { topicId: string }[] };
     const option = FIRST_OVERVIEW.situation.options.find((item) => item.id === situationId)!;
-    expect(instructions.startsWith("[캐릭터]")).toBe(true);
-    expect(instructions).toContain("context에 적힌 걱정거리(예: 생활비와 불안 관리)는 그 상황에서 흔한 주제일 뿐 이 사용자가 말한 감정이 아니다");
+    expect(instructions.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    expect(instructions).toContain("context의 걱정거리는 그 상황에서 흔한 주제일 뿐 이 사용자가 말한 감정이 아니다");
+    // 고른 상황 때문에 풀이 전체를 진지하게 바꾸지 않는다.
+    expect(instructions).toContain("고른 상황에 흔한 걱정이나 지난 메시지의 한마디 때문에 풀이 전체를 진지하게 바꾸지 않는다");
     expect(parsed.situation).toEqual({ label: option.label, context: option.context });
     // 궁금한 점이 없으면 사용자가 말한 감정은 없다. 고른 상황만 출처 situation으로 들어간다.
     expect(parsed.userContext).toEqual([{ ref: "u1", text: `사용자가 고른 현재 상황: ${option.label}`, from: "situation" }]);
@@ -59,7 +61,7 @@ describe("여섯 상황 모두 같은 캐릭터 지시와, 상황과 감정을 �
   });
 });
 
-describe("작성 재료의 중복 덜어 내기 (reading-2.7.0, followup-2.7.0)", () => {
+describe("작성 재료의 중복 덜어 내기 (reading-2.7.0, followup-2.7.0, 행동 문장은 3.1.0부터)", () => {
   const { plan: base } = analyze("job-seeking");
   const plan = buildNarrationPlan({ base, product: FIRST_OVERVIEW, analysis: emptyAnalysis("2026-11-11"), timing: [] });
   type InputStatement = { ref: string; text: string; weakness: unknown; action: unknown; basis: string[]; caveats: string[]; lore?: string[] };
@@ -79,14 +81,25 @@ describe("작성 재료의 중복 덜어 내기 (reading-2.7.0, followup-2.7.0)"
     expect(givenBasis.length).toBe(new Set(givenBasis).size);
   });
 
-  it("뜻은 그대로다: 모든 근거·이유·주의사항이 어딘가에 한 번은 들어가고, 판단·약점·행동 제안은 바뀌지 않는다", () => {
+  it("뜻은 그대로다: 모든 근거·이유·주의사항·행동이 어딘가에 한 번은 들어가고, 판단과 약점(무엇이·언제·잃는 것)은 바뀌지 않는다", () => {
     expect(new Set(given.flatMap((statement) => statement.lore ?? []))).toEqual(new Set(original.flatMap((statement) => statement.lore ?? [])));
     expect(new Set(given.flatMap((statement) => statement.basis))).toEqual(new Set(original.flatMap((statement) => statement.basis ?? [])));
+    type Weakness = { what: string; when: string; cost: string; change: string | null } | null;
     for (const statement of original) {
       const item = given.find((entry) => entry.ref === statement.ref)!;
-      expect([item.text, item.weakness, item.action]).toEqual([statement.text, statement.weakness ?? null, statement.action ?? null]);
+      expect(item.text).toBe(statement.text);
+      const weakness = item.weakness as Weakness;
+      expect(weakness && { what: weakness.what, when: weakness.when, cost: weakness.cost }).toEqual(
+        statement.weakness ? { what: statement.weakness.what, when: statement.weakness.when, cost: statement.weakness.cost } : null,
+      );
+      // 행동 문장은 그대로이거나, 앞 해석에 같은 문장이 있어 비운 것이다.
+      expect([statement.action ?? null, null]).toContain(item.action);
       for (const caveat of statement.caveats) expect([...input.commonCaveats, ...item.caveats]).toContain(caveat);
     }
+    const actionsOf = (items: readonly { action?: unknown; weakness?: unknown }[]) =>
+      items.flatMap((item) => [item.action, (item.weakness as Weakness)?.change]).filter((text): text is string => typeof text === "string" && Boolean(text));
+    expect(new Set(actionsOf(given))).toEqual(new Set(actionsOf(original as never)));
+    expect(actionsOf(given)).toHaveLength(new Set(actionsOf(given)).size);
     expect(given).toHaveLength(original.length);
   });
 

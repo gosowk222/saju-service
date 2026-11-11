@@ -23,6 +23,15 @@ import type {
  * 1.0.0 검사(checkNarration, checkFollowup)는 이전 형식으로 시작한 생성 작업에만 쓴다.
  */
 
+/**
+ * 검사 문제를 기록용으로 줄인다. 문제 문장은 '어디: 무엇이 잘못됐습니다 (값)' 다음에 생성 문장이나 질문 요약이 붙을 수 있으므로,
+ * 첫 '~니다'와 바로 뒤 괄호까지만 남긴다 (예: 'work: 없는 근거를 참조했습니다 (s9)'). 생성 결과 원문과 사용자 질문을 DB 기록에 남기지 않는다.
+ */
+export function issueSummary(issue: string): string {
+  const match = issue.match(/^(.*?니다)(\s*\([^)]{0,20}\))?/);
+  return match ? `${match[1]}${match[2] ?? ""}` : issue.slice(0, 30);
+}
+
 export const BUBBLE_MAX_CHARS = 220;
 export const FOLLOWUP_MAX_CHARS = 700;
 const TOTAL_BUBBLES = { min: 12, max: 30 };
@@ -274,7 +283,8 @@ export function catchphraseCounter(persona: Persona | undefined, scope: "reading
     for (const phrase of persona.catchphrases) {
       bump(phrase.pattern, phrase.text, occurrences(text, phrase), limitOf(phrase.maxPerReading, phrase.maxPerAnswer));
     }
-    bump("emoji", "그림 이모티콘", (text.match(EMOJI) ?? []).length, limitOf(persona.emojiLimit.perReading, persona.emojiLimit.perAnswer));
+    // 묘묘 2.1.0부터는 말버릇 목록과 이모티콘 상한이 없어 아무것도 세지 않는다 (말투를 개수로 판정하지 않는다).
+    if (persona.emojiLimit) bump("emoji", "그림 이모티콘", (text.match(EMOJI) ?? []).length, limitOf(persona.emojiLimit.perReading, persona.emojiLimit.perAnswer));
     return issues;
   };
   return { count };

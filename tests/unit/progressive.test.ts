@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MYOMYO } from "@/domain/personas";
+import { MYOMYO, MYOMYO_1_4_0 } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { buildNarrationPlan } from "@/domain/reading/focus";
 import { emptyAnalysis } from "@/domain/reading/question";
@@ -73,15 +73,16 @@ function fakeStream(outputs: readonly NarrationOutputV2[]) {
   return { stream, inputs, instructions };
 }
 
-async function run(outputs: readonly NarrationOutputV2[], sent: SentParts = { opening: null, focus: [], topics: [] }) {
+/** legacy: reading-2.9.0(묘묘 1.4.0)으로 시작한 작업처럼 이어 쓴다 (말버릇 횟수를 세던 버전). */
+async function run(outputs: readonly NarrationOutputV2[], sent: SentParts = { opening: null, focus: [], topics: [] }, legacy = false) {
   const commits: NewMessage[][] = [];
   const { stream, inputs, instructions } = fakeStream(outputs);
   const result = await narrateReadingProgressive({
     plan,
     excluded: [],
     chart,
-    persona: MYOMYO,
-    config,
+    persona: legacy ? MYOMYO_1_4_0 : MYOMYO,
+    config: legacy ? { ...config, promptVersion: "reading-2.9.0" } : config,
     sent,
     commit: async (messages) => {
       commits.push([...messages]);
@@ -234,7 +235,7 @@ describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는�
     expect(result.meta.llmCalls).toBe(2);
   });
 
-  it("보내지 않은 주제의 말버릇은 다음 시도의 횟수에 넣지 않는다", async () => {
+  it("(1.4.0으로 시작한 작업) 보내지 않은 주제의 말버릇은 다음 시도의 횟수에 넣지 않는다", async () => {
     // 보낸 1·2번 주제에 '어라~?' 2번, 거부된 3번 주제에 2번. 다시 쓴 3번 주제도 2번 → 실제로 보낸 것은 4번(상한 4).
     const withTic = (round: number) => (topicId: string) => {
       const index = topicIds.indexOf(topicId);
@@ -245,13 +246,13 @@ describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는�
     };
     const first = brokenAtThird(withTic(1));
     const second = rewrittenFromThird(withTic(2));
-    const { commits, inputs } = await run([first, second]);
+    const { commits, inputs } = await run([first, second], undefined, true);
     expect(inputs).toHaveLength(2);
     const sentTics = commits.flat().filter((message) => message.text.includes("어라~?")).length;
     expect(sentTics).toBe(4);
   });
 
-  it("이미 보낸 말버릇은 그대로 세어, 보낸 것과 합쳐 상한을 넘으면 다시 쓰게 한다", async () => {
+  it("(1.4.0으로 시작한 작업) 이미 보낸 말버릇은 그대로 세어, 보낸 것과 합쳐 상한을 넘으면 다시 쓰게 한다", async () => {
     const tic = (topicId: string) => topicBubbles(topicId).map((bubble, index) => (index === 0 ? `어라~? ${bubble.text}` : bubble.text));
     const stored = [
       { topicId: null, text: "달빛아, 왔네." },
@@ -259,14 +260,16 @@ describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는�
     ];
     // 이미 4번 보냈다. 이어 쓴 5번 주제에 또 쓰면 상한(4)을 넘는다.
     const next = output({ topics: plan.topics.map((topic, index) => ({ topicId: topic.topicId, bubbles: index < 4 ? [] : index === 4 ? topicBubbles(topic.topicId).map((bubble, i) => (i === 0 ? { ...bubble, text: `어라~? ${bubble.text}` } : bubble)) : topicBubbles(topic.topicId) })) }, topicIds.slice(0, 4));
-    await expect(run([next, next], sentPartsFrom(stored, plan.focusSection.id))).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(run([next, next], sentPartsFrom(stored, plan.focusSection.id), true)).rejects.toMatchObject({ code: "validation_failed" });
+    // 묘묘 2.1.0(reading-3.1.0)은 말버릇을 세지 않으므로 같은 말풍선을 그대로 받는다.
+    await expect(run([next], sentPartsFrom(stored, plan.focusSection.id))).resolves.toBeDefined();
   });
 
   it("다시 쓰는 요청에도 같은 캐릭터 지시가 그대로 들어간다", async () => {
     const { instructions } = await run([brokenAtThird(plainTexts), rewrittenFromThird(plainTexts)]);
     expect(instructions).toHaveLength(2);
     expect(instructions[1]).toBe(instructions[0]);
-    expect(instructions[1]!.startsWith("[캐릭터]")).toBe(true);
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
     expect(instructions[1]).toContain(MYOMYO.tone[4]!);
     expect(instructions[1]).toContain("근거 연결, 날짜, 비율 같은 사실 문제를 고칠 때 문장의 장난, 비유, 직설적인 지적까지 순화하지 않는다");
   });
@@ -429,7 +432,7 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
     await answerFollowupProgressive({ ...args, questions: [question], reaction: "praise", publish: async () => undefined, stream: capture });
     expect(instructions).toHaveLength(2);
     expect(instructions[1]).toBe(instructions[0]);
-    expect(instructions[1]!.startsWith("[캐릭터]")).toBe(true);
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
     for (const input of inputs) {
       expect(input.reaction).toBe("praise");
       expect((input.questions as { ref: string }[]).map((item) => item.ref)).toEqual(["q1"]);

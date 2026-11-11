@@ -8,6 +8,7 @@ import { excludedItems, excludedLabel, inScopeFacts, inScopeItems, itemDomain, r
 import { isPlanV2, type AnyReadingPlan, type ChartView, type StoredMessage, type TimingAnalysis, type UserContextStatement } from "@/domain/reading/types";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { answerFollowup, answerFollowupProgressive, type GenerationMeta } from "@/server/llm/narrate";
+import type { UsageMeter } from "@/server/llm/usage";
 
 export type FollowupStatus = "answered" | "off_topic" | "clarify";
 
@@ -69,6 +70,8 @@ export async function answerAnalyzedFollowup(input: {
    * 이 요청이 더는 이 질문을 맡지 않으면 오류를 던진다.
    */
   readonly publish?: (answer: string) => Promise<void>;
+  /** 이 후속 질문 하나의 사용량. 질문 분석과 답변 호출이 함께 쌓인다. */
+  readonly meter?: UsageMeter;
 }): Promise<{ readonly status: FollowupStatus; readonly answer: string; readonly refs: readonly string[]; readonly meta: GenerationMeta }> {
   const { plan, product, analysis } = input;
   const items = inScopeItems(analysis);
@@ -115,6 +118,7 @@ export async function answerAnalyzedFollowup(input: {
     chart: input.chart,
     modelId: input.modelId,
     deadlineAt: input.deadlineAt,
+    meter: input.meter,
     check: {
       questionRefs: questions.map((item) => item.ref),
       knownRefs: new Set([...plan.facts.map((fact) => fact.ref), ...userContext.map((item) => item.ref), ...statements.map((item) => item.ref), ...timingAll.map((item) => item.ref)]),

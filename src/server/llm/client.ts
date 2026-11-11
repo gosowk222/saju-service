@@ -2,6 +2,9 @@ import "server-only";
 import OpenAI from "openai";
 import type { z } from "zod";
 import { LLM_SETTINGS, LlmConfigError, liveCallBlockReason, requireApiKey } from "./config";
+import type { LlmUsage, UsageMeter } from "./usage";
+
+export type { LlmUsage } from "./usage";
 
 /** OpenAI 호출은 이 모듈만 한다. 화면, 규칙, 결제 코드는 SDK를 직접 쓰지 않는다. */
 
@@ -50,14 +53,6 @@ export class LlmError extends Error {
   }
 }
 
-export interface LlmUsage {
-  readonly inputTokens: number | null;
-  readonly outputTokens: number | null;
-  readonly totalTokens: number | null;
-  readonly reasoningTokens: number | null;
-  readonly cachedInputTokens: number | null;
-}
-
 export interface StructuredResult<T> {
   readonly parsed: T;
   readonly meta: {
@@ -83,6 +78,8 @@ export interface StructuredRequest<T> {
   readonly timeoutMs?: number;
   /** 이 시각(epoch ms)을 넘길 재시도는 하지 않는다. */
   readonly deadlineAt?: number;
+  /** 요청마다 사용량을 기록한다. 응답을 받은 뒤 실패해도(형식 오류, 미완료) 받은 usage는 남는다. */
+  readonly meter?: UsageMeter;
 }
 
 let activeCalls = 0;
@@ -124,13 +121,43 @@ export function classifyProviderError(error: unknown): LlmError {
   return new LlmError("server_error", "알 수 없는 호출 오류입니다.");
 }
 
-function readUsage(usage: OpenAI.Responses.ResponseUsage | undefined): LlmUsage {
+/** API가 돌려준 usage. usage 자체가 없으면 null (0으로 채우지 않는다). */
+function readUsage(usage: OpenAI.Responses.ResponseUsage | null | undefined): LlmUsage | null {
+  if (!usage) return null;
+  const count = (value: number | null | undefined) => (typeof value === "number" ? value : null);
   return {
-    inputTokens: usage?.input_tokens ?? null,
-    outputTokens: usage?.output_tokens ?? null,
-    totalTokens: usage?.total_tokens ?? null,
-    reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? null,
-    cachedInputTokens: usage?.input_tokens_details?.cached_tokens ?? null,
+    inputTokens: count(usage.input_tokens),
+    outputTokens: count(usage.output_tokens),
+    totalTokens: count(usage.total_tokens),
+    reasoningTokens: count(usage.output_tokens_details?.reasoning_tokens),
+    cachedInputTokens: count(usage.input_tokens_details?.cached_tokens),
+  };
+}
+
+/**
+ * 요청 하나의 사용량을 한 번만 기록하는 도우미. 응답을 받으면 usage를, 오류 응답(4xx·5xx)이면 생성하지 않은 호출로,
+ * 연결이 끊기거나 중간에 멈춘 경우는 usage를 모르는 호출로 남긴다.
+ */
+function requestLedger(meter: UsageMeter | undefined) {
+  let done = false;
+  return {
+    usage(usage: OpenAI.Responses.ResponseUsage | null | undefined) {
+      if (done) return;
+      done = true;
+      const read = readUsage(usage);
+      meter?.record(read ? { kind: "usage", usage: read } : { kind: "unknown" });
+    },
+    unknown() {
+      if (done) return;
+      done = true;
+      meter?.record({ kind: "unknown" });
+    },
+    failed(error: unknown) {
+      if (done) return;
+      done = true;
+      const rejected = error instanceof OpenAI.APIError && typeof error.status === "number";
+      meter?.record(rejected ? { kind: "rejected" } : { kind: "unknown" });
+    },
   };
 }
 
@@ -175,6 +202,7 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
 
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   for (let attempt = 0; ; attempt += 1) {
+    const ledger = requestLedger(request.meter);
     try {
       calls += 1;
       // temperature 등 모델 문서에서 확인하지 않은 옵션은 보내지 않는다.
@@ -194,6 +222,8 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
           { timeout },
         ),
       );
+      // 응답을 받았으면 형식 확인 전에 사용량부터 남긴다 (미완료·형식 오류로 실패해도 토큰은 쓰였다).
+      ledger.usage(response.usage);
 
       const text = extractOutputText(response);
       let json: unknown;
@@ -211,12 +241,13 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
           requestedModel: request.model,
           actualModel: response.model ?? null,
           responseId: response.id ?? null,
-          usage: readUsage(response.usage),
+          usage: readUsage(response.usage) ?? UNKNOWN_USAGE,
           durationMs: Date.now() - startedAt,
           calls,
         },
       };
     } catch (error) {
+      ledger.failed(error);
       const classified = classifyProviderError(error);
       const backoff = 500 * 2 ** attempt;
       const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
@@ -267,6 +298,7 @@ export async function callStructuredStream<T>(
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   for (let attempt = 0; ; attempt += 1) {
     let received = false;
+    const ledger = requestLedger(request.meter);
     // SDK의 timeout은 응답 헤더까지만 본다. 스트림 전체 시간은 여기서 끊는다.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -302,17 +334,21 @@ export async function callStructuredStream<T>(
               throw new DeltaHandlerFailure(cause);
             }
             if (decision === "stop") {
-              // 반복을 멈추면 SDK가 요청을 끊는다.
+              // 반복을 멈추면 SDK가 요청을 끊는다. 끊은 호출은 usage를 받을 수 없다.
               stopped = true;
+              ledger.unknown();
               break;
             }
           } else if (event.type === "response.refusal.delta") {
             throw new LlmError("refused", "모델이 응답을 거절했습니다.");
           } else if (event.type === "response.completed") {
             final = event.response;
+            ledger.usage(event.response.usage);
           } else if (event.type === "response.incomplete") {
+            ledger.usage(event.response.usage);
             throw new LlmError("incomplete", `응답이 완료되지 않았습니다: ${event.response.incomplete_details?.reason ?? "unknown"}`);
           } else if (event.type === "response.failed") {
+            ledger.usage(event.response.usage);
             throw new LlmError("server_error", "응답 생성에 실패했습니다.");
           } else if (event.type === "error") {
             throw new LlmError("server_error", `응답 중 오류가 났습니다: ${event.code ?? "unknown"}`);
@@ -340,13 +376,18 @@ export async function callStructuredStream<T>(
           requestedModel: request.model,
           actualModel: final?.model ?? null,
           responseId: final?.id ?? null,
-          usage: final ? readUsage(final.usage) : UNKNOWN_USAGE,
+          usage: (final ? readUsage(final.usage) : null) ?? UNKNOWN_USAGE,
           durationMs: Date.now() - startedAt,
           calls,
         },
       };
     } catch (error) {
-      if (error instanceof DeltaHandlerFailure) throw error.cause;
+      // 화면 저장 중 오류(다른 요청이 이어받음 등)로 멈춘 호출도 토큰을 썼을 수 있다. usage는 모르는 호출로 남긴다.
+      if (error instanceof DeltaHandlerFailure) {
+        ledger.unknown();
+        throw error.cause;
+      }
+      ledger.failed(error);
       const classified = classifyProviderError(error);
       const backoff = 500 * 2 ** attempt;
       const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
@@ -362,7 +403,7 @@ export async function callStructuredStream<T>(
 }
 
 /** 설정 확인용 최소 호출. 모델 접근 가능 여부만 확인한다. */
-export async function pingModel(model: string): Promise<{ actualModel: string | null; usage: LlmUsage }> {
+export async function pingModel(model: string): Promise<{ actualModel: string | null; usage: LlmUsage | null }> {
   const client = createClient();
   const response = await client.responses.create({
     model,
