@@ -158,18 +158,22 @@ function fixtureQuestion(input: { text: string }) {
   };
 }
 
+/** 현재 지시는 readings(작성 재료 3.0.0), 이전 지시는 statements로 해석을 넘긴다. */
+type MaterialTopic = { readings?: { ref: string }[]; statements?: { ref: string }[] };
+const refsOf = (topic: MaterialTopic) => (topic.readings ?? topic.statements ?? []).map((item) => item.ref);
+
 type NarrationV2Input = {
   alreadySent?: { opening: string | null; focus: string[]; topics: { topicId: string }[] } | null;
   nickname: string;
   facts: { ref: string }[];
   questions: { ref: string; summary: string; timingId: string | null }[];
   timing: { id: string; months: { ref: string }[] }[];
-  topics: { topicId: string; target: number; statements: { ref: string }[] }[];
+  topics: ({ topicId: string; target: number } & MaterialTopic)[];
 };
 
 /** 2.0.0 풀이 테스트 응답. 질문마다 답을 두고 주제마다 3개 이상 설명을 둔다. */
 function fixtureNarrationV2(input: NarrationV2Input) {
-  const firstRef = input.topics.find((topic) => topic.statements.length)?.statements[0]?.ref ?? input.facts[0]!.ref;
+  const firstRef = input.topics.map(refsOf).find((refs) => refs.length)?.[0] ?? input.facts[0]!.ref;
   // 이어 쓰기: 이미 보낸 부분은 비워 두고 나머지만 쓴다 (reading-2.4.0의 규칙).
   const sent = input.alreadySent;
   const sentTopics = new Set(sent?.topics.map((topic) => topic.topicId) ?? []);
@@ -183,7 +187,7 @@ function fixtureNarrationV2(input: NarrationV2Input) {
       topicId: topic.topicId,
       bubbles: Array.from({ length: sentTopics.has(topic.topicId) ? 0 : Math.max(topic.target, 3) }, (_, index) => ({
         kind: "explanation",
-        refs: [topic.statements[index % Math.max(topic.statements.length, 1)]?.ref ?? input.facts[0]!.ref],
+        refs: [refsOf(topic)[index % Math.max(refsOf(topic).length, 1)] ?? input.facts[0]!.ref],
         text:
           index === 0
             ? `[테스트 응답] ${topic.topicId} 주제의 첫 설명이에요. 강조 확인 문구는 굵게 보여야 해요.`

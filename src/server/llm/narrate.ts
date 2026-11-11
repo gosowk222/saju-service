@@ -1,5 +1,4 @@
 import "server-only";
-import type { Persona } from "@/domain/personas";
 import type { ProductDefinition } from "@/domain/products/types";
 import { z } from "zod";
 import {
@@ -26,7 +25,7 @@ import type {
 } from "@/domain/reading/types";
 import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmUsage, type StreamedResult } from "./client";
 import { LLM_SETTINGS } from "./config";
-import { buildFollowupPrompt, buildQuestionPrompt, getNarrationSchema, getReadingPrompt, type FollowupPromptArgs } from "./prompts";
+import { buildFollowupPrompt, buildQuestionPrompt, getNarrationSchema, getReadingPrompt, type FollowupPromptArgs, type PromptPersona } from "./prompts";
 import { completedParts, followupParts, type StreamedFollowup, type StreamedParts } from "./stream-parts";
 
 export interface GenerationConfig {
@@ -67,7 +66,8 @@ export type NarrationInput =
 export async function narrateReading(input: {
   readonly narration: NarrationInput;
   readonly chart: ChartView;
-  readonly persona: Persona;
+  /** 작업에 고정된 프롬프트 버전에 맞는 캐릭터 설정 (prompts.ts의 promptPersona). */
+  readonly persona: PromptPersona;
   readonly config: GenerationConfig;
   readonly deadlineAt?: number;
 }): Promise<{ readonly output: NarrationOutput | NarrationOutputV2; readonly meta: GenerationMeta }> {
@@ -107,7 +107,7 @@ export async function narrateReading(input: {
 
     const issues =
       narration.version === "2.0.0"
-        ? checkNarrationV2(result.parsed as NarrationOutputV2, narration.plan, chart, narration.excluded, persona)
+        ? checkNarrationV2(result.parsed as NarrationOutputV2, narration.plan, chart, narration.excluded)
         : checkNarration(result.parsed as NarrationOutput, narration.plan, chart);
     issueCount += issues.length;
     if (issues.length === 0) {
@@ -189,15 +189,15 @@ const PartTopic = z.object({ topicId: z.string(), bubbles: z.array(PartBubble) }
  * 검사에 걸리면 그 자리에서 생성을 끊고, 이미 보낸 부분은 그대로 둔 채 나머지만 이어 쓰게 다시 요청한다.
  * 호출 수와 재시도 횟수는 한 번에 받는 방식과 같다. 마무리 말풍선은 완료 저장 때 함께 저장하도록 돌려준다.
  *
- * 검사기는 검사한 문장을 통과 여부와 관계없이 같은 문장 반복·말버릇 횟수에 센다. 그래서 시도마다 새 검사기를 만들고
+ * 검사기는 검사한 문장을 통과 여부와 관계없이 같은 문장 반복 확인에 넣는다. 그래서 시도마다 새 검사기를 만들고
  * 실제로 보낸 문장만 넣는다. 검사에 걸려 보내지 않은 주제의 문장이 다음 시도에 남아, 근거 ID만 고친 같은 문장을
- * '같은 문장 반복'이나 '말버릇 초과'로 다시 거부하는 일을 막는다 (후속 답변 answerFollowupProgressive와 같은 방식).
+ * '같은 문장 반복'으로 다시 거부하는 일을 막는다. 이미 보낸 문장을 다시 보내는 것은 계속 막는다.
  */
 export async function narrateReadingProgressive(input: {
   readonly plan: NarrationPlanV2;
   readonly excluded: readonly ExcludedQuestion[];
   readonly chart: ChartView;
-  readonly persona: Persona;
+  readonly persona: PromptPersona;
   readonly config: GenerationConfig;
   readonly deadlineAt?: number;
   /** 이전 시도에서 이미 보낸 부분. */
@@ -219,7 +219,7 @@ export async function narrateReadingProgressive(input: {
   const topics = input.sent.topics.map((topic) => ({ topicId: topic.topicId, texts: [...topic.texts] }));
   /** 이번 시도의 검사기. 지금까지 실제로 보낸 문장(이전 요청이 보낸 것 포함)만 기억한다. */
   const freshChecker = () => {
-    const checker = narrationChecker(plan, chart, excluded, persona);
+    const checker = narrationChecker(plan, chart, excluded);
     for (const text of [opening ?? "", ...focus, ...topics.flatMap((topic) => topic.texts)]) if (text) checker.remember(text);
     return checker;
   };
@@ -428,7 +428,6 @@ export async function answerFollowupProgressive(
     if (round > 0 && input.deadlineAt !== undefined && Date.now() + task.timeoutMs > input.deadlineAt) break;
     const prompt = buildFollowupPrompt({ ...input, previousIssues, alreadySent: snapshot() });
     const checker = followupChecker(input.check, input.chart);
-    for (const paragraphs of sent.values()) for (const paragraph of paragraphs) checker.remember(paragraph);
     const issues: string[] = [];
     const checkedSections = new Set<number>();
     const handled = new Map<number, number>();

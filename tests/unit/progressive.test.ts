@@ -234,45 +234,30 @@ describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는�
     expect(result.meta.llmCalls).toBe(2);
   });
 
-  it("보내지 않은 주제의 말버릇은 다음 시도의 횟수에 넣지 않는다", async () => {
-    // 보낸 1·2번 주제에 '어라~?' 2번, 거부된 3번 주제에 2번. 다시 쓴 3번 주제도 2번 → 실제로 보낸 것은 4번(상한 4).
-    const withTic = (round: number) => (topicId: string) => {
-      const index = topicIds.indexOf(topicId);
-      const texts = topicBubbles(topicId, round).map((bubble) => bubble.text);
-      if (index < 2) return [`어라~? ${texts[0]}`, texts[1]!, texts[2]!];
-      if (index === 2) return [`어라~? ${texts[0]}`, `어라~? ${texts[1]}`, texts[2]!];
-      return texts;
-    };
-    const first = brokenAtThird(withTic(1));
-    const second = rewrittenFromThird(withTic(2));
-    const { commits, inputs } = await run([first, second]);
-    expect(inputs).toHaveLength(2);
-    const sentTics = commits.flat().filter((message) => message.text.includes("어라~?")).length;
-    expect(sentTics).toBe(4);
+  it("다시 쓰는 요청은 틀린 근거 ID만 짚고, 정상 문장의 말투를 고치라고 하지 않는다", async () => {
+    const { inputs } = await run([brokenAtThird(plainTexts), rewrittenFromThird(plainTexts)]);
+    const issues = inputs[1]!.fixTheseProblemsFromPreviousAttempt as string[];
+    expect(issues).toEqual([`${topicIds[2]}: 없는 근거를 참조했습니다 (s999).`]);
   });
 
-  it("이미 보낸 말버릇은 그대로 세어, 보낸 것과 합쳐 상한을 넘으면 다시 쓰게 한다", async () => {
-    const tic = (topicId: string) => topicBubbles(topicId).map((bubble, index) => (index === 0 ? `어라~? ${bubble.text}` : bubble.text));
-    const stored = [
-      { topicId: null, text: "달빛아, 왔네." },
-      ...topicIds.slice(0, 4).flatMap((topicId) => tic(topicId).map((text) => ({ topicId, text }))),
-    ];
-    // 이미 4번 보냈다. 이어 쓴 5번 주제에 또 쓰면 상한(4)을 넘는다.
-    const next = output({ topics: plan.topics.map((topic, index) => ({ topicId: topic.topicId, bubbles: index < 4 ? [] : index === 4 ? topicBubbles(topic.topicId).map((bubble, i) => (i === 0 ? { ...bubble, text: `어라~? ${bubble.text}` } : bubble)) : topicBubbles(topic.topicId) })) }, topicIds.slice(0, 4));
-    await expect(run([next, next], sentPartsFrom(stored, plan.focusSection.id))).rejects.toMatchObject({ code: "validation_failed" });
+  it("말버릇·감탄사·이모티콘이 많아도 횟수로 거부하지 않는다 (묘묘 2.0.0부터 말투를 세는 검사가 없다)", async () => {
+    const noisy = (topicId: string) => topicBubbles(topicId).map((bubble, index) => (index === 0 ? `어라~? 흐응. 풉. ${bubble.text} 😏♡` : bubble.text));
+    const { commits, inputs } = await run([output({ topics: plan.topics.map((topic) => ({ topicId: topic.topicId, bubbles: noisy(topic.topicId).map((text) => ({ kind: "explanation" as const, refs: [topic.statements[0]?.ref ?? plan.base.facts[0]!.ref], text, highlight: "" })) })) })]);
+    expect(inputs).toHaveLength(1);
+    expect(commits.flat().filter((message) => message.text.includes("어라~?"))).toHaveLength(topicIds.length);
   });
 
   it("다시 쓰는 요청에도 같은 캐릭터 지시가 그대로 들어간다", async () => {
     const { instructions } = await run([brokenAtThird(plainTexts), rewrittenFromThird(plainTexts)]);
     expect(instructions).toHaveLength(2);
     expect(instructions[1]).toBe(instructions[0]);
-    expect(instructions[1]!.startsWith("[캐릭터]")).toBe(true);
-    expect(instructions[1]).toContain(MYOMYO.tone[4]!);
-    expect(instructions[1]).toContain("근거 연결, 날짜, 비율 같은 사실 문제를 고칠 때 문장의 장난, 비유, 직설적인 지적까지 순화하지 않는다");
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    for (const behavior of MYOMYO.character.behaviors) expect(instructions[1]).toContain(behavior.does);
+    expect(instructions[1]).toContain("근거 연결, 날짜, 비율 같은 문제는 그 칸만 고치고, 문장의 장난·비유·직설적인 지적은 그대로 둔다");
   });
 });
 
-// ─── 후속 답변 (followup-2.5.0 / followup-output-2.1.0) ─────────────────
+// ─── 후속 답변 (문단마다 먼저 보여 주기, followup-2.5.0부터) ─────────────────
 
 /** 정해 둔 JSON 문자열들을 차례로 흘려보내는 가짜 스트림. */
 function fakeTextStream(texts: readonly string[], size = 23) {
@@ -329,7 +314,7 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
     nickname: "달빛",
     situationId: null,
   });
-  const check = { questionRefs: ["q1", "q2"], knownRefs: new Set(["s1", "s2"]), timing: [], percentSources: [], excluded: [], persona: MYOMYO };
+  const check = { questionRefs: ["q1", "q2"], knownRefs: new Set(["s1", "s2"]), timing: [], percentSources: [], excluded: [] };
   const args = {
     persona: MYOMYO,
     nickname: "달빛",
@@ -399,8 +384,7 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
     expect(result.output.sections[0]!.text).toBe("먼저 보낸 문단이야.\n\n이어서 쓴 문단이야.");
   });
 
-  it("검사에 걸려 보내지 않은 문단의 말버릇은 다음 시도에 세지 않는다 (최초 풀이와 같은 기준)", async () => {
-    // 질문 2개라 '어라'는 이 답에서 2번까지. 보낸 1번 + 거부된 1번 + 다시 쓴 1번 = 보낸 것은 2번.
+  it("욕설로 걸린 문단만 다시 쓰게 하고, 같은 감탄사를 여러 번 써도 횟수로 거부하지 않는다", async () => {
     const first = followupAnswer([
       { questionRef: "q1", refs: ["s1"], paragraphs: ["어라~? 먼저 보낸 문단이야.", "어라~? 이건 진짜 병신 같은 습관이야."] },
       { questionRef: "q2", refs: [], paragraphs: ["두 번째."] },
@@ -429,7 +413,8 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
     await answerFollowupProgressive({ ...args, questions: [question], reaction: "praise", publish: async () => undefined, stream: capture });
     expect(instructions).toHaveLength(2);
     expect(instructions[1]).toBe(instructions[0]);
-    expect(instructions[1]!.startsWith("[캐릭터]")).toBe(true);
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    expect(instructions[1]).toContain(MYOMYO.character.behaviors.find((behavior) => behavior.when.includes("칭찬"))!.does);
     for (const input of inputs) {
       expect(input.reaction).toBe("praise");
       expect((input.questions as { ref: string }[]).map((item) => item.ref)).toEqual(["q1"]);

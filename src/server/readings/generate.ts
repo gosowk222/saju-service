@@ -1,6 +1,5 @@
 import "server-only";
 import type { PublicBirthInput } from "sajuengine";
-import { findPersona } from "@/domain/personas";
 import { findProduct } from "@/domain/products";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan, type StoredMessage } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -18,7 +17,7 @@ import {
   type NarrationInput,
   type NewMessage,
 } from "@/server/llm/narrate";
-import { isPlanV2Prompt, isProgressivePrompt, personaVersionFor, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { isPlanV2Prompt, isProgressivePrompt, promptPersona, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { internalReason } from "@/server/log";
 import { prepareNarration } from "./analysis";
 
@@ -108,8 +107,9 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     };
     if (config.modelId === "unconfigured") throw new LlmError("model_not_configured", "모델이 설정되지 않았습니다.", 0);
 
-    // 캐릭터 설정은 작업에 고정된 프롬프트 버전에 맞춘다. 이전 프롬프트로 이어 쓰는 작업에 새 캐릭터 설정이 섞이지 않게 한다.
-    const persona = findPersona(reading.persona_id as string, personaVersionFor(config.promptVersion));
+    // 캐릭터 설정은 작업에 고정된 프롬프트 버전에 맞춘다. 이전 프롬프트로 이어 쓰는 작업은 이전 설정(legacy.ts)을,
+    // 새 작업(reading-3.0.0)은 현재 설정(묘묘 2.0.0)을 받아 두 설정이 한 작업 안에서 섞이지 않는다.
+    const persona = promptPersona(reading.persona_id as string, config.promptVersion);
     if (!persona) throw new Error("persona_unavailable");
     const product = findProduct(reading.product_id as string);
     const chart = reading.chart as ChartView;

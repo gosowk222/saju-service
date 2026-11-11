@@ -10,7 +10,7 @@ import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import { callStructured, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
-import { CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, NARRATION_SCHEMA_VERSION, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { CURRENT_FOLLOWUP_PROMPT, CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, NARRATION_SCHEMA_VERSION, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
@@ -26,15 +26,18 @@ let mode: { narration: "valid" | "invalid" | "invalid-once"; status?: number } =
 type Input = Record<string, unknown> & {
   questions: { ref: string; timingId: string | null }[];
   timing: { id: string; months: { ref: string }[] }[];
-  topics: { topicId: string; statements: { ref: string }[] }[];
+  /** 현재 지시는 readings(작성 재료 3.0.0), 이전 지시는 statements로 해석을 넘긴다. */
+  topics: { topicId: string; readings?: { ref: string }[]; statements?: { ref: string }[] }[];
 };
+
+const refsOf = (topic: Input["topics"][number]) => (topic.readings ?? topic.statements ?? []).map((item) => item.ref);
 
 function narration(input: Input, valid: boolean) {
   const focus = input.questions.flatMap((question) => {
     const plan = input.timing.find((entry) => entry.id === question.timingId);
     return [
-      { kind: "explanation", refs: [question.ref, ...(plan?.months[0] ? [plan.months[0].ref] : [input.topics[0]!.statements[0]!.ref])], text: `[테스트] ${question.ref} 핵심 답` },
-      { kind: "explanation", refs: [question.ref, input.topics[0]!.statements[0]!.ref], text: `[테스트] ${question.ref} 이유` },
+      { kind: "explanation", refs: [question.ref, ...(plan?.months[0] ? [plan.months[0].ref] : [refsOf(input.topics[0]!)[0]!])], text: `[테스트] ${question.ref} 핵심 답` },
+      { kind: "explanation", refs: [question.ref, refsOf(input.topics[0]!)[0]!], text: `[테스트] ${question.ref} 이유` },
     ];
   });
   return {
@@ -44,7 +47,7 @@ function narration(input: Input, valid: boolean) {
       topicId: topic.topicId,
       bubbles: [0, 1, 2, 3].map((index) => ({
         kind: "explanation",
-        refs: [topic.statements[index % topic.statements.length]!.ref],
+        refs: [refsOf(topic)[index % refsOf(topic).length]!],
         text: `[테스트] ${topic.topicId} ${index}`,
       })),
     })),
@@ -233,17 +236,19 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 
-  it("새 작업은 현재 프롬프트(reading-2.9.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+  it("새 작업은 현재 프롬프트(reading-3.0.0)와 출력 형식(narration-2.2.0), 추론 설정 low로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
     expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
-    expect(CURRENT_READING_PROMPT).toBe("reading-2.9.0");
-    expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
+    expect(CURRENT_READING_PROMPT).toBe("reading-3.0.0");
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.0.0");
     expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
     expect(isProgressivePrompt(CURRENT_READING_PROMPT)).toBe(true);
-    // 작업을 시작할 때 이 값을 고정한다 (generate.ts → claim_generation의 p_reasoning_effort). 질문 정리와 후속 답변은 low 그대로다.
-    expect(LLM_SETTINGS.tasks.reading.reasoningEffort).toBe("medium");
+    // 작업을 시작할 때 이 값을 고정한다 (generate.ts → claim_generation의 p_reasoning_effort). 모델·추론 강도 상향으로 캐릭터를 고치지 않는다.
+    expect(LLM_SETTINGS.tasks.reading.reasoningEffort).toBe("low");
     expect(LLM_SETTINGS.tasks.classify.reasoningEffort).toBe("low");
     expect(LLM_SETTINGS.tasks.followup.reasoningEffort).toBe("low");
     // 이미 이전 버전으로 시작한 작업도 그 버전 그대로 스트리밍 생성을 이어 간다.
+    expect(isProgressivePrompt("reading-2.9.0")).toBe(true);
+    expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.7.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.6.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.5.0")).toBe(true);
@@ -279,7 +284,8 @@ describe("최초 풀이 생성", () => {
     // 다시 생성할 때도 캐릭터 지시가 그대로 들어간다.
     const [first, second] = requests.filter((item) => item.schema === "saju_narration_v2");
     expect(second!.instructions).toBe(first!.instructions);
-    expect(second!.instructions.startsWith("[캐릭터]")).toBe(true);
+    expect(second!.instructions.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    expect(second!.instructions).not.toMatch(/말버릇 \(|말투 견본|묘묘다운 순간/);
   });
 
   it("계속 실패하면 설정한 횟수에서 멈춘다", async () => {
@@ -358,8 +364,10 @@ describe("후속 질문 답변 조립", () => {
     expect(input.userContext.find((item) => item.from === "message")!.text).toContain("물이 많은 곳");
     expect(input.lastTurn).toEqual(lastTurn);
     // 실제 후속 답변 프롬프트와 그 버전에 맞는 캐릭터 설정을 쓴다.
-    expect(sent.instructions.startsWith("[캐릭터]\n캐릭터 이름: 묘묘")).toBe(true);
-    expect(sent.instructions).toContain("[먼저 반응하고 답하기]");
+    expect(sent.instructions.startsWith(`[캐릭터: 묘묘]\n${persona.character.identity}`)).toBe(true);
+    expect(sent.instructions).toContain("[캐릭터로 답하기]");
+    expect(sent.instructions).toContain(persona.character.behaviors.find((behavior) => behavior.when.includes("칭찬"))!.does);
+    expect(sent.instructions).not.toMatch(/말버릇 \(|말투 견본|묘묘다운 순간/);
   });
 
   it("범위 안 질문이 없으면 답변을 만들지 않고 범위 안내나 되묻기로 끝낸다", () => {
