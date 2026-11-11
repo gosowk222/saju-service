@@ -107,7 +107,7 @@ export async function narrateReading(input: {
 
     const issues =
       narration.version === "2.0.0"
-        ? checkNarrationV2(result.parsed as NarrationOutputV2, narration.plan, chart, narration.excluded)
+        ? checkNarrationV2(result.parsed as NarrationOutputV2, narration.plan, chart, narration.excluded, persona)
         : checkNarration(result.parsed as NarrationOutput, narration.plan, chart);
     issueCount += issues.length;
     if (issues.length === 0) {
@@ -188,6 +188,10 @@ const PartTopic = z.object({ topicId: z.string(), bubbles: z.array(PartBubble) }
  * 한 번의 호출을 스트리밍으로 받으며, 인사 → 궁금한 점에 대한 답 → 주제 순서로 완성된 부분을 검사해 바로 저장한다(commit).
  * 검사에 걸리면 그 자리에서 생성을 끊고, 이미 보낸 부분은 그대로 둔 채 나머지만 이어 쓰게 다시 요청한다.
  * 호출 수와 재시도 횟수는 한 번에 받는 방식과 같다. 마무리 말풍선은 완료 저장 때 함께 저장하도록 돌려준다.
+ *
+ * 검사기는 검사한 문장을 통과 여부와 관계없이 같은 문장 반복·말버릇 횟수에 센다. 그래서 시도마다 새 검사기를 만들고
+ * 실제로 보낸 문장만 넣는다. 검사에 걸려 보내지 않은 주제의 문장이 다음 시도에 남아, 근거 ID만 고친 같은 문장을
+ * '같은 문장 반복'이나 '말버릇 초과'로 다시 거부하는 일을 막는다 (후속 답변 answerFollowupProgressive와 같은 방식).
  */
 export async function narrateReadingProgressive(input: {
   readonly plan: NarrationPlanV2;
@@ -208,13 +212,17 @@ export async function narrateReadingProgressive(input: {
   const schema = getNarrationSchema(config.schemaVersion);
   const task = LLM_SETTINGS.tasks.reading;
   const startedAt = Date.now();
-  const checker = narrationChecker(plan, chart, excluded);
   const focusNeeded = plan.questions.length > 0;
 
   let opening = input.sent.opening;
   let focus = [...input.sent.focus];
   const topics = input.sent.topics.map((topic) => ({ topicId: topic.topicId, texts: [...topic.texts] }));
-  for (const text of [opening ?? "", ...focus, ...topics.flatMap((topic) => topic.texts)]) if (text) checker.remember(text);
+  /** 이번 시도의 검사기. 지금까지 실제로 보낸 문장(이전 요청이 보낸 것 포함)만 기억한다. */
+  const freshChecker = () => {
+    const checker = narrationChecker(plan, chart, excluded, persona);
+    for (const text of [opening ?? "", ...focus, ...topics.flatMap((topic) => topic.texts)]) if (text) checker.remember(text);
+    return checker;
+  };
   const isSent = (topicId: string) => topics.some((topic) => topic.topicId === topicId);
   const nextTopic = () => plan.topics.find((topic) => !isSent(topic.topicId))?.topicId ?? null;
 
@@ -228,6 +236,7 @@ export async function narrateReadingProgressive(input: {
     if (round > 0 && deadlineAt !== undefined && Date.now() + task.timeoutMs > deadlineAt) break;
     const alreadySent = opening !== null || focus.length || topics.length ? { opening, focus, topics } : null;
     const { instructions, input: promptInput } = prompt({ plan, persona, previousIssues, alreadySent } as never);
+    const checker = freshChecker();
     const issues: string[] = [];
     let openingSeen = false;
     let focusSeen = false;
