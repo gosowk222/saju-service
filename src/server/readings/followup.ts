@@ -7,10 +7,11 @@ import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@
 import { isPlanV2, type AnyReadingPlan, type ChartView } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
-import { LlmError, type LlmUsage } from "@/server/llm/client";
+import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
-import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
-import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { classifyQuestion } from "@/server/llm/narrate";
+import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, personaVersionFor, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { UsageMeter } from "@/server/llm/usage";
 import { internalReason } from "@/server/log";
 import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems, type FollowupStatus } from "./followup-core";
@@ -94,7 +95,16 @@ export async function askFollowup(input: {
   }
 
   const followupId = begin.followup!.id;
-  const failFollowup = (code: string) => admin.rpc("fail_followup", { p_followup_id: followupId, p_user_id: userId, p_code: code });
+  /** 이 후속 질문에서 보낸 호출(질문 분석, 답변, 재작성)의 사용량. 최초 풀이 사용량(generation_attempts)과 따로 followups.usage에 남는다. */
+  const meter = new UsageMeter();
+  const failFollowup = async (code: string) => {
+    await admin.rpc("fail_followup", { p_followup_id: followupId, p_user_id: userId, p_code: code });
+    // 실패한 질문도 이미 쓴 토큰은 남긴다. 호출이 없었으면 남길 것이 없다. 기록 실패는 응답에 영향을 주지 않는다.
+    if (meter.calls) {
+      const { error: usageError } = await admin.from("followups").update({ usage: meter.summary() }).eq("id", followupId).eq("status", "failed");
+      if (usageError) console.warn("[followup] usage not recorded", { readingId, code: usageError.code ?? "unknown" });
+    }
+  };
   const startedAt = Date.now();
   const deadlineAt = startedAt + LLM_SETTINGS.followupBudgetMs;
 
@@ -114,7 +124,8 @@ export async function askFollowup(input: {
     ]);
     if (internals.error || reading.error || messages.error || previous.error) throw new Error("load_failed");
 
-    const persona = findPersona(reading.data.persona_id as string);
+    // 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트에 맞는 캐릭터 설정을 쓴다 (followups.prompt_version으로 버전을 알 수 있다).
+    const persona = findPersona(reading.data.persona_id as string, personaVersionFor(CURRENT_FOLLOWUP_PROMPT));
     const product = findProduct(reading.data.product_id as string);
     if (!persona || !product) throw new Error("configuration_unavailable");
     const plan = internals.data.plan as AnyReadingPlan;
@@ -122,11 +133,9 @@ export async function askFollowup(input: {
     const lastTurn = last ? { question: last.question, answer: truncate(last.answer ?? "", 600) } : null;
     const referenceDate = seoulDate();
 
-    const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: question, lastTurn, modelId, deadlineAt });
+    const classified = await classifyQuestion({ product, referenceDate, mode: "followup", text: question, lastTurn, modelId, deadlineAt, meter });
     // 이 풀이에 있는 주제만 답한다. 주제가 늘기 전에 만든 풀이에서 새 주제를 물으면 차감 없이 안내한다.
     const analysis = limitToTopics(classified.analysis, new Set(focusTopicsOf(plan, product).map((topic) => topic.inquiryDomain)));
-    let usage: LlmUsage = classified.meta.usage;
-    let llmCalls = classified.meta.llmCalls;
     let actualModel = classified.meta.actualModel;
 
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
@@ -154,6 +163,7 @@ export async function askFollowup(input: {
         lastTurn,
         modelId,
         deadlineAt,
+        meter,
         // 문단이 완성될 때마다 답을 먼저 저장해 화면에 보여 준다. 횟수 차감과 완료 상태는 complete_followup에서 한 번에 바꾼다.
         publish: async (partial) => {
           const { data: updated, error: updateError } = await admin
@@ -165,12 +175,12 @@ export async function askFollowup(input: {
           if (updateError || !updated?.length) throw new FollowupHandedOver();
         },
       });
-      usage = mergeUsage(usage, answered.meta.usage);
-      llmCalls += answered.meta.llmCalls;
       actualModel = answered.meta.actualModel;
       result = answered;
     }
 
+    const usage = meter.summary();
+    const llmCalls = meter.calls;
     const { data: completed, error: completeError } = await admin.rpc("complete_followup", {
       p_followup_id: followupId,
       p_user_id: userId,
@@ -187,7 +197,16 @@ export async function askFollowup(input: {
         analysis: analysisRecord(analysis, llmCalls),
       },
     });
-    console.info("[followup] done", { readingId, status: result.status, calls: llmCalls, durationMs: Date.now() - startedAt, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+    console.info("[followup] done", {
+      readingId,
+      status: result.status,
+      calls: llmCalls,
+      durationMs: Date.now() - startedAt,
+      inputTokens: usage.inputTokens,
+      cachedInputTokens: usage.cachedInputTokens,
+      outputTokens: usage.outputTokens,
+      usageComplete: usage.complete,
+    });
     if (completeError) {
       await failFollowup("save_failed");
       throw new ApiError(500, "save_failed", "답변을 저장하지 못했어요. 질문 횟수는 줄지 않았어요.");

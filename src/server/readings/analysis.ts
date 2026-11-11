@@ -18,8 +18,8 @@ import {
 import type { NarrationPlanV2, ReadingPlanV2, TimingAnalysis } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { TIMING_ANALYSIS_VERSION, analyzeTiming } from "@/server/engine/timing";
-import type { LlmUsage } from "@/server/llm/client";
-import { classifyQuestion, mergeUsage } from "@/server/llm/narrate";
+import { classifyQuestion } from "@/server/llm/narrate";
+import type { UsageMeter } from "@/server/llm/usage";
 
 /**
  * 질문 분석과 기간 재료를 풀이별로 저장하고 다시 쓴다.
@@ -113,8 +113,8 @@ export interface PreparedNarration {
   readonly plan: NarrationPlanV2;
   readonly analysis: QuestionAnalysis;
   readonly excluded: readonly ExcludedQuestion[];
+  /** 이번에 새로 부른 질문 분석 호출 수. 저장된 분석을 다시 쓰면 0이다 (사용량은 넘겨받은 meter에 쌓인다). */
   readonly llmCalls: number;
-  readonly usage: LlmUsage | null;
   readonly versions: Record<string, unknown>;
 }
 
@@ -131,18 +131,18 @@ export async function prepareNarration(input: {
   readonly concern: string;
   readonly modelId: string;
   readonly deadlineAt: number;
+  /** 생성 시도의 사용량. 저장된 질문 분석을 다시 쓰면 아무것도 기록하지 않는다. */
+  readonly meter?: UsageMeter;
 }): Promise<PreparedNarration> {
   const { admin, readingId, base, product, birth, concern, modelId, deadlineAt } = input;
   let llmCalls = 0;
-  let usage: LlmUsage | null = null;
 
   let analysis = await loadAnalysis<QuestionAnalysis>(admin, readingId, INITIAL_QUESTION_KEY);
   if (!analysis) {
     const referenceDate = seoulDate();
     if (concern.trim()) {
-      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: concern, lastTurn: null, modelId, deadlineAt });
+      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: concern, lastTurn: null, modelId, deadlineAt, meter: input.meter });
       llmCalls += classified.meta.llmCalls;
-      usage = mergeUsage(usage, classified.meta.usage);
       analysis = classified.analysis;
     } else {
       analysis = emptyAnalysis(referenceDate);
@@ -159,7 +159,6 @@ export async function prepareNarration(input: {
     analysis,
     excluded: excludedItems(analysis).map(({ summary, domain }) => ({ summary, domain })),
     llmCalls,
-    usage,
     versions: {
       planVersion: base.planVersion,
       rulesetVersion: base.rulesetVersion,

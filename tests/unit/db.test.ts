@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDb, type TestDb } from "../support/test-db";
 
@@ -457,5 +459,112 @@ describe("지역 값 보존", () => {
     const [row] = await svc<{ place_snapshot: { latitudeDeg: number } }>(`select place_snapshot from public.readings where id = $1`, [readingId]);
     expect(row!.place_snapshot.latitudeDeg).toBe(37.5);
     await expect(asUser(userA, `update public.readings set place_snapshot = '{}' where id = $1`, [readingId])).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("최초 풀이 토큰 사용량 (20261112 migration)", () => {
+  async function paidReading() {
+    const readingId = await createReading(userA);
+    const order = await createOrder(userA, readingId);
+    await markPaid(order.id, userA, `pk-${order.id}`);
+    return readingId;
+  }
+  const record = (readingId: string, attempt: number, outcome: string, usage: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    svc<{ r: boolean }>(`select record_generation_attempt($1, $2, $3, $4) as r`, [
+      readingId,
+      attempt,
+      outcome,
+      JSON.stringify({ modelId: "gpt-5.6-luna", actualModel: "gpt-5.6-luna-2026", promptVersion: "reading-3.1.0", personaVersion: "2.1.0", reasoningEffort: "medium", durationMs: 1000, usage, ...extra }),
+    ]);
+  type UsageRow = {
+    status: string;
+    attempts: number;
+    recorded_attempts: number;
+    llm_calls: number;
+    calls_without_usage: number;
+    input_tokens: string | null;
+    cached_input_tokens: string | null;
+    uncached_input_tokens: string | null;
+    output_tokens: string | null;
+    reasoning_tokens: string | null;
+    total_tokens: string | null;
+    usage_complete: boolean;
+    persona_version: string | null;
+  };
+  const summary = async (readingId: string) => (await svc<UsageRow>(`select * from public.generation_usage where reading_id = $1`, [readingId]))[0]!;
+
+  it("실패한 시도와 재시도의 사용량을 모두 더하고, 같은 시도를 다시 보내도 한 번만 남긴다", async () => {
+    const readingId = await paidReading();
+    const [{ r: first }] = await claim(userA, readingId);
+    await svc(`select fail_generation($1, $2, 'validation_failed', true, 2)`, [readingId, first.job.attempts]);
+    const failedUsage = { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 600, reasoningTokens: 50, calls: 2, callsWithoutUsage: 0, complete: true };
+    const [{ r: saved }] = await record(readingId, 1, "failed", failedUsage, { errorCode: "validation_failed", issues: ["work: 없는 근거를 참조했습니다 (s999)"] });
+    expect(saved).toBe(true);
+    // 같은 시도를 다시 보내면 처음 기록을 그대로 둔다 (두 번 더하지 않는다).
+    const [{ r: again }] = await record(readingId, 1, "failed", { ...failedUsage, inputTokens: 9999 });
+    expect(again).toBe(false);
+
+    const [{ r: second }] = await claim(userA, readingId, true);
+    expect(second.job.attempts).toBe(2);
+    await svc(`select complete_generation($1, $2, $3, $4)`, [readingId, 2, MESSAGES, META]);
+    await record(readingId, 2, "completed", { inputTokens: 500, outputTokens: 100, cachedInputTokens: 0, reasoningTokens: 20, calls: 1, callsWithoutUsage: 0, complete: true });
+    // 시작하지 않은 시도 번호는 받지 않는다.
+    const [{ r: future }] = await record(readingId, 3, "completed", { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, calls: 1, callsWithoutUsage: 0, complete: true });
+    expect(future).toBe(false);
+
+    const row = await summary(readingId);
+    expect(row).toMatchObject({ status: "completed", attempts: 2, recorded_attempts: 2, llm_calls: 3, calls_without_usage: 0, usage_complete: true, persona_version: "2.1.0" });
+    // total = input + output (캐시·추론을 다시 더하지 않는다). 캐시되지 않은 입력 = 1500 - 600.
+    expect([row.input_tokens, row.cached_input_tokens, row.uncached_input_tokens, row.output_tokens, row.reasoning_tokens, row.total_tokens].map(Number)).toEqual([1500, 600, 900, 300, 70, 1800]);
+    const [attempt] = await svc<{ issues: string[]; error_code: string; total_tokens: string }>(`select issues, error_code, total_tokens from public.generation_attempts where reading_id = $1 and attempt = 1`, [readingId]);
+    expect(attempt).toMatchObject({ issues: ["work: 없는 근거를 참조했습니다 (s999)"], error_code: "validation_failed" });
+    expect(Number(attempt!.total_tokens)).toBe(1200);
+  });
+
+  it("usage를 받지 못한 호출이 있거나 기록되지 않은 시도가 있으면 합계를 불완전으로 표시하고 0으로 채우지 않는다", async () => {
+    const readingId = await paidReading();
+    await claim(userA, readingId);
+    // 시도 1이 아직 기록되지 않았다 (진행 중이거나 중간에 멈춘 요청).
+    let row = await summary(readingId);
+    expect(row).toMatchObject({ recorded_attempts: 0, usage_complete: false, input_tokens: null, total_tokens: null });
+    await record(readingId, 1, "handed_over", { inputTokens: 300, outputTokens: 100, cachedInputTokens: 0, calls: 2, callsWithoutUsage: 1, complete: false });
+    row = await summary(readingId);
+    expect(row).toMatchObject({ recorded_attempts: 1, calls_without_usage: 1, usage_complete: false });
+    expect(Number(row.input_tokens)).toBe(300);
+    // 받지 못한 호출이 있는데 완전하다고 기록할 수는 없다.
+    await svc(`update public.generation_jobs set lease_until = now() - interval '1 second' where reading_id = $1`, [readingId]);
+    await claim(userA, readingId);
+    await expect(record(readingId, 2, "completed", { inputTokens: 300, outputTokens: 100, cachedInputTokens: 0, calls: 2, callsWithoutUsage: 1, complete: true })).rejects.toThrow(
+      /generation_attempts_complete_check/,
+    );
+  });
+
+  it("운영 문서(docs/LLM_OPERATIONS.md)의 조회 SQL이 실제 스키마에서 실행된다", async () => {
+    const readingId = await paidReading();
+    await claim(userA, readingId);
+    await record(readingId, 1, "completed", { inputTokens: 1000, outputTokens: 200, cachedInputTokens: 600, calls: 1, callsWithoutUsage: 0, complete: true });
+    const doc = readFileSync(path.resolve(process.cwd(), "docs/LLM_OPERATIONS.md"), "utf8");
+    const section = doc.slice(doc.indexOf("## 토큰 사용량 기록"), doc.indexOf("## 공식 문서 확인 결과"));
+    const statements = [...section.matchAll(/```sql\r?\n([\s\S]*?)```/g)]
+      .flatMap((block) => block[1]!.split(/;\s*(?:\r?\n|$)/))
+      .map((sql) => sql.replace(/^\s*--.*$/gm, "").trim())
+      .filter(Boolean);
+    expect(statements.length).toBe(5);
+    const results = [];
+    for (const sql of statements) results.push(await svc(sql.replaceAll("'<풀이 ID>'", `'${readingId}'`)));
+    expect(Number((results[0]![0] as { total_tokens: string }).total_tokens)).toBe(1200);
+    expect(Number((results[0]![0] as { uncached_input_tokens: string }).uncached_input_tokens)).toBe(400);
+  });
+
+  it("사용량 기록은 서버 전용이다: 본인도 브라우저 권한으로 읽거나 쓸 수 없다", async () => {
+    const readingId = await paidReading();
+    await claim(userA, readingId);
+    await record(readingId, 1, "completed", { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, calls: 1, callsWithoutUsage: 0, complete: true });
+    for (const role of ["authenticated", "anon"] as const) {
+      const user = role === "authenticated" ? userA : null;
+      await expect(db.run(role, user, `select * from public.generation_attempts`)).rejects.toThrow(/permission denied/);
+      await expect(db.run(role, user, `select * from public.generation_usage`)).rejects.toThrow(/permission denied/);
+      await expect(db.run(role, user, `select record_generation_attempt(gen_random_uuid(), 1, 'completed', '{}'::jsonb)`)).rejects.toThrow(/permission denied/);
+    }
   });
 });

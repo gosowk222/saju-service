@@ -39,8 +39,11 @@ export type UserContextStatement = {
   readonly ref: string;
   readonly kind: "user-context";
   readonly text: string;
-  /** situation: 고른 상황, concern: 1.0.0 계획의 원문, fact: 질문에서 정리한 사용자 사실 */
-  readonly source: "situation" | "concern" | "fact";
+  /**
+   * situation: 고른 상황, concern: 1.0.0 계획의 원문, fact: 궁금한 점(최초 풀이 때 적은 글)에서 정리한 사용자 사실,
+   * message: 지금 답하는 후속 메시지에서 정리한 사용자 사실. 생성 입력에서는 지금 한 말과 예전에 한 말을 구분하는 데 쓴다.
+   */
+  readonly source: "situation" | "concern" | "fact" | "message";
 };
 
 export type PlanStatement = FactStatement | InterpretationStatement | UserContextStatement;

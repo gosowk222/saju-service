@@ -10,7 +10,8 @@ import { analyzeBirth, toPublicBirthInput } from "@/server/engine/analyze";
 import { callStructured, LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
 import { narrateReading, toStoredMessages } from "@/server/llm/narrate";
-import { CURRENT_READING_PROMPT, isPlanV2Prompt, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { CURRENT_READING_PROMPT, isPlanV2Prompt, isProgressivePrompt, NARRATION_SCHEMA_VERSION, PROMPTS_FOR_PLAN } from "@/server/llm/prompts";
+import { UsageMeter } from "@/server/llm/usage";
 import { INITIAL_QUESTION_KEY, prepareNarration } from "@/server/readings/analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems } from "@/server/readings/followup-core";
 import { internalReason } from "@/server/log";
@@ -20,7 +21,7 @@ import { internalReason } from "@/server/log";
  * 호출 횟수, 재사용, 재시도 한도, 응답 조립만 확인하며 문장 품질과는 무관하다.
  */
 let server: Server;
-const requests: { schema: string; input: Record<string, unknown> }[] = [];
+const requests: { schema: string; input: Record<string, unknown>; instructions: string }[] = [];
 let mode: { narration: "valid" | "invalid" | "invalid-once"; status?: number } = { narration: "valid" };
 
 type Input = Record<string, unknown> & {
@@ -79,10 +80,10 @@ beforeAll(async () => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
-      const body = JSON.parse(raw) as { input: string; text: { format: { name: string } } };
+      const body = JSON.parse(raw) as { input: string; instructions?: string; text: { format: { name: string } } };
       const schema = body.text.format.name;
       const input = schema === "t" ? {} : (JSON.parse(body.input) as Record<string, unknown>);
-      requests.push({ schema, input });
+      requests.push({ schema, input, instructions: body.instructions ?? "" });
       if (mode.status) {
         res.writeHead(mode.status, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: { message: "x" } }));
@@ -232,6 +233,24 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt(PROMPTS_FOR_PLAN["1.0.0"]!.prompt)).toBe(false);
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
+
+  it("새 작업은 현재 프롬프트(reading-3.1.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+    expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
+    expect(CURRENT_READING_PROMPT).toBe("reading-3.1.0");
+    expect(isProgressivePrompt("reading-2.9.0")).toBe(true);
+    expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
+    expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
+    expect(isProgressivePrompt(CURRENT_READING_PROMPT)).toBe(true);
+    // 작업을 시작할 때 이 값을 고정한다 (generate.ts → claim_generation의 p_reasoning_effort). 질문 정리와 후속 답변은 low 그대로다.
+    expect(LLM_SETTINGS.tasks.reading.reasoningEffort).toBe("medium");
+    expect(LLM_SETTINGS.tasks.classify.reasoningEffort).toBe("low");
+    expect(LLM_SETTINGS.tasks.followup.reasoningEffort).toBe("low");
+    // 이미 이전 버전으로 시작한 작업도 그 버전 그대로 스트리밍 생성을 이어 간다.
+    expect(isProgressivePrompt("reading-2.7.0")).toBe(true);
+    expect(isProgressivePrompt("reading-2.6.0")).toBe(true);
+    expect(isProgressivePrompt("reading-2.5.0")).toBe(true);
+    expect(isProgressivePrompt("reading-2.3.0")).toBe(false);
+  });
 });
 
 describe("최초 풀이 생성", () => {
@@ -259,6 +278,28 @@ describe("최초 풀이 생성", () => {
     expect(meta.llmCalls).toBe(2);
     const retry = requests.at(-1)!.input as { fixTheseProblemsFromPreviousAttempt?: string[] };
     expect(retry.fixTheseProblemsFromPreviousAttempt?.join()).toContain("궁금한 점에 대한 답");
+    // 다시 생성할 때도 캐릭터 지시가 그대로 들어간다.
+    const [first, second] = requests.filter((item) => item.schema === "saju_narration_v2");
+    expect(second!.instructions).toBe(first!.instructions);
+    expect(second!.instructions.startsWith("[캐릭터: 묘묘]")).toBe(true);
+  });
+
+  it("한 생성 시도의 사용량은 질문 분석과 본문 작성·재작성을 모두 더하고, 다음 시도에서 저장된 분석을 다시 쓰면 더하지 않는다", async () => {
+    const { admin } = fakeAdmin();
+    const args = { admin, readingId: "r-usage", base: base.plan, product: FIRST_OVERVIEW, birth, concern: "언제 취업할까요?", modelId: "gpt-5.6-luna", deadlineAt: Date.now() + 60_000 };
+    const attempt = new UsageMeter();
+    const prepared = await prepareNarration({ ...args, meter: attempt });
+    mode = { narration: "invalid-once" };
+    const { meta } = await narrateReading({ narration: { version: "2.0.0", plan: prepared.plan, excluded: prepared.excluded }, chart: base.chart, persona, config, meter: attempt });
+    // 가짜 서버는 호출마다 input 100, output 50, cached 0, reasoning 5를 돌려준다.
+    expect(meta.usage).toMatchObject({ calls: 2, inputTokens: 200, outputTokens: 100, complete: true });
+    expect(attempt.summary()).toMatchObject({ calls: 3, inputTokens: 300, outputTokens: 150, cachedInputTokens: 0, reasoningTokens: 15, totalTokens: 450, complete: true });
+    expect(meta.llmCalls + prepared.llmCalls).toBe(attempt.calls);
+
+    const next = new UsageMeter();
+    const reused = await prepareNarration({ ...args, meter: next });
+    expect(reused.llmCalls).toBe(0);
+    expect(next.summary()).toMatchObject({ calls: 0, inputTokens: 0, complete: true });
   });
 
   it("계속 실패하면 설정한 횟수에서 멈춘다", async () => {
@@ -309,6 +350,36 @@ describe("후속 질문 답변 조립", () => {
     expect(result.answer).toContain(persona.lines.partialScope("시험·학업 결과"));
     const sent = requests.find((item) => item.schema === "saju_followup_v2")!.input as Input;
     expect(JSON.stringify(sent)).not.toContain("시험에 붙을지");
+  });
+
+  it("칭찬과 질문이 함께 오면 반응과 질문을 함께 넘기고, 지금 한 말과 처음 궁금한 점·직전 대화를 구분해 넘긴다", async () => {
+    const career = { summary: "면접에서 계속 떨어지는 이유", domain: "career" as const, intent: "explain" as const, options: [], period: { kind: "none" as const, start: "", end: "" }, missingInfo: [] };
+    const initialAnalysis = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-10", {
+      items: [career],
+      userFacts: [{ text: "요즘 많이 지쳐 있다고 말함", domain: "temperament" }],
+      needsClarification: false,
+    });
+    const analysis = buildQuestionAnalysis(FIRST_OVERVIEW, "2026-11-11", {
+      items: [{ ...career, summary: "바닷가 도시로 옮겨 일하는 게 맞는지", intent: "apply" }],
+      userFacts: [{ text: "물이 많은 곳을 좋아한다고 말함", domain: "place" }],
+      needsClarification: false,
+      reaction: "praise",
+    });
+    const lastTurn = { question: "요즘 취업 너무 힘든데 왜 자꾸 떨어질까?", answer: "속상하지. 그래도 지금까지 한 준비를 다 낙제 처리하진 마." };
+    const result = await answerAnalyzedFollowup({ plan: base.plan, product: FIRST_OVERVIEW, persona, chart: base.chart, analysis, initialAnalysis, timing: [], messages: [], lastTurn, modelId: "gpt-5.6-luna" });
+    expect(result.status).toBe("answered");
+    const sent = requests.find((item) => item.schema === "saju_followup_v2")!;
+    const input = sent.input as { reaction: string; questions: { summary: string }[]; userContext: { text: string; from: string }[]; lastTurn: unknown };
+    expect(input.reaction).toBe("praise");
+    expect(input.questions.map((question) => question.summary)).toEqual(["바닷가 도시로 옮겨 일하는 게 맞는지"]);
+    // 상황 선택, 처음 궁금한 점에서 한 말(지친다), 이번 메시지에서 한 말을 출처로 나눈다.
+    expect(input.userContext.map((item) => item.from)).toEqual(["situation", "concern", "message"]);
+    expect(input.userContext.find((item) => item.from === "concern")!.text).toContain("지쳐");
+    expect(input.userContext.find((item) => item.from === "message")!.text).toContain("물이 많은 곳");
+    expect(input.lastTurn).toEqual(lastTurn);
+    // 실제 후속 답변 프롬프트와 그 버전에 맞는 캐릭터 설정을 쓴다.
+    expect(sent.instructions.startsWith("[캐릭터: 묘묘]\n누가 말하는가: 묘묘.")).toBe(true);
+    expect(sent.instructions).toContain("[캐릭터로 답하기]");
   });
 
   it("범위 안 질문이 없으면 답변을 만들지 않고 범위 안내나 되묻기로 끝낸다", () => {

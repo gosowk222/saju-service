@@ -15,7 +15,9 @@
     "test:e2e:clean": "node scripts/e2e-clean.mjs",
     "places:import": "tsx scripts/import-geonames.ts",
     "llm:check": "node --conditions=react-server --import tsx scripts/llm-check.ts",
-    "llm:compare": "node --conditions=react-server --import tsx scripts/llm-compare.ts"
+    "llm:compare": "node --conditions=react-server --import tsx scripts/llm-compare.ts",
+    "llm:export": "node --conditions=react-server --import tsx scripts/llm-export.ts",
+    "llm:render": "node --conditions=react-server --import tsx scripts/llm-render.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

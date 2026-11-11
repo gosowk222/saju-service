@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MYOMYO } from "@/domain/personas";
+import { MYOMYO, MYOMYO_1_4_0 } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { buildNarrationPlan } from "@/domain/reading/focus";
 import { emptyAnalysis } from "@/domain/reading/question";
@@ -41,9 +41,11 @@ function output(overrides: Partial<NarrationOutputV2> = {}, sent: readonly strin
 /** 정해 둔 출력들을 차례로 흘려보내는 가짜 스트림. onDelta가 멈추라고 하면 거기서 끊는다. */
 function fakeStream(outputs: readonly NarrationOutputV2[]) {
   const inputs: Record<string, unknown>[] = [];
+  const instructions: string[] = [];
   const stream = (async (request: Parameters<typeof callStructuredStream>[0]) => {
     const text = JSON.stringify(outputs[inputs.length]!);
     inputs.push(JSON.parse(request.input) as Record<string, unknown>);
+    instructions.push(request.instructions);
     let received = "";
     let stopped = false;
     for (let index = 0; index < text.length; index += 37) {
@@ -68,25 +70,26 @@ function fakeStream(outputs: readonly NarrationOutputV2[]) {
       },
     };
   }) as unknown as typeof callStructuredStream;
-  return { stream, inputs };
+  return { stream, inputs, instructions };
 }
 
-async function run(outputs: readonly NarrationOutputV2[], sent: SentParts = { opening: null, focus: [], topics: [] }) {
+/** legacy: reading-2.9.0(묘묘 1.4.0)으로 시작한 작업처럼 이어 쓴다 (말버릇 횟수를 세던 버전). */
+async function run(outputs: readonly NarrationOutputV2[], sent: SentParts = { opening: null, focus: [], topics: [] }, legacy = false) {
   const commits: NewMessage[][] = [];
-  const { stream, inputs } = fakeStream(outputs);
+  const { stream, inputs, instructions } = fakeStream(outputs);
   const result = await narrateReadingProgressive({
     plan,
     excluded: [],
     chart,
-    persona: MYOMYO,
-    config,
+    persona: legacy ? MYOMYO_1_4_0 : MYOMYO,
+    config: legacy ? { ...config, promptVersion: "reading-2.9.0" } : config,
     sent,
     commit: async (messages) => {
       commits.push([...messages]);
     },
     stream,
   });
-  return { result, commits, inputs };
+  return { result, commits, inputs, instructions };
 }
 
 const topicIds = plan.topics.map((topic) => topic.topicId);
@@ -166,6 +169,109 @@ describe("주제가 완성될 때마다 먼저 보여 주는 생성", () => {
     const { commits, inputs } = await run([extra]);
     expect(inputs).toHaveLength(1);
     expect(commits.flat().some((message) => message.text === "묻지 않은 답이에요.")).toBe(false);
+  });
+});
+
+describe("메모 칸이 있는 출력 (narration-2.2.0)", () => {
+  it("focusAngle과 주제마다 angle을 먼저 써도 완성된 주제를 같은 순서로 저장하고, 메모는 저장하지 않는다", async () => {
+    // 구조화 출력은 형식의 속성 순서대로 나온다: opening → focusAngle → focus → topics[topicId → angle → bubbles] → closing
+    const plain = output();
+    const withNotes = {
+      opening: plain.opening,
+      focusAngle: "",
+      focus: plain.focus,
+      topics: plain.topics.map((topic) => ({ topicId: topic.topicId, angle: `${topic.topicId}: 먼저 짚을 장면`, bubbles: topic.bubbles })),
+      closing: plain.closing,
+    } as unknown as NarrationOutputV2;
+    const { result, commits } = await run([withNotes]);
+    expect(commits.map((batch) => batch[0]!.topicId)).toEqual([null, ...topicIds]);
+    expect(commits.flat().some((message) => message.text.includes("먼저 짚을 장면"))).toBe(false);
+    expect(commits[1]!.map((message) => message.text)).toEqual(topicBubbles(topicIds[0]!).map((bubble) => bubble.text));
+    expect(result.closing.text).toBe(plain.closing);
+  });
+});
+
+describe("다시 쓸 때 보내지 않은 문장은 기준에 남기지 않는다 (reading-2.6.0부터)", () => {
+  /** 3번 주제의 두 번째 말풍선만 없는 근거를 가리키는 첫 응답. 문장과 말투는 정상이다. */
+  function brokenAtThird(texts: (topicId: string) => string[]) {
+    return output({
+      topics: plan.topics.map((topic, index) => ({
+        topicId: topic.topicId,
+        bubbles: texts(topic.topicId).map((text, bubble) => ({
+          kind: "explanation" as const,
+          refs: index === 2 && bubble === 1 ? ["s999"] : [topic.statements[0]?.ref ?? plan.base.facts[0]!.ref],
+          text,
+          highlight: "",
+        })),
+      })),
+    });
+  }
+  /** 1·2번 주제는 보냈다고 보고, 나머지 주제를 같은 문장 그대로 근거만 고쳐 쓴 다시 쓰기 응답. */
+  function rewrittenFromThird(texts: (topicId: string) => string[]) {
+    const sent = topicIds.slice(0, 2);
+    return output(
+      {
+        topics: plan.topics.map((topic) => ({
+          topicId: topic.topicId,
+          bubbles: sent.includes(topic.topicId)
+            ? []
+            : texts(topic.topicId).map((text) => ({ kind: "explanation" as const, refs: [topic.statements[0]?.ref ?? plan.base.facts[0]!.ref], text, highlight: "" })),
+        })),
+      },
+      sent,
+    );
+  }
+  const plainTexts = (topicId: string) => topicBubbles(topicId).map((bubble) => bubble.text);
+
+  it("근거 ID만 틀려 보내지 않은 주제를 같은 문장으로 다시 쓰면 반복으로 거부하지 않고 받는다", async () => {
+    const { result, commits, inputs } = await run([brokenAtThird(plainTexts), rewrittenFromThird(plainTexts)]);
+    expect(inputs).toHaveLength(2);
+    expect(String(inputs[1]!.fixTheseProblemsFromPreviousAttempt)).toContain("없는 근거");
+    expect(String(inputs[1]!.fixTheseProblemsFromPreviousAttempt)).not.toContain("반복");
+    // 각 주제는 한 번씩만 보냈고, 3번 주제는 근거를 고친 같은 문장으로 보냈다.
+    expect(commits.map((batch) => batch[0]!.topicId)).toEqual([null, ...topicIds]);
+    expect(commits[3]!.map((message) => message.text)).toEqual(plainTexts(topicIds[2]!));
+    expect(commits[3]!.every((message) => !message.refs.includes("s999"))).toBe(true);
+    expect(result.meta.llmCalls).toBe(2);
+  });
+
+  it("(1.4.0으로 시작한 작업) 보내지 않은 주제의 말버릇은 다음 시도의 횟수에 넣지 않는다", async () => {
+    // 보낸 1·2번 주제에 '어라~?' 2번, 거부된 3번 주제에 2번. 다시 쓴 3번 주제도 2번 → 실제로 보낸 것은 4번(상한 4).
+    const withTic = (round: number) => (topicId: string) => {
+      const index = topicIds.indexOf(topicId);
+      const texts = topicBubbles(topicId, round).map((bubble) => bubble.text);
+      if (index < 2) return [`어라~? ${texts[0]}`, texts[1]!, texts[2]!];
+      if (index === 2) return [`어라~? ${texts[0]}`, `어라~? ${texts[1]}`, texts[2]!];
+      return texts;
+    };
+    const first = brokenAtThird(withTic(1));
+    const second = rewrittenFromThird(withTic(2));
+    const { commits, inputs } = await run([first, second], undefined, true);
+    expect(inputs).toHaveLength(2);
+    const sentTics = commits.flat().filter((message) => message.text.includes("어라~?")).length;
+    expect(sentTics).toBe(4);
+  });
+
+  it("(1.4.0으로 시작한 작업) 이미 보낸 말버릇은 그대로 세어, 보낸 것과 합쳐 상한을 넘으면 다시 쓰게 한다", async () => {
+    const tic = (topicId: string) => topicBubbles(topicId).map((bubble, index) => (index === 0 ? `어라~? ${bubble.text}` : bubble.text));
+    const stored = [
+      { topicId: null, text: "달빛아, 왔네." },
+      ...topicIds.slice(0, 4).flatMap((topicId) => tic(topicId).map((text) => ({ topicId, text }))),
+    ];
+    // 이미 4번 보냈다. 이어 쓴 5번 주제에 또 쓰면 상한(4)을 넘는다.
+    const next = output({ topics: plan.topics.map((topic, index) => ({ topicId: topic.topicId, bubbles: index < 4 ? [] : index === 4 ? topicBubbles(topic.topicId).map((bubble, i) => (i === 0 ? { ...bubble, text: `어라~? ${bubble.text}` } : bubble)) : topicBubbles(topic.topicId) })) }, topicIds.slice(0, 4));
+    await expect(run([next, next], sentPartsFrom(stored, plan.focusSection.id), true)).rejects.toMatchObject({ code: "validation_failed" });
+    // 묘묘 2.1.0(reading-3.1.0)은 말버릇을 세지 않으므로 같은 말풍선을 그대로 받는다.
+    await expect(run([next], sentPartsFrom(stored, plan.focusSection.id))).resolves.toBeDefined();
+  });
+
+  it("다시 쓰는 요청에도 같은 캐릭터 지시가 그대로 들어간다", async () => {
+    const { instructions } = await run([brokenAtThird(plainTexts), rewrittenFromThird(plainTexts)]);
+    expect(instructions).toHaveLength(2);
+    expect(instructions[1]).toBe(instructions[0]);
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    expect(instructions[1]).toContain(MYOMYO.tone[4]!);
+    expect(instructions[1]).toContain("근거 연결, 날짜, 비율 같은 사실 문제를 고칠 때 문장의 장난, 비유, 직설적인 지적까지 순화하지 않는다");
   });
 });
 
@@ -294,6 +400,58 @@ describe("문단이 완성될 때마다 먼저 보여 주는 후속 답변", () 
     expect(published.flat()).not.toContain("안 보일 문단.");
     expect(inputs[1]!.alreadySent).toEqual([{ questionRef: "q1", paragraphs: ["먼저 보낸 문단이야."] }]);
     expect(result.output.sections[0]!.text).toBe("먼저 보낸 문단이야.\n\n이어서 쓴 문단이야.");
+  });
+
+  it("검사에 걸려 보내지 않은 문단의 말버릇은 다음 시도에 세지 않는다 (최초 풀이와 같은 기준)", async () => {
+    // 질문 2개라 '어라'는 이 답에서 2번까지. 보낸 1번 + 거부된 1번 + 다시 쓴 1번 = 보낸 것은 2번.
+    const first = followupAnswer([
+      { questionRef: "q1", refs: ["s1"], paragraphs: ["어라~? 먼저 보낸 문단이야.", "어라~? 이건 진짜 병신 같은 습관이야."] },
+      { questionRef: "q2", refs: [], paragraphs: ["두 번째."] },
+    ]);
+    const rest = followupAnswer([
+      { questionRef: "q1", refs: ["s1"], paragraphs: ["어라~? 이건 습관이 문제라는 뜻이야."] },
+      { questionRef: "q2", refs: [], paragraphs: ["두 번째 답이야."] },
+    ]);
+    const { result, inputs } = await runFollowup([first, rest]);
+    expect(inputs).toHaveLength(2);
+    expect(String(inputs[1]!.fixTheseProblemsFromPreviousAttempt)).toContain("욕설");
+    expect(String(inputs[1]!.fixTheseProblemsFromPreviousAttempt)).not.toContain("말버릇");
+    expect(result.output.sections[0]!.text).toBe("어라~? 먼저 보낸 문단이야.\n\n어라~? 이건 습관이 문제라는 뜻이야.");
+  });
+
+  it("다시 쓰는 요청에도 캐릭터 지시와 반응·질문이 그대로 들어간다", async () => {
+    const instructions: string[] = [];
+    const bad = followupAnswer([{ questionRef: "q1", refs: ["s99"], paragraphs: ["보이면 안 돼."] }, { questionRef: "q2", refs: [], paragraphs: ["두 번째."] }]);
+    const good = followupAnswer([{ questionRef: "q1", refs: ["s1"], paragraphs: ["흐, 흐응. 이제 알아봤어?"] }, { questionRef: "q2", refs: [], paragraphs: ["두 번째 답."] }]);
+    const { stream, inputs } = fakeTextStream([bad, good]);
+    const capture = (async (request: Parameters<typeof callStructuredStream>[0]) => {
+      instructions.push(request.instructions);
+      return stream(request);
+    }) as unknown as typeof callStructuredStream;
+    const question = { ref: "q1", summary: "먼저 연락해도 될지", domain: "romance" as const, topicId: "romance", intent: "apply" as const, options: [], answerability: "full" as const, missingInfo: [], relatedRefs: [], timingId: null, timingNote: null };
+    await answerFollowupProgressive({ ...args, questions: [question], reaction: "praise", publish: async () => undefined, stream: capture });
+    expect(instructions).toHaveLength(2);
+    expect(instructions[1]).toBe(instructions[0]);
+    expect(instructions[1]!.startsWith("[캐릭터: 묘묘]")).toBe(true);
+    for (const input of inputs) {
+      expect(input.reaction).toBe("praise");
+      expect((input.questions as { ref: string }[]).map((item) => item.ref)).toEqual(["q1"]);
+    }
+  });
+
+  it("질문마다 메모(angle)를 근거 연결보다 먼저 써도 문단을 같은 방식으로 보내고, 메모는 답에 넣지 않는다 (followup-output-2.2.0)", async () => {
+    const text = JSON.stringify({
+      mode: "answer",
+      sections: [
+        { questionRef: "q1", angle: "칭찬에 으스대고, 먼저 연락 못 하는 이유를 짚기", refs: ["s1"], text: "흐, 흐응. 이제 알아봤어?\n\n먼저 연락하면 지는 것 같지?" },
+        { questionRef: "q2", angle: "", refs: ["s2"], text: "두 번째 답이야." },
+      ],
+      clarifyQuestion: "",
+    });
+    const { result, published } = await runFollowup([text]);
+    expect(published.at(-1)).toEqual(["흐, 흐응. 이제 알아봤어?", "먼저 연락하면 지는 것 같지?", "두 번째 답이야."]);
+    expect(result.output.sections.map((section) => section.text)).toEqual(["흐, 흐응. 이제 알아봤어?\n\n먼저 연락하면 지는 것 같지?", "두 번째 답이야."]);
+    expect(JSON.stringify(result.output)).not.toContain("칭찬에 으스대고");
   });
 
   it("되묻기는 끝까지 받은 뒤 한 번에 돌려주고 문단을 보내지 않는다", async () => {
