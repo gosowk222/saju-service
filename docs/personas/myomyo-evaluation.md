@@ -1,4 +1,4 @@
-# 묘묘 말투 비교 자료와 평가 기준 (persona 1.2.0, reading-2.7.0, followup-2.7.0)
+# 묘묘 말투 비교 자료와 평가 기준 (persona 1.3.0, reading-2.8.0, followup-2.8.0)
 
 묘묘가 설명 본문과 후속 답변에서도 묘묘답게 말하는지 사람이 읽고 판단하기 위한 자료다. 설정 설명은 [`myomyo.md`](myomyo.md).
 
@@ -128,6 +128,8 @@
 | 7 | 계산값과 결론을 바꾸지 않았는가 | 원국 글자, 비율, 기간, 행운 값, 판단 | 재료·이전 풀이와 같다. 없는 사건·속마음·확정된 미래가 없다 | 값이 다르거나 "반드시", "적중률" 같은 장담 |
 | 8 | 재료를 옮겨 적지 않았는가 | 같은 사람의 이전 풀이와 나란히 놓고, 구체적인 조언 문장 | 같은 조언(무엇을, 언제)이 이 사람 상황에 맞춘 다른 말로 나온다 | 이전 풀이와 같은 조언 문장이 거의 그대로 반복된다. 재료 문장을 옮겨 적었다는 신호다 (`docs/READING_QUALITY.md` 20절) |
 | 9 | 비율·글자 근거가 주제마다 되풀이되지 않는가 | 여러 주제의 근거 문장 | 같은 비율은 한 번, 그다음엔 "아까 그 고집"처럼 이어 받는다 | 같은 "○○이 n%라"가 서너 주제에 나온다 |
+| 9-1 | 건방짐·장난기·자신감·얄미움이 느껴지는가 | 주제마다 설명 사이 | 으스대기("봐, 맞지?"), 가벼운 놀림, 얄미운 한마디, 마지못한 다정함이 주제마다 한두 번, 다른 말로 나온다 | 알아맞히기와 조언만 있고 으스대거나 놀리는 말이 없다 (2.7.0 결과) |
+| 9-2 | 중요한 부분은 충분히 길고, 짧아도 되는 부분만 짧은가 | 질문 답, 중심 주제(상황과 가장 관련된 주제), 인사·마무리·행운 값 | 질문 답과 중심 주제는 해석마다 장면·이유·잃는 것·행동까지 있다 | 중심 주제도 서너 줄로 끝난다 (2.7.0 결과) |
 
 후속 답변은 위 기준에 더해 다음을 본다.
 
@@ -183,7 +185,7 @@
 
 ```sql
 -- 최초 풀이: 프롬프트·캐릭터 버전, 호출 수, 검사에서 찾은 문제 수
-select prompt_version, schema_version, model_id, attempts, llm_calls, checked_issue_count,
+select prompt_version, schema_version, model_id, reasoning_effort, attempts, llm_calls, checked_issue_count, usage,
        generation_meta ->> 'personaVersion' as persona_version,
        generation_meta ->> 'planPersonaVersion' as plan_persona_version,
        generation_meta -> 'questionAnalysis' as question_analysis
@@ -199,11 +201,12 @@ from followups where reading_id = '<풀이 ID>' order by created_at;
 
 | 값 | 읽는 법 |
 | --- | --- |
-| `prompt_version` | 새 풀이는 `reading-2.7.0`(출력 형식 `narration-2.2.0`), 새 후속 답변은 `followup-2.7.0`(`followup-output-2.2.0`)이어야 한다. `reading-2.6.0`·`reading-2.5.0`이면 그 전에 시작한 작업이다 |
-| `persona_version` | 새 풀이는 `1.2.0`. 2026-11-11 이전 기록은 풀이 기록을 만들 때의 값이 들어 있다 |
+| `prompt_version` | 새 풀이는 `reading-2.8.0`(출력 형식 `narration-2.2.0`), 새 후속 답변은 `followup-2.8.0`(`followup-output-2.2.0`)이어야 한다. 그보다 낮으면 그 전에 시작한 작업이다 |
+| `reasoning_effort` (`generation_jobs`) | 새 풀이는 `medium`. `low`면 설정을 바꾸기 전에 시작한 작업이다 |
+| `persona_version` | 새 풀이는 `1.3.0`. 2026-11-11 이전 기록은 풀이 기록을 만들 때의 값이 들어 있다 |
 | `llm_calls` (최초 풀이) | `attempts`가 1일 때, 궁금한 점이 있으면 질문 정리 1 + 풀이 1이 기본이다. 하나 더 많으면 검사에 걸려 다시 썼다. 어떤 검사였는지는 저장되지 않는다 (`checked_issue_count`는 개수만). `attempts`가 2 이상이면 실행이 다시 시작된 것이라 호출 수가 함께 쌓인다 |
 | `reaction` (후속) | 칭찬이 섞인 메시지인데 `none`이면 질문 분석이 반응을 알아보지 못한 것이다. 이때는 답에 반응이 없는 게 프롬프트 문제가 아니라 분류 문제다 |
 
-비용: 호출 수는 이전과 같다 (최초 풀이는 질문 정리 0~1회 + 풀이 1회, 검사 실패 시 +1. 후속 질문은 질문 정리 1회 + 답변 1회, +1). 말투를 덧칠하는 추가 호출은 없다. 2.7.0은 같은 사주 기준으로 최초 풀이의 지시문+입력이 2.6.0보다 약 10% 짧다 (중복 재료를 덜어 냄, 시범 추가). 후속 답변 지시문은 약 10,700자다. 실제 토큰과 응답 시간은 서버 로그 `[generation] done`·`[followup] done`의 `inputTokens`·`durationMs`로 확인한다.
+비용: 호출 수는 이전과 같다 (최초 풀이는 질문 정리 0~1회 + 풀이 1회, 검사 실패 시 +1. 후속 질문은 질문 정리 1회 + 답변 1회, +1). 말투를 덧칠하는 추가 호출은 없다. 2.8.0부터 최초 풀이 추론 설정이 medium이라 출력 단가로 과금되는 추론 토큰이 늘고, 중심 주제가 길어져 출력도 늘어난다. 추정은 `docs/READING_QUALITY.md` 21절. `usage` 칸에 입력·출력·추론·캐시 토큰이 남는다 (마지막 성공한 실행 기준). 실제 토큰과 응답 시간은 서버 로그 `[generation] done`·`[followup] done`의 `inputTokens`·`durationMs`로 확인한다.
 
 **같은 사람으로 비교하기.** 2.6.0 풀이(공유해 주신 결과)와 같은 별명·생년월일·시각·상황·궁금한 점으로 새 풀이를 하나 만들어 나란히 읽으면 3절 기준 8(재료 옮겨 쓰기)을 바로 볼 수 있다. 두 풀이에 같은 조언 문장이 거의 그대로 나오면 아직 옮겨 적고 있는 것이다.

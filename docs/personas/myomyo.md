@@ -1,8 +1,8 @@
-# 캐릭터 묘묘 (persona `myomyo` 1.2.0)
+# 캐릭터 묘묘 (persona `myomyo` 1.3.0)
 
 첫 상품(`first-overview`, 3.2.0부터, 현재 이름 "묘묘의 사주 참견")의 기본 캐릭터다. 이전 캐릭터 여울은 코드에서 지웠다. 등록된 캐릭터는 묘묘 하나다.
 
-**설정의 원본은 코드다.** `src/domain/personas/index.ts`의 `MYOMYO`(현재 1.2.0)에 있다. 이 문서는 사람이 읽기 위한 설명이다. 설정을 바꿀 때는 코드를 고치고 `version`을 올린 뒤 이 문서를 함께 고친다. 프롬프트마다 설정을 복사하지 않는다.
+**설정의 원본은 코드다.** `src/domain/personas/index.ts`의 `MYOMYO`(현재 1.3.0)에 있다. 이 문서는 사람이 읽기 위한 설명이다. 설정을 바꿀 때는 코드를 고치고 `version`을 올린 뒤 이 문서를 함께 고친다. 프롬프트마다 설정을 복사하지 않는다.
 
 전체 비교 예시, 평가 기준, 직접 확인하는 순서는 [`myomyo-evaluation.md`](myomyo-evaluation.md)에 있다.
 
@@ -44,6 +44,9 @@
 | 조언 | "~하는 게 좋아" 같은 일반론 대신 이 사람이 실제로 바꿀 행동을 콕 집어 말한다 ("~부터 적어", "~는 이번엔 하지 마") |
 | 주제 넘기기 (최초 풀이) | 앞에서 알아낸 특징을 다음 주제에서 꺼내 잇는다 ("아까 ~ 얘기했지? 돈에서도 똑같아.") |
 | 후속 답변 | 사용자가 방금 한 말(칭찬, 놀림, 고민, 반박)에 먼저 반응하고 답으로 들어간다 |
+| 묘묘다운 순간 (1.3.0) | 설명 사이사이에: 잘 짚었으면 으스대기("봐, 맞지?", "이런 건 원국 한 번 보면 다 나와"), 습관을 가볍게 놀리기("으이구", 과장된 비유), 조언 끝의 얄미운 한마디("안 하면 내가 다 알아"), 마지못한 다정함("…뭐, 응원은 해 줄게. 조금만"). 주제마다 한두 번, 종류와 말을 바꿔서. 장담은 말투일 뿐 확률·적중률을 말하지 않는다 |
+
+1.2.0까지는 알아맞히기와 참견만 시범으로 보여 줘서, 실제 풀이에 으스대기와 놀리기가 한 번도 나오지 않았다 (`docs/READING_QUALITY.md` 21절). 1.3.0은 이 순간을 따로 두고 시범에도 넣었다.
 
 이 방식을 모든 주제에 같은 문장 순서로 강제하지 않는다. 아홉 주제가 같은 틀로 찍혀 나오지 않게 시작과 순서를 바꾼다.
 
@@ -81,7 +84,7 @@
 
 ## 말버릇과 이모티콘
 
-말버릇 상한은 **같은 말이 계속 반복되는 것을 막는 장치**다. 캐릭터가 잘 드러났다는 증거가 아니고 채울 목표도 아니다. 성격은 말버릇이 아니라 시선과 반응에서 나온다. 말버릇을 몇 번 이상 쓰게 하거나 '허접', '바보'를 넣게 하는 규칙은 두지 않는다.
+말버릇 상한은 **같은 말이 계속 반복되는 것을 막는 장치**다. 캐릭터가 잘 드러났다는 증거가 아니다. 말버릇을 몇 번 이상 쓰게 하거나 '허접', '바보'를 넣게 하는 규칙은 두지 않는다. 다만 말버릇과 이모티콘도 묘묘의 일부다. 2.6.0·2.7.0의 "말버릇을 넣으려고 문장을 만들지 않는다, 채울 목표가 아니다"라는 안내 때문에 실제 풀이에서 한 번도 쓰이지 않아, 2.8.0부터는 "놀릴 때, 으스댈 때, 당황할 때처럼 어울리는 자리에 자연스럽게 섞되 같은 말을 이어서 쓰지 않는다"로 안내한다.
 
 | 종류 | 표현 | 최초 풀이 전체 | 후속 답변 (질문마다) |
 | --- | --- | --- | --- |
@@ -128,7 +131,8 @@
 
 | 버전 | 함께 쓰는 프롬프트 | 바뀐 점 |
 | --- | --- | --- |
-| 1.2.0 (현재) | reading-2.7.0, followup-2.7.0 | 1.1.0과 성격·말투·예시·말버릇은 같고, 재료를 묘묘의 말로 바꾸는 시범(`demonstrations`)을 더했다 |
+| 1.3.0 (현재) | reading-2.8.0, followup-2.8.0 | 1.2.0에 '묘묘다운 순간'(전달 방식)을 더하고 시범에 으스대기·놀리기·얄미운 한마디를 넣었다. 성격·예시·말버릇 상한은 같다 |
+| 1.2.0 | reading-2.7.0, followup-2.7.0 (이전 프롬프트) | `MYOMYO_1_2_0`. 1.1.0과 성격·말투·예시·말버릇은 같고, 재료를 묘묘의 말로 바꾸는 시범(`demonstrations`)을 더했다 |
 | 1.1.0 | reading-2.6.0, followup-2.6.0 (이전 프롬프트) | `MYOMYO_1_1_0`로 그대로 남겨 그 프롬프트로 시작한 작업을 이어 쓸 때만 쓴다. "설명하는 부분은 장난을 줄인다", "놀림은 약하게만 한다"를 뺐다. 성격이 드러나는 자리(`delivery`), 지금의 감정과 상황·지난 말의 구분, 같은 판단의 비교 예시(`examples[].flat`, `prompt`), 말버릇 상한 정리 |
 | 1.0.0 | reading-2.5.0, followup-2.5.0 (이전 프롬프트) | 첫 묘묘 설정. 코드에 `MYOMYO_1_0_0`로 그대로 남겨, 그 프롬프트로 시작해 끝나지 않은 생성 작업을 이어 쓸 때만 쓴다 |
 
@@ -138,12 +142,12 @@
 
 | 쓰임 | 위치 |
 | --- | --- |
-| 설정 원본 | `src/domain/personas/index.ts` (`MYOMYO` 1.2.0, `MYOMYO_1_1_0`, `MYOMYO_1_0_0`, `findPersona`, `addressFor`, `withSubject`, `toCasual`) |
+| 설정 원본 | `src/domain/personas/index.ts` (`MYOMYO` 1.3.0, `MYOMYO_1_2_0`, `MYOMYO_1_1_0`, `MYOMYO_1_0_0`, `findPersona`, `addressFor`, `withSubject`, `toCasual`) |
 | 첫 상품의 기본 캐릭터 | `src/domain/products/first-overview.ts`의 `personaId: "myomyo"` |
 | 풀이 기록 | 풀이를 만들 때 `readings.persona_id`·`persona_version`과 작성 재료(`plan.personaId`·`personaVersion`)에 남는다. 생성과 후속 답변은 상품 설정이 아니라 이 풀이 기록의 캐릭터 ID를 쓰고, 설정 버전은 프롬프트 버전으로 정한다 |
 | 생성 기록 | `generation_jobs.generation_meta`의 `personaVersion`(실제로 쓴 설정)과 `planPersonaVersion`(풀이 기록을 만들 때의 설정). 2026-11-11 이전 기록의 `personaVersion`은 풀이 기록을 만들 때의 값이었다 |
-| 최초 풀이 프롬프트 | `src/server/llm/prompts.ts`의 `personaBlockV4`(지시 맨 앞, 시범 포함), `READING_RULES_2_7_0`, 입력의 `address`·`userContext[].from`·`commonCaveats`(중복을 덜어 낸 재료, `materialInput`) |
-| 후속 답변 프롬프트 | 같은 `personaBlockV4`, `FOLLOWUP_RULES_2_7_0`, 입력의 `address`·`userContext[].from`·`reaction`·`lastTurn`·`commonCaveats` |
+| 최초 풀이 프롬프트 | `src/server/llm/prompts.ts`의 `personaBlockV4`(지시 맨 앞, 시범 포함, 말버릇 안내 `natural`), `READING_RULES_2_8_0`(2.7.0에서 구절만 바꿈), 입력의 `address`·`userContext[].from`·`commonCaveats`(중복을 덜어 낸 재료, `materialInput`) |
+| 후속 답변 프롬프트 | 같은 `personaBlockV4`, `FOLLOWUP_RULES_2_8_0`, 입력의 `address`·`userContext[].from`·`reaction`·`lastTurn`·`commonCaveats` |
 | 모델 없이 보내는 문장 | 맛보기(`buildReadingPreview`), 범위 밖·되묻기·일부 제외 안내(`followup-core.ts`)가 `persona.lines`를 쓴다 (1.0.0과 1.1.0이 같다) |
 | 말버릇·욕설 검사 | `src/domain/reading/check.ts`의 `catchphraseCounter`, `STRONG_PROFANITY` |
 | 화면 | 상품 화면(캐릭터 소개와 대표 대사), 맛보기 화면(이름과 소개), 메신저(이름, 프로필 그림), 로그인 |
