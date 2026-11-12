@@ -1,7 +1,7 @@
 import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findMessengerProduct } from "@/domain/products";
 import { focusTopicsOf } from "@/domain/reading/focus";
 import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView } from "@/domain/reading/types";
@@ -126,7 +126,7 @@ export async function askFollowup(input: {
 
     // 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트에 맞는 캐릭터 설정을 쓴다 (followups.prompt_version으로 버전을 알 수 있다).
     const persona = findPersona(reading.data.persona_id as string, personaVersionFor(CURRENT_FOLLOWUP_PROMPT));
-    const product = findProduct(reading.data.product_id as string);
+    const product = findMessengerProduct(reading.data.product_id as string);
     if (!persona || !product) throw new Error("configuration_unavailable");
     const plan = internals.data.plan as AnyReadingPlan;
     const last = (previous.data ?? [])[0] as { question: string; answer: string | null } | undefined;

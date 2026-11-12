@@ -1,7 +1,7 @@
 import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findMessengerProduct } from "@/domain/products";
 import { issueSummary } from "@/domain/reading/check";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan, type StoredMessage } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -158,7 +158,7 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     const persona = findPersona(reading.persona_id as string, personaVersionFor(config.promptVersion));
     if (!persona) throw new Error("persona_unavailable");
     personaVersion = persona.version;
-    const product = findProduct(reading.product_id as string);
+    const product = findMessengerProduct(reading.product_id as string);
     const chart = reading.chart as ChartView;
 
     let narration: NarrationInput;

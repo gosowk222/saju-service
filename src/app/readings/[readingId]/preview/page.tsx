@@ -9,7 +9,7 @@ import { Badge, Card, LoadingScreen, Notice, PageHeader, PersonaAvatar } from "@
 import { BRANCH_OPTIONS } from "@/domain/birth/input";
 import { parseIsoDate, formatKoreanDate } from "@/domain/birth/date";
 import { findPersona } from "@/domain/personas";
-import { findProduct, formatPrice } from "@/domain/products";
+import { findMessengerProduct, findProduct, formatPrice, isScrollProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReadingAccess, READINGS_CLOSED_MESSAGE } from "@/server/access";
 import { requirePageUser } from "@/server/auth";
@@ -39,8 +39,10 @@ async function Preview({ params }: { params: Promise<{ readingId: string }> }) {
   ]);
   if (!reading) notFound();
   if (entitlement) redirect(`/readings/${readingId}`);
+  // 족자 상품(무진)은 구매 전에도 풀이 화면에서 무료 부분을 보여 주므로 메신저 맛보기를 쓰지 않는다.
+  if (isScrollProduct(findProduct(reading.product_id))) redirect(`/readings/${readingId}`);
 
-  const product = findProduct(reading.product_id);
+  const product = findMessengerProduct(reading.product_id);
   const persona = findPersona(reading.persona_id);
   if (!product || !persona) notFound();
   const mode = checkoutMode();

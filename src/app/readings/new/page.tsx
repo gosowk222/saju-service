@@ -4,7 +4,7 @@ import { BirthWizard } from "@/components/birth-wizard";
 import { LinkButton } from "@/components/ui/button";
 import { LoadingScreen, Notice, PageHeader } from "@/components/ui/layout";
 import { DraftSchema, emptyDraft, type Draft } from "@/domain/birth/input";
-import { DEFAULT_PRODUCT_ID, findProduct } from "@/domain/products";
+import { DEFAULT_PRODUCT_ID, findProduct, isMessengerProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReadingAccess, READINGS_CLOSED_MESSAGE } from "@/server/access";
 import { requirePageUser } from "@/server/auth";
@@ -52,6 +52,18 @@ async function NewReading({ searchParams }: { searchParams: Promise<Record<strin
       </>
     );
   }
+  // 족자 상품(무진)의 대화형 입력은 아래 메신저 입력 마법사와 다른 화면이다.
+  if (!isMessengerProduct(product)) {
+    return (
+      <>
+        <PageHeader title={product.name} backHref={`/products/${product.id}`} />
+        <main className="flex flex-1 flex-col gap-5 px-5 py-6">
+          <Notice tone="info">입력 화면을 준비하고 있어요.</Notice>
+        </main>
+      </>
+    );
+  }
+
   const supabase = await createSupabaseServerClient();
 
   let draft: Draft = emptyDraft(product.id);

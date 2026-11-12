@@ -7,7 +7,7 @@ import { LinkButton } from "@/components/ui/button";
 import { Badge, Card, PageHeader, PersonaAvatar } from "@/components/ui/layout";
 import { SkeletonBlock, SkeletonScreen } from "@/components/ui/skeleton";
 import { findPersona } from "@/domain/personas";
-import { findProduct, formatPrice } from "@/domain/products";
+import { findProduct, formatPrice, isMessengerProduct, isScrollProduct } from "@/domain/products";
 import { checkoutMode, FREE_TRIAL, grantsOpen } from "@/server/checkout/mode";
 
 async function ProductDetail({ params }: { params: Promise<{ productId: string }> }) {
@@ -15,9 +15,17 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
   const product = findProduct(productId);
   if (!product) notFound();
   const persona = findPersona(product.personaId)!;
+  const scroll = isScrollProduct(product) ? product : null;
+  const messenger = isMessengerProduct(product) ? product : null;
+  // 족자 상품은 장 목록, 메신저 상품은 주제 목록을 보여 준다.
+  const contents = scroll
+    ? scroll.scroll.sections
+        .filter((section) => section.kind === "chapter")
+        .map((section) => ({ id: section.id, title: section.title, summary: `${section.tier === "free" ? "무료 · " : ""}${section.summary}` }))
+    : (messenger?.topics ?? []).map((topic) => ({ id: topic.id, title: topic.title, summary: topic.summary }));
 
   const facts = [
-    ["분량", product.expectedBubbles],
+    ["분량", scroll ? scroll.contentsLabel : (messenger?.expectedBubbles ?? "")],
     ["가격", formatPrice(product.priceKrw)],
     ["후속 질문", `${product.followupLimit}회 포함`],
     ["다시 보기", product.archive ? "보관함에서 언제든" : "제공하지 않음"],
@@ -39,7 +47,7 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
           <section className="flex flex-col gap-3">
             <h2 className="type-title">다루는 내용</h2>
             <ol className="flex flex-col gap-3">
-              {product.topics.map((topic, index) => (
+              {contents.map((topic, index) => (
                 <li key={topic.id} className="flex items-start gap-3">
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 type-caption-sm text-primary-600">
                     {index + 1}
@@ -78,13 +86,14 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
             </div>
           </section>
 
+          {messenger ? (
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <h2 className="type-title">풀이 예시</h2>
               <Badge tone="warning">실제 개인 풀이가 아닌 예시예요</Badge>
             </div>
             <div className="flex flex-col gap-3 rounded-lg bg-gray-50 p-5">
-              {product.sampleBubbles.map((bubble) => (
+              {messenger.sampleBubbles.map((bubble) => (
                 <div key={bubble.text} className="flex items-start gap-3">
                   <PersonaAvatar persona={persona} />
                   <p className="rounded-t-lg rounded-br-lg rounded-bl-(--space-2) bg-gray-100 px-4 py-3 type-body text-gray-900">
@@ -94,6 +103,7 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
               ))}
             </div>
           </section>
+          ) : null}
         </div>
       </main>
       <div className="sticky bottom-0 flex items-center gap-4 border-t border-gray-200 bg-white px-5 py-4 pb-safe">

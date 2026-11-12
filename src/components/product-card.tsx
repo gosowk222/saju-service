@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { SquareArt } from "@/components/ui/art";
-import { formatPrice, type ProductDefinition } from "@/domain/products";
+import { formatPrice, type AnyProductDefinition } from "@/domain/products";
 
 /**
  * 상품 부설명. 문장마다 새 줄에서 시작해 좁은 칸에서도 문장 중간이 어색하게 끊기지 않게 한다.
@@ -31,7 +31,7 @@ const FIRST_SCREEN_POSTERS = 4;
  * 그림이 오기 전에는 같은 비율의 밤 인디고 면(포스터 스켈레톤)이 자리를 잡고, 글자는 그 위에 먼저 보인다.
  * order는 목록에서의 순서다. 첫 화면에 보이는 포스터는 바로 불러오고, 첫 번째는 가장 먼저 받는다.
  */
-export function ProductPoster({ product, order = 0 }: { product: ProductDefinition; order?: number }) {
+export function ProductPoster({ product, order = 0 }: { product: AnyProductDefinition; order?: number }) {
   const { poster } = product.art;
   const firstScreen = order < FIRST_SCREEN_POSTERS;
   return (
@@ -59,7 +59,7 @@ export function ProductPoster({ product, order = 0 }: { product: ProductDefiniti
  * 캐릭터는 오른쪽에 있고 왼쪽이 비어 있으므로 글자를 왼쪽 아래에 둔다. 부설명은 폭의 42% 안에서,
  * 제목은 한 줄에 다섯 글자 정도에서 줄을 바꿔 얼굴, 부채, 벽걸이, 책상 위 책을 가리지 않는다.
  */
-export function ProductHero({ product }: { product: ProductDefinition }) {
+export function ProductHero({ product }: { product: AnyProductDefinition }) {
   const { banner } = product.art;
   return (
     <div className="relative aspect-16/10 w-full overflow-hidden bg-primary-900">
@@ -74,11 +74,11 @@ export function ProductHero({ product }: { product: ProductDefinition }) {
 }
 
 /** 보관함 같은 목록의 작은 정사각 썸네일. 포스터에서 얼굴 부분(square)만 보여 준다. 옆에 상품 이름이 있다. */
-export function ProductThumb({ product }: { product: ProductDefinition }) {
+export function ProductThumb({ product }: { product: AnyProductDefinition }) {
   return <SquareArt image={product.art.poster} displayPx={56} className="h-tile w-tile rounded-md bg-primary-900" />;
 }
 
-export function ProductCard({ product, order = 0 }: { product: ProductDefinition; order?: number }) {
+export function ProductCard({ product, order = 0 }: { product: AnyProductDefinition; order?: number }) {
   return (
     <Link href={`/products/${product.id}`} className="flex flex-col gap-3 text-gray-900 hover:text-gray-900 hover:no-underline">
       <ProductPoster product={product} order={order} />

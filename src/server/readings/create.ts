@@ -1,6 +1,6 @@
 import "server-only";
 import { type CreateReadingInput } from "@/domain/birth/input";
-import { findProduct } from "@/domain/products";
+import { findMessengerProduct } from "@/domain/products";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
 import { analyzeBirth, resolveBirthDateNow, toPublicBirthInput } from "@/server/engine/analyze";
@@ -13,7 +13,7 @@ const READINGS_PER_HOUR = 30;
  * 기록은 수정하지 않는다. 입력을 고치면 새 기록을 만들어 이전 주문과 섞이지 않게 한다.
  */
 export async function createReading(userId: string, input: CreateReadingInput): Promise<string> {
-  const product = findProduct(input.productId);
+  const product = findMessengerProduct(input.productId);
   if (!product) throw new ApiError(404, "unknown_product", "상품을 찾을 수 없어요.");
 
   const situation = product.situation.options.find((option) => option.id === input.situationId);

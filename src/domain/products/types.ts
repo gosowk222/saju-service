@@ -97,17 +97,27 @@ export interface ProductExpression {
 }
 
 /**
- * 상품 그림. 상품명과 부설명은 그림에 넣지 않고 화면 글자로 올린다.
+ * 상품 그림. 메신저 상품(묘묘)은 상품명과 부설명을 그림에 넣지 않고 화면 글자로 올린다.
  * 화면은 글자를 포스터 아래쪽, 배너 왼쪽에 놓으므로 그림은 그 자리를 비워 둔다.
+ * 그림 안에 이미 글자가 있는 상품(무진)은 textInImage로 알려 화면 글자를 겹치지 않게 한다.
  */
 export interface ProductArt {
   /** 3:4 포스터 카드. 아래쪽 여백에 부설명과 제목이 올라간다. 보관함 썸네일은 square 영역을 쓴다. */
   readonly poster: ImageAsset;
-  /** 상품 상세의 16:10 배너. 왼쪽 여백에 부설명과 제목이 올라간다. */
+  /** 상품 상세 배너. 메신저 상품은 16:10이고 왼쪽 여백에 부설명과 제목이 올라간다. */
   readonly banner: ImageAsset;
+  /**
+   * 그림 안에 상품 이름과 문구가 이미 들어 있다. 화면은 그림 위에 글자·스크림을 겹치지 않고,
+   * 화면 읽기용 제목과 상품 정보를 그림 밖에 둔다. 배너는 원본 비율로 보여 준다.
+   */
+  readonly textInImage?: boolean;
 }
 
-export interface ProductDefinition {
+/** 결과를 보여 주는 형식. messenger: 말풍선 대화(묘묘), scroll: 장으로 나눈 긴 족자 보고서(무진). */
+export type ProductFormat = "messenger" | "scroll";
+
+/** 형식과 관계없이 모든 상품이 가진 판매·범위·입력 값. 질문 분류, 주문, 이용권, 후속 질문이 이 값만 읽는다. */
+export interface ProductBase {
   readonly id: string;
   readonly version: string;
   /** 화면, 결제창, 보관함, PDF에 보이는 상품 이름. 주문에는 이름 대신 상품 ID와 버전이 남는다. */
@@ -118,6 +128,8 @@ export interface ProductDefinition {
   readonly art: ProductArt;
   /** 결제 금액의 최종 기준. 브라우저가 보낸 금액은 쓰지 않는다. */
   readonly priceKrw: number;
+  /** final(없을 때 기본): 출시 가격. provisional: 출시 가격이 정해지지 않아 개발·테스트용으로 둔 임시 가격. */
+  readonly priceStatus?: "final" | "provisional";
   /** 결제창에 보이는 주문 이름. */
   readonly orderName: string;
   readonly followupLimit: number;
@@ -131,19 +143,9 @@ export interface ProductDefinition {
   readonly personaId: string;
   readonly featureId: string;
   readonly rulesetId: string;
-  readonly expectedBubbles: string;
-  readonly topics: readonly ProductTopic[];
-  /** 궁금한 점에 직접 답하는 영역. 메시지의 topicId로 저장된다. */
-  readonly focusSection: { readonly id: string; readonly title: string };
   readonly scope: ProductScope;
   readonly timing: ProductTiming;
-  readonly length: ProductLength;
   readonly expression: ProductExpression;
-  readonly situation: {
-    readonly required: boolean;
-    readonly title: string;
-    readonly options: readonly ProductSituationOption[];
-  };
   readonly concern: {
     readonly enabled: boolean;
     readonly required: boolean;
@@ -151,12 +153,87 @@ export interface ProductDefinition {
     readonly placeholder: string;
     readonly hint: string;
   };
+}
+
+/** 메신저 말풍선 상품 (묘묘의 사주 참견). format이 없으면 메신저다. */
+export interface ProductDefinition extends ProductBase {
+  readonly format?: "messenger";
+  readonly expectedBubbles: string;
+  readonly topics: readonly ProductTopic[];
+  /** 궁금한 점에 직접 답하는 영역. 메시지의 topicId로 저장된다. */
+  readonly focusSection: { readonly id: string; readonly title: string };
+  readonly length: ProductLength;
+  readonly situation: {
+    readonly required: boolean;
+    readonly title: string;
+    readonly options: readonly ProductSituationOption[];
+  };
   readonly sampleBubbles: readonly SampleBubble[];
 }
 
-/** 화면과 PDF에서 쓰는 주제 제목. 질문 답변 영역의 제목도 포함한다. */
-export function topicTitlesOf(product: ProductDefinition | undefined): Readonly<Record<string, string>> {
+/** 족자 보고서의 질문 하나. 목차·관심 주제·진행 상태에 같은 제목을 쓴다. */
+export interface ScrollQuestion {
+  /** 설계 문서의 질문 ID (P01~P05, 1-1~10-4). */
+  readonly id: string;
+  readonly title: string;
+}
+
+/** 족자 보고서의 한 칸 (기초 분석 한 항목, 한 장, 마지막 정리). */
+export interface ScrollSectionSpec {
+  readonly id: string;
+  /** chart: 원국표(계산값만, 글 없음), basics: 기초 분석, chapter: 1~10장, closing: 마지막 질문 정리. */
+  readonly kind: "chart" | "basics" | "chapter" | "closing";
+  /** 장 번호 (chapter만). */
+  readonly number: number | null;
+  readonly title: string;
+  readonly tier: "free" | "paid";
+  readonly questions: readonly ScrollQuestion[];
+  /** 최종 한국어 본문(공백 포함)의 편집 목표. 강제 최소 글자 수가 아니며 범위 밖이라고 다시 만들지 않는다. */
+  readonly targetChars: { readonly min: number; readonly max: number };
+  /** 구매 전 목차에 보이는 설명. 개인 풀이 내용이 아니다. */
+  readonly summary: string;
+  /** 앱이 실제 계산값으로 그리는 표. LLM이 값을 다시 쓰지 않는다. */
+  readonly tables: readonly ScrollTable[];
+}
+
+export type ScrollTable = "pillars" | "elements" | "stages" | "ten-gods" | "luck" | "months";
+
+/** Pass 1 초안을 한 번의 스트림 호출로 받는 장 묶음. 첫 표시 단위는 작게, 뒤쪽은 관련 장끼리 묶는다. */
+export interface ScrollDraftBatch {
+  readonly id: string;
+  readonly tier: "free" | "paid";
+  readonly sectionIds: readonly string[];
+}
+
+export interface ScrollSpec {
+  /** 목차 순서. 생성이 끝나는 순서와 관계없이 화면은 이 순서를 지킨다. */
+  readonly sections: readonly ScrollSectionSpec[];
+  /** Pass 1 묶음. 같은 단계 안에서 순서대로 실행한다. 마지막 정리는 다른 장의 초안 요약이 필요해 맨 뒤에 둔다. */
+  readonly draftBatches: readonly ScrollDraftBatch[];
+}
+
+/** 장으로 나눈 긴 족자 보고서 상품 (무진의 종합 사주). */
+export interface ScrollProductDefinition extends ProductBase {
+  readonly format: "scroll";
+  /** 상품 화면에 보이는 구성 안내 (예: "무료 기초 분석과 1장 · 유료 2~10장과 질문 정리"). */
+  readonly contentsLabel: string;
+  readonly scroll: ScrollSpec;
+}
+
+export type AnyProductDefinition = ProductDefinition | ScrollProductDefinition;
+
+export function isScrollProduct(product: AnyProductDefinition | undefined | null): product is ScrollProductDefinition {
+  return product?.format === "scroll";
+}
+
+export function isMessengerProduct(product: AnyProductDefinition | undefined | null): product is ProductDefinition {
+  return !!product && product.format !== "scroll";
+}
+
+/** 화면과 PDF에서 쓰는 주제 제목. 질문 답변 영역의 제목도 포함한다. 족자 상품은 장 제목을 쓴다. */
+export function topicTitlesOf(product: AnyProductDefinition | undefined): Readonly<Record<string, string>> {
   if (!product) return {};
+  if (isScrollProduct(product)) return Object.fromEntries(product.scroll.sections.map((section) => [section.id, section.title] as const));
   return Object.fromEntries([
     [product.focusSection.id, product.focusSection.title],
     ...product.topics.map((topic) => [topic.id, topic.title] as const),
