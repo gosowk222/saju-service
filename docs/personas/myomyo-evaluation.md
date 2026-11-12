@@ -1,8 +1,8 @@
-# 묘묘 평가 기준과 비교 자료 (persona 2.1.0, reading-3.1.0, followup-3.1.0)
+# 묘묘 평가 기준과 비교 자료 (persona 2.1.0, reading-3.2.0·3.1.0, followup-3.2.0·3.1.0)
 
-묘묘가 설명 본문과 후속 답변에서도 묘묘답게 말하는지, 질문에 제대로 답하는지 사람이 읽고 판단하기 위한 자료다. 설정 설명은 [`myomyo.md`](myomyo.md), 해석 지침은 [`../READING_GUIDE.md`](../READING_GUIDE.md).
+묘묘가 설명 본문과 후속 답변에서도 묘묘답게 말하는지, 질문에 제대로 답하는지 사람이 읽고 판단하기 위한 자료다. 설정 설명은 [`myomyo.md`](myomyo.md), 해석 지침은 [`../READING_GUIDE.md`](../READING_GUIDE.md), 생성 지시에 넣는 문답 예시 카탈로그는 [`examples.md`](examples.md).
 
-**주의.** 이 문서의 "묘묘의 말"은 사람이 쓴 방향 예시다. 실제 모델이 이렇게 쓴다는 증거가 아니다. **이 문서의 문장은 생성 지시에 넣지 않는다** (예시를 넣으면 모델이 옮겨 쓴다, `docs/READING_QUALITY.md` 22절). 실제 문장의 개선 여부는 아래 0절의 절차로 새 결과를 만들어 읽고 판단한다 (작업 보고에는 `LIVE_NOT_RUN`). 에이전트는 실제 OpenAI API를 호출하지 않는다. 자동 테스트와 가짜 응답 통과는 문장 품질의 증거가 아니다.
+**주의.** 이 문서의 "묘묘의 말"은 사람이 쓴 방향 예시다. 실제 모델이 이렇게 쓴다는 증거가 아니다. **이 문서의 문장은 생성 지시에 넣지 않는다.** 생성 지시에는 카탈로그(`src/domain/personas/examples/myomyo.ts`)에서 고른 문답 예시만 들어간다 (reading-3.2.0, followup-3.2.0). 이 문서의 1절 비교 예시는 1.x에서 판단 주제에 그대로 옮겨 쓰였던 자료라 평가할 때 '새어 들어갔는지' 보는 데만 쓴다 (`docs/READING_QUALITY.md` 22절). 실제 문장의 개선 여부는 아래 0절의 절차로 새 결과를 만들어 읽고 판단한다 (작업 보고에는 `LIVE_NOT_RUN`). 에이전트는 실제 OpenAI API를 호출하지 않는다. 자동 테스트와 가짜 응답 통과는 문장 품질의 증거가 아니다.
 
 ## 0. 평가 항목 (2.1.0 기준)
 
@@ -46,35 +46,45 @@
 
 한 번에 한 조건만 바꿔 비교한다. 모델과 추론 설정은 운영과 같게 둔다 (모델 변경이나 추론 강도 상향으로 해결하지 않는다).
 
-**A. 같은 사주·상황·질문으로 수정 전후 비교 (모델 호출 없이 파일 만들기)**
+**A. 같은 사주·상황·질문으로 예시 사용·미사용 비교 (모델 호출 없이 파일 만들기)**
 
 PowerShell에서는 `--`를 따옴표로 감싼다.
 
 ```powershell
-npm run llm:export '--' --case=job-seeking --date=2026-11-12                          # 새 지시 (reading-3.1.0, 묘묘 2.1.0)
-npm run llm:export '--' --case=job-seeking --date=2026-11-12 --prompt=reading-2.9.0   # 이전 지시 (묘묘 1.4.0)
+npm run llm:export '--' --case=job-seeking --date=2026-11-12                          # 문답 예시 사용 (reading-3.2.0, 현재 운영)
+npm run llm:export '--' --case=job-seeking --date=2026-11-12 --prompt=reading-3.1.0   # 예시 미사용 비교용 (reading-3.1.0)
+npm run llm:export '--' --case=job-seeking --date=2026-11-12 --task=followup --reaction=praise                          # 후속 답변 (followup-3.2.0)
+npm run llm:export '--' --case=job-seeking --date=2026-11-12 --task=followup --reaction=praise --prompt=followup-3.1.0  # 후속 답변 비교용
 ```
 
-`docs/model-comparison/prompts/`(git에 올리지 않음)에 `*.instructions.txt`, `*.input.json`, `*.schema.json`, `*.request.json`이 생긴다. 두 버전의 입력은 행동 문장 중복을 덜어 낸 것 말고 같다. OpenAI 플레이그라운드에서 같은 모델로 instructions와 input을 붙이고, 출력 형식을 schema.json으로 정해 실행한다 (비용은 사용자가 낸다). 결과 JSON을 저장해 말풍선으로 읽는다.
+`docs/model-comparison/prompts/`(git에 올리지 않음)에 `*.instructions.txt`, `*.input.json`, `*.schema.json`, `*.request.json`이 생긴다. 3.2.0은 `*.examples.md`도 생긴다 (넣은 예시 ID, 고른 조건, 지시 파일 안의 위치). 두 버전은 입력(`input.json`)과 출력 형식이 같고, 지시는 3.1.0 끝에 `[캐릭터 문답 예시: 묘묘]` 블록이 붙은 것만 다르다. 모델과 추론 설정도 같게 둔다 (예시 효과와 모델 변경 효과가 섞이지 않게). OpenAI 플레이그라운드에서 같은 모델로 instructions와 input을 붙이고, 출력 형식을 schema.json으로 정해 실행한다 (비용은 사용자가 낸다). 결과 JSON을 저장해 말풍선으로 읽는다.
 
 ```powershell
-npm run llm:render '--' --case=job-seeking --date=2026-11-12 --file=결과-3.1.0.json
-npm run llm:render '--' --case=job-seeking --date=2026-11-12 --prompt=reading-2.9.0 --file=결과-2.9.0.json
+npm run llm:render '--' --case=job-seeking --date=2026-11-12 --file=결과-3.2.0.json
+npm run llm:render '--' --case=job-seeking --date=2026-11-12 --prompt=reading-3.1.0 --file=결과-3.1.0.json
 ```
 
-같은 이름의 `.md`에 말풍선, 검사 문제, 말풍선 수와 길이가 나온다. 검사 통과는 형식·근거 확인일 뿐 품질 판정이 아니다. 0절 항목으로 두 결과를 나란히 읽는다.
+같은 이름의 `.md`에 말풍선, 검사 문제, 말풍선 수와 길이, **예시 문장 겹침 표**(카탈로그 예시 답과 16글자 이상 그대로 겹치는 조각)가 나온다. 검사 통과와 겹침 0건은 품질 판정이 아니다. 0절 항목과 아래 '예시 비교에서 더 보는 것'으로 두 결과를 나란히 읽는다.
+
+예시 비교에서 더 보는 것 (특정 말버릇·욕설·하트 수로 판정하지 않는다):
+
+- 캐릭터가 단순 반말 이상으로 드러나는가 (0절 1번). 긴 설명 주제에서도 성격이 유지되는가 (2번).
+- 예시 문장·비유·생활 장면이 그대로 또는 비슷하게 늘었는가 (겹침 표와 직접 읽기). 서로 다른 사례(`prepare-type`과 `express-type`)에서 같은 답이 반복되는가.
+- 질문에 대한 설명이 짧아지지 않았는가 (말풍선 수·길이, 0절 3번).
+- 사용자 사실·날짜가 예시에서 들어오지 않았는가 (예: 예시용 '2027년 4월', 예시 속 '팀장', '엄마가 아프심'이 다른 사례 결과에 나오면 유입이다).
+- 조건·반대 근거·행동 제안이 재료와 같게 남았는가 (0절 6번, 검사 결과).
 
 **B. 같은 사주에서 상황과 질문만 바꾸기**: `job-seeking`과 `same-chart-employee`.
 
 **C. 서로 다른 사주에서 같은 농담·조언이 반복되는지**: `prepare-type`과 `express-type`, 또는 `homemaker`와 `self-employed`.
 
-**D. 앱에서 직접**: 사용자가 연 `npm run dev`에서 0-1의 상황·질문으로 새 풀이를 만들고 후속 질문 흐름을 보낸다. 만든 풀이의 버전과 토큰은 `docs/LLM_OPERATIONS.md`의 조회 SQL로 확인한다 (prompt_version이 reading-3.1.0, persona_version이 2.1.0인지).
+**D. 앱에서 직접**: 사용자가 연 `npm run dev`에서 0-1의 상황·질문으로 새 풀이를 만들고 후속 질문 흐름을 보낸다. 만든 풀이의 버전과 토큰은 `docs/LLM_OPERATIONS.md`의 조회 SQL로 확인한다 (prompt_version이 reading-3.2.0, persona_version이 2.1.0인지, generation_meta의 exampleIds). 예시 전후의 입력·캐시 토큰은 `generation_attempts`를 prompt_version(reading-3.1.0 / reading-3.2.0)으로 나눠 비교한다.
 
-## 1. 같은 판단, 다른 말 (개발·평가용 예시, 지시에 넣지 않음)
+## 1. 같은 판단, 다른 말 (평가용 예시, 생성 지시에 넣지 않음)
 
 모든 예시는 **같은 판단**을 밋밋하게 말한 것과 묘묘답게 말한 것을 나란히 둔다. 판단(무엇을 말하는가)은 바꾸지 않고 전달 방식만 다르다. 사용자마다 같은 문장을 붙이는 고정 응답이 아니다.
 
-이 예시들은 1.1.0~1.3.0 때 사람이 쓴 방향 예시이고, 2.1.0의 생성 지시에는 하나도 들어가지 않는다. 아래 "프롬프트" 표시는 1.1.0~1.3.0에서 넣었던 곳이다. 반응 대사("흐, 흐응", "으…… 잘못 짚었네")는 1.x의 정해진 대사였고, 2.1.0은 반응의 말을 정해 두지 않는다.
+이 예시들은 1.1.0~1.3.0 때 사람이 쓴 방향 예시이고, 2.1.0의 생성 지시(reading-3.1.0·3.2.0)에는 하나도 들어가지 않는다 (3.2.0의 문답 예시는 별도 카탈로그에서 온다). 아래 "프롬프트" 표시는 1.1.0~1.3.0에서 넣었던 곳이다. 반응 대사("흐, 흐응", "으…… 잘못 짚었네")는 1.x의 정해진 대사였고, 2.1.0은 반응의 말을 정해 두지 않는다.
 
 평가할 때 이 예시 문장이 결과에 거의 그대로 나오면 감점한다 (예시가 어딘가에서 새어 들어간 것이다).
 

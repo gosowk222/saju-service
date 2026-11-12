@@ -10,7 +10,9 @@
 
 ## 2.1.0의 원칙
 
-1.1.0~1.4.0은 실제 풀이를 볼 때마다 지시를 덧붙였다. 비교 예시, 재료 시범, 말투 견본, 말버릇 목록과 횟수, '주제마다 묘묘다운 순간 한두 번'이 쌓였고, 모델은 예시 문장을 같은 판단의 주제에 옮겨 쓰거나 성격을 말버릇으로 채웠다 (`docs/READING_QUALITY.md` 20~22절). 2.1.0은 이것을 모두 걷어 내고 **누가 말하는지와 그 사람의 성격만** 적는다. 문장 예시는 프롬프트에 넣지 않는다.
+1.1.0~1.4.0은 실제 풀이를 볼 때마다 지시를 덧붙였다. 비교 예시, 재료 시범, 말투 견본, 말버릇 목록과 횟수, '주제마다 묘묘다운 순간 한두 번'이 쌓였고, 모델은 예시 문장을 같은 판단의 주제에 옮겨 쓰거나 성격을 말버릇으로 채웠다 (`docs/READING_QUALITY.md` 20~22절). 2.1.0은 이것을 모두 걷어 내고 **누가 말하는지와 그 사람의 성격만** 적는다.
+
+설명만으로는 실제 풀이에서 성격이 충분히 드러나지 않아, 2026-11-13부터는 설정과 따로 관리하는 **질문–답변 예시 카탈로그**에서 작성 용도에 맞는 예시 몇 개를 골라 지시 끝에 넣는다 (reading-3.2.0, followup-3.2.0, [`examples.md`](examples.md)). 예시는 설정(`MYOMYO`) 안에 두지 않고, 예시가 현재 사용자의 사실이나 판단이 아니라는 경계 안내와 함께 한 곳에서 조립한다. 1.x의 '판단 → 밋밋한 말 → 묘묘의 말' 비교 예시와 달리, 예시마다 그 예시에만 해당하는 전제를 붙여 '이 판단이면 이 문장'으로 읽히지 않게 한다.
 
 - 이름과 감탄사, 이모티콘을 지워도 묘묘가 한 말처럼 읽혀야 한다. 성공 여부를 특정 단어가 몇 번 나왔는지로 판정하지 않는다.
 - 욕설·비속어 수위를 낮추는 것과 캐릭터의 존재감을 줄이는 것은 다르다. 직설적인 지적, 얄미운 되물음, 능청스러운 칭찬은 수위 제한과 상관없다.
@@ -90,7 +92,7 @@
 
 | 버전 | 함께 쓰는 프롬프트 | 바뀐 점 |
 | --- | --- | --- |
-| 2.1.0 (현재) | reading-3.1.0, followup-3.1.0 | 정체성·관계·성격·말하는 방식·상황에 따른 반응·놀림의 기준만 둔다. 말투 견본, 판단별 예시와 시범, 말버릇 목록과 횟수, 이모티콘 개수, 상황별 완성 대사, '묘묘다운 순간' 의무, 상품 표현 강도 문구를 뺐다. 명리 해석 지침(guide-1.0.0)과 함께 쓴다 |
+| 2.1.0 (현재) | reading-3.2.0, followup-3.2.0 (문답 예시 포함, 카탈로그 myomyo-examples-1.0.0) · reading-3.1.0, followup-3.1.0 (예시 없음, 3.2.0 이전에 시작한 작업과 비교용) | 정체성·관계·성격·말하는 방식·상황에 따른 반응·놀림의 기준만 둔다. 말투 견본, 판단별 예시와 시범, 말버릇 목록과 횟수, 이모티콘 개수, 상황별 완성 대사, '묘묘다운 순간' 의무, 상품 표현 강도 문구를 뺐다. 명리 해석 지침(guide-1.0.0)과 함께 쓴다. 3.2.0은 설정을 바꾸지 않고 카탈로그의 문답 예시만 더했다 |
 | 2.0.0 | 쓰지 않음 | 되돌린 작업(`refactor/myomyo-persona-rebuild`, reading-3.0.0)에서 쓴 번호다. 그 작업에서 시작한 풀이 기록에 이 번호가 남아 있을 수 있어 다시 쓰지 않는다. 남겨 둔 설정이 없으므로 화면은 현재 설정으로 보인다 |
 | 1.4.0 | reading-2.9.0, followup-2.9.0 (이전 프롬프트) | `MYOMYO_1_4_0`. 판단에 묶인 예시와 시범을 빼고 말투 견본(`voiceSamples`)만 둔 설정 |
 | 1.3.0 | reading-2.8.0, followup-2.8.0 | `MYOMYO_1_3_0`. '묘묘다운 순간'과 그 순간이 들어간 시범 |
@@ -98,14 +100,15 @@
 | 1.1.0 | reading-2.6.0, followup-2.6.0 | `MYOMYO_1_1_0`. 성격이 드러나는 자리(`delivery`), 같은 판단의 비교 예시, 말버릇 상한 정리 |
 | 1.0.0 | reading-2.5.0, followup-2.5.0 | `MYOMYO_1_0_0`. 첫 묘묘 설정 |
 
-생성 작업은 시작할 때 프롬프트 버전을 고정하고, 캐릭터 설정은 그 프롬프트 버전으로 고른다 (`personaVersionFor` → `findPersona(id, version)`). 그래서 이전 프롬프트로 이어 쓰는 작업에 새 설정이 섞이지 않는다. 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트(followup-3.1.0)와 현재 설정을 쓴다.
+생성 작업은 시작할 때 프롬프트 버전을 고정하고, 캐릭터 설정과 예시 카탈로그·선택 정책은 그 프롬프트 버전으로 고른다 (`personaVersionFor` → `findPersona(id, version)`, `example-block.ts`의 `PROMPT_EXAMPLES`). 그래서 이전 프롬프트로 이어 쓰는 작업에 새 설정이나 예시가 섞이지 않는다. 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트(followup-3.2.0)와 현재 설정을 쓴다.
 
 ## 코드에서 쓰이는 곳
 
 | 쓰임 | 위치 |
 | --- | --- |
 | 설정 원본 | `src/domain/personas/index.ts` (`MYOMYO` 2.1.0, 이전 설정 `MYOMYO_1_0_0`~`MYOMYO_1_4_0`, `findPersona`, `addressFor`, `toCasual`) |
-| 프롬프트로 옮기기 | `src/server/llm/prompts.ts`의 `characterBlock` (reading-3.1.0·followup-3.1.0의 지시 맨 앞). 1.x는 `personaBlockV3`~`personaBlockV5` |
+| 프롬프트로 옮기기 | `src/server/llm/prompts.ts`의 `characterBlock` (reading-3.1.0·3.2.0, followup-3.1.0·3.2.0의 지시 맨 앞). 1.x는 `personaBlockV3`~`personaBlockV5` |
+| 문답 예시 | 카탈로그 `src/domain/personas/examples/myomyo.ts`(A·B·C 세트 27개), 선택 `select.ts`, 조립 `src/server/llm/example-block.ts` (3.2.0의 지시 맨 끝). 생성 기록 `generation_jobs.generation_meta.exampleIds`, 후속은 `followups.analysis.examples` |
 | 풀이 기록 | `readings.persona_id`·`persona_version`, 작성 재료의 `plan.personaVersion` (풀이를 만들 때의 설정) |
 | 생성 기록 | `generation_jobs.generation_meta.personaVersion`(실제로 쓴 설정), `generation_attempts.persona_version`(시도마다) |
 | 모델 없이 보내는 문장 | 맛보기(`buildReadingPreview`), 범위 밖·되묻기·반응 답(`followup-core.ts`)이 `persona.lines`를 쓴다 |

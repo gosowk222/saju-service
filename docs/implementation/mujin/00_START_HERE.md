@@ -74,7 +74,7 @@
 | 이용권 | `FREE_TRIAL.productIds = ['first-overview']` | `['first-overview', 'mujin-overview']`, 재지급 없음 |
 | 결과 화면 | 항상 `Messenger` | `/readings/[id]`가 족자 상품이면 `src/components/mujin/scroll-reading.tsx` |
 | 입력 화면 | 단계형 위저드 | `src/components/mujin/intake.tsx`(공용 부품은 `intake-parts.tsx`로 옮김, 묘묘 화면 불변) |
-| 보관함·PDF·후속 질문 | 메신저 전제 | 보관함 무료 부분 표시, `renderScrollPdf`, `src/server/scroll/followup.ts` + mujin-followup-1.0.0 |
+| 보관함·PDF·후속 질문 | 메신저 전제 | 보관함 무료 부분 표시, `renderScrollPdf`, `src/server/scroll/followup.ts` + mujin-followup-1.1.0 (1.0.0 + 문답 예시) |
 | 관리자 | 설정·이용권 | 무진 생성 사용량·생성 시간 칸 |
 | 모델 비교 | `llm:export`·`llm:render` (묘묘 고정) | `--product=mujin-overview`(`scripts/mujin-llm.ts`): Pass별 요청 파일과 초안·최종문 비교표 |
 
@@ -99,13 +99,14 @@
 17. PDF: 묘묘와 같이 권한이 있고 유료 단계까지 끝난 풀이만 내보낸다.
 18. 유료 시작 조건: 무료 단계가 끝난 뒤 시작한다. 무료 단계가 더 다시 시도할 수 없는 실패로 끝났으면 구매한 유료 장은 시작한다.
 19. 상품 상세: 배너 아래에 상담 장면과 무진의 첫 인사를 두고, '무진과 상담 시작하기'로 대화형 입력(로그인 필요)으로 이어진다.
+20. 문답 예시 (2026-11-13 정책 변경, 명세 04 7절을 바꿈): 사용자가 준 원문 21개를 받은 그대로 카탈로그(`src/domain/personas/examples/`)에 두고, 원문 05·07·09·10을 참조하는 Pass 2 재작성 예시 4개를 더했다. 묶음 `mujin-1.1.0`부터 Pass 2는 장마다 재작성 예시 하나와 문답 하나, 후속 답변은 질문·반응에 맞는 문답 두세 개를 지시 끝에 넣는다. Pass 1과 질문 정리에는 넣지 않는다. 1.0.0 묶음에 고정된 단계는 예시 없이 이어 쓴다. 설명은 `docs/personas/examples.md`.
 
 ## 6. 미확정 사항
 
 1. 출시 가격 (현재 임시 990원).
 2. 상담 장면 최종 아트(B01~B04)와 프로필 그림(B05).
 3. 실제 모델로 본 무진 문체 품질과 질문 정리 정확도 (사용자 실행, LIVE_NOT_RUN).
-4. 명세가 언급한 21개 문답 예시 원문 (작업 환경에 없음, 평가 문서에 자리만 둠).
+4. 문답 예시를 넣은 Pass 2·후속 답변의 실제 모델 효과 (예시 사용 mujin-1.1.0과 미사용 mujin-1.0.0 비교, 사용자 실행, LIVE_NOT_RUN). 21개 원문은 2026-11-13에 받아 넣었다 (결정 20).
 5. 무진만 따로 공개·비공개하는 운영 설정 (현재 공개 설정은 모든 상품 공통).
 6. 고전 자료 사용 여부.
 7. 무료 생성 비용 상한 값(시작 8회, 하루 10개, 장별 3회)과 실제 지연에서 요청 하나(270초)에 들어가는 묶음 수.
@@ -177,7 +178,7 @@
 - 질문 정리(궁금한 점이 있을 때만)는 무료 단계에서 1회 부르고 저장해 다시 쓴다.
 - Pass 1 스트림에서 장 원소가 닫힐 때마다 검사하고 초안을 저장한 뒤 Pass 2 대기열에 넣는다. 수신 루프는 Pass 2를 기다리지 않는다.
 - 검사에 걸린 장만 같은 요청에서 1회 다시 요청하고, 장마다 Pass 1·Pass 2 시도 총수 3회까지. 호출 수는 재시도에 따라 달라진다(2-pass는 역할 구분이지 항상 2회가 아니다).
-- 버전은 묶음 `mujin-1.0.0`(mujin-draft-1.0.0, mujin-voice-1.0.0, mujin-question-1.0.0, mujin-followup-1.0.0, 무진 1.0.0, guide-1.0.0)으로 작업에 고정한다.
+- 버전은 묶음으로 단계마다 작업에 고정한다. 현재 `mujin-1.1.0`(mujin-draft-1.0.0, mujin-voice-1.1.0, mujin-question-1.0.0, mujin-followup-1.1.0, 무진 1.0.0, guide-1.0.0, 문답 예시 카탈로그 mujin-examples-1.0.0·선택 정책 example-select-1.0.0). 그 전 `mujin-1.0.0`(voice·followup 1.0.0, 예시 없음)에 고정된 단계는 그대로 이어 쓴다.
 
 ### 저장과 재개
 
