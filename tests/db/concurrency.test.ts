@@ -159,6 +159,51 @@ async function redeemedAndRunning() {
   return { user, readingId, ticketId: r.ticket.id, attempt: claim.job.attempts };
 }
 
+/** 무진 풀이 기록 (가상 값). 상품·캐릭터·규칙 ID와 '지금의 나'만 묘묘 풀이와 다르다. */
+async function createMujinReading(user: string): Promise<string> {
+  const reading = {
+    product_id: "mujin-overview",
+    product_version: "1.0.0",
+    nickname: "달빛",
+    birth_input: {},
+    place_snapshot: {},
+    chart: {},
+    preview: {},
+    persona_id: "mujin",
+    persona_version: "1.0.0",
+    ruleset_id: "mujin-overview",
+    ruleset_version: "1.0.0",
+    engine_meta: {},
+    situation_detail: { now: { work: ["student"], interests: [], relationship: null, family: [] } },
+  };
+  const [row] = await svc<{ id: string }>(`select create_reading($1, $2, $3, 1000) as id`, [
+    user,
+    JSON.stringify(reading),
+    JSON.stringify({ plan: {}, trace: [] }),
+  ]);
+  return row!.id;
+}
+
+const redeemProductSql = (user: string, readingId: string, productId: string, productVersion: string) => ({
+  sql: `select redeem_free_ticket($1, $2, $3, $4, $5, 3, '{}'::jsonb) as r`,
+  params: [user, readingId, randomUUID(), productId, productVersion],
+});
+const claimFreeSql = (user: string, readingId: string, dailyLimit = 100) => ({
+  sql: `select claim_free_run($1, $2, false, 'gpt-5.6-luna', 'mujin-pass1-1.0.0', 'mujin-draft-1.0.0', 'medium', 300, 3, $3) as r`,
+  params: [user, readingId, dailyLimit],
+});
+const saveDraftSql = (readingId: string, attempt: number, unitId: string) => ({
+  sql: `select save_unit_draft($1, 'free', $2, $3, '{"coreAnswer":"가상 초안"}'::jsonb, '{}'::jsonb) as r`,
+  params: [readingId, attempt, unitId],
+});
+
+async function mujinFreeRunning() {
+  const user = await member();
+  const readingId = await createMujinReading(user);
+  const [{ r }] = await svc<{ r: { run: { attempts: number } } }>(claimFreeSql(user, readingId).sql, claimFreeSql(user, readingId).params);
+  return { user, readingId, attempt: r.run.attempts };
+}
+
 describe.skipIf(!BASE_URL)("실제 Postgres 동시 요청", () => {
   beforeAll(async () => {
     const url = new URL(BASE_URL!);
@@ -356,5 +401,88 @@ describe.skipIf(!BASE_URL)("실제 Postgres 동시 요청", () => {
     const results = await race(Array.from({ length: 6 }, (_, index) => ({ sql: `select set_readings_open_to_all($1, $2) as r`, params: [boss, index % 2 === 0] })));
     expect(results.filter((result) => !result.ok)).toEqual([]);
     expect(await count(`select count(*)::int as n from public.app_settings where key = 'readings_open_to_all'`, [])).toBe(1);
+  });
+
+  // 무진의 종합 사주 (20261113120000 migration)
+
+  it("한 이용권으로 묘묘·무진 풀이에 동시에 10번 써도 한 건만 쓰인다", async () => {
+    for (let round = 0; round < 3; round += 1) {
+      const user = await member();
+      await svc(grantSql(user).sql, grantSql(user).params);
+      const myomyo = await createReading(user);
+      const mujin = await createMujinReading(user);
+      // 무진 풀이는 결제 전 무료 단계를 시작한 상태다. 이 점유 행은 이용권 사용을 막지 않는다.
+      await svc(claimFreeSql(user, mujin).sql, claimFreeSql(user, mujin).params);
+      const jobs = Array.from({ length: 10 }, (_, index) =>
+        index % 2 === 0 ? redeemProductSql(user, myomyo, "first-overview", "3.2.1") : redeemProductSql(user, mujin, "mujin-overview", "1.0.0"),
+      );
+      const results = await race<{ outcome: string; readingId: string }>(jobs);
+      expect(results.filter((result) => !result.ok)).toEqual([]);
+      const values = results.flatMap((result) => (result.ok ? [result.value] : []));
+      const winners = values.filter((value) => value.outcome === "redeemed");
+      expect(winners).toHaveLength(1);
+      const winner = winners[0]!.readingId;
+      // 이긴 풀이의 나머지 요청은 이미 받은 풀이로, 다른 상품 풀이의 요청은 이용권을 쓴 풀이로 안내받는다.
+      expect(values.filter((value) => value.outcome === "already_redeemed")).toHaveLength(4);
+      const used = values.filter((value) => value.outcome === "ticket_used");
+      expect(used).toHaveLength(5);
+      expect(used.every((value) => value.readingId === winner)).toBe(true);
+      expect(await count(`select count(*)::int as n from public.entitlements where user_id = $1`, [user])).toBe(1);
+      expect(await count(`select count(*)::int as n from public.generation_jobs where user_id = $1`, [user])).toBe(1);
+      expect(await count(`select count(*)::int as n from public.free_ticket_events where user_id = $1 and kind = 'redeemed'`, [user])).toBe(1);
+      const [ticket] = await svc<{ status: string; reading_id: string }>(`select status, reading_id from public.free_tickets where user_id = $1`, [user]);
+      expect(ticket).toEqual({ status: "redeemed", reading_id: winner });
+    }
+  });
+
+  it("같은 무진 풀이의 무료 단계 시작이 동시에 와도 한 요청만 시작한다", async () => {
+    const user = await member();
+    const readingId = await createMujinReading(user);
+    const results = await race<{ claimed: boolean; reason: string }>(Array.from({ length: 8 }, () => claimFreeSql(user, readingId)));
+    expect(results.filter((result) => !result.ok)).toEqual([]);
+    const values = results.flatMap((result) => (result.ok ? [result.value] : []));
+    expect(values.filter((value) => value.claimed)).toHaveLength(1);
+    expect(values.filter((value) => value.reason === "running")).toHaveLength(7);
+    const [run] = await svc<{ status: string; attempts: number }>(`select status, attempts from public.reading_free_runs where reading_id = $1`, [readingId]);
+    expect(run).toEqual({ status: "running", attempts: 1 });
+  });
+
+  it("같은 회원이 여러 무진 풀이의 무료 단계를 동시에 시작해도 하루 시작 수 제한을 넘지 않는다", async () => {
+    const user = await member();
+    const readings = await Promise.all(Array.from({ length: 6 }, () => createMujinReading(user)));
+    const results = await race<{ claimed: boolean; reason: string }>(readings.map((readingId) => claimFreeSql(user, readingId, 2)));
+    expect(results.filter((result) => !result.ok)).toEqual([]);
+    const reasons = results.map((result) => (result.ok ? result.value.reason : ""));
+    expect(reasons.filter((reason) => reason === "claimed")).toHaveLength(2);
+    expect(reasons.filter((reason) => reason === "daily_limited")).toHaveLength(4);
+    expect(await count(`select count(*)::int as n from public.reading_free_runs where user_id = $1`, [user])).toBe(2);
+  });
+
+  it("무료 단계 시작 재요청과 장 저장이 같은 풀이에 동시에 와도 교착 없이 처리된다", async () => {
+    // 시작 요청은 풀이 행을, 장 저장은 외래 키 확인으로 같은 풀이 행을 잠근다. 서로 기다리다 멈추지 않아야 한다.
+    for (let round = 0; round < 5; round += 1) {
+      const { user, readingId, attempt } = await mujinFreeRunning();
+      const jobs = Array.from({ length: 8 }, (_, index) => (index % 2 === 0 ? claimFreeSql(user, readingId) : saveDraftSql(readingId, attempt, `unit-${index}`)));
+      const results = await race<{ reason?: string } | boolean>(jobs);
+      expect(results.filter((result) => !result.ok)).toEqual([]);
+      const values = results.map((result) => (result.ok ? result.value : null));
+      expect(values.filter((_, index) => index % 2 === 0).map((value) => (value as { reason: string }).reason)).toEqual(Array(4).fill("running"));
+      expect(values.filter((_, index) => index % 2 === 1)).toEqual(Array(4).fill(true));
+      expect(await count(`select count(*)::int as n from public.reading_units where reading_id = $1 and status = 'drafted'`, [readingId])).toBe(4);
+    }
+  });
+
+  it("같은 장의 최종문 저장이 동시에 와도 한 문장만 남는다", async () => {
+    const { readingId, attempt } = await mujinFreeRunning();
+    const results = await race<boolean>(
+      Array.from({ length: 5 }, (_, index) => ({
+        sql: `select save_unit_final($1, 'free', $2, 'ch1', $3, '{}'::jsonb) as r`,
+        params: [readingId, attempt, JSON.stringify({ sectionId: "ch1", coreAnswer: `가상 완성문 ${index}`, blocks: [] })],
+      })),
+    );
+    expect(results.filter((result) => !result.ok)).toEqual([]);
+    expect(await count(`select count(*)::int as n from public.reading_sections where reading_id = $1`, [readingId])).toBe(1);
+    const [unit] = await svc<{ status: string }>(`select status from public.reading_units where reading_id = $1 and unit_id = 'ch1'`, [readingId]);
+    expect(unit!.status).toBe("done");
   });
 });
