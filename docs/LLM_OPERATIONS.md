@@ -40,6 +40,7 @@
 | `reading-2.0.0` / `narration-2.0.0` | 2.1.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만 |
 | `reading-1.0.0` / `narration-1.0.0` | 작성 재료 1.0.0으로 만든 이전 풀이를 이어서 생성할 때만 |
 | `followup-3.1.0` / `followup-output-2.2.0` | 현재 후속 질문 (캐릭터 묘묘 2.1.0, guide-1.0.0). reading-3.1.0과 같은 구성. 판단 규칙·입력·출력 형식은 2.9.0과 같다 |
+| `mujin-followup-1.0.0` / `followup-output-2.2.0` | 무진의 종합 사주 후속 질문 (캐릭터 무진 1.0.0, guide-1.0.0, 묶음 `mujin-1.0.0`의 `followupPrompt`). `[캐릭터: 무진 도사]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]` → 출력 조건. 묘묘 지시의 반말 전제 문구는 없다. 재료는 질문 분야와 이어지는 장(질문마다 한 장 이상, 모두 4개까지)의 작성 재료와 그 장 최종문 일부(장마다 1,200자까지), 기간 질문이면 첫 유료 생성 때 고정한 기준일의 기간 자료. 질문 정리는 묘묘와 같은 `question-1.3.0`. 횟수·범위·차감·무료 반응·되묻기 정책과 출력 형식은 묘묘와 같다 (`src/server/scroll/followup.ts`, `src/server/llm/mujin-followup-prompt.ts`) |
 | `followup-2.9.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.4.0). 2.8.0과 같고 예시·시범 대신 말투 견본 |
 | `followup-2.8.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 문단 3~5개(설명 문단은 두세 문장까지) |
 | `followup-2.7.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범, 중복을 덜어 낸 입력을 더했다. 출력 형식 2.2.0은 질문마다 refs 앞에 화면에 나가지 않는 메모 `angle`을 받는다 |
@@ -244,3 +245,57 @@ ChatGPT나 코딩 도구 구독은 API 사용 권한과 별개다.
 5. 문제가 생기면 `OPENAI_MODEL=gpt-5.6-luna`로 되돌리고 재배포한다.
 
 `NODE_ENV=production`이라는 이유로 모델이 바뀌지 않는다. 운영에서 `OPENAI_MODEL`이 비어 있으면 임의의 모델을 쓰지 않고 설정 오류로 처리한다.
+
+## 무진 호출 단위 사용량 (migration `20261113120000_mujin_scroll.sql`)
+
+무진의 종합 사주는 실제 LLM 호출(HTTP 요청) 하나마다 `llm_calls`에 한 줄을 남긴다. 전송 재시도, 검사 실패 뒤 재작성, 중간에 끊은 스트림도 각각 한 줄이다. 칸: 풀이(`reading_id`), 회원, 후속 질문(`followup_id`), 상품, 단계(`tier` free·paid, `step` classify·pass1·pass2·followup), 장·묶음(`unit_id`), 요청·실제 모델, 지시·출력 형식·캐릭터 버전, 추론 설정, 공급자 응답·요청 ID, 결과(`outcome`)와 오류 코드, 시작·끝 시각, 입력·캐시 입력·출력·추론 토큰, 사용량 수신 여부. 집계 뷰는 `llm_call_usage`, 관리자 조회 함수는 `admin_llm_usage(p_limit)`다. 묘묘 최초 풀이는 지금처럼 `generation_attempts`에만 남는다.
+
+- 집계 규칙은 위 "토큰 사용량 기록"과 같다. 캐시 입력은 입력에, 추론 토큰은 출력에 이미 들어 있어 다시 더하지 않는다 (합계 = 입력 + 출력). 받지 못한 값은 null이고 `usage_complete = false`로 표시한다.
+- 무진 후속 질문은 질문마다 `followups.usage`(합계)에 남기고, 호출마다 `llm_calls`(step classify·followup, tier paid, `unit_id` 없음, `followup_id`)에도 남긴다. 두 합계는 같아야 한다 (아래 SQL 3). 캐릭터 버전과 묶음, 기간 기준일은 `followups.analysis`의 `personaVersion`, `bundle`, `timingReferenceDate`에 있다.
+- 기록 저장은 기다리지 않고 시작하며, 저장에 실패해도 생성과 답변은 바뀌지 않는다 (서버 로그 `[llm-call] not recorded`에 오류 코드만 남는다).
+- 관리자 화면(`/admin`)의 "무진 생성 사용량"은 `admin_llm_usage(20)`을 서버 권한으로 불러 최근 호출 순 풀이 20개의 단계별 호출 수, 사용량 받은 호출 수, 입력·캐시 입력·출력 토큰, 합계, 완전 여부를 보여 준다. 관리자만 열리고(다른 사람에게는 404), 서버 함수도 관리자 역할을 DB에서 다시 확인한다. 별명·질문 원문·생성 문장은 담지 않는다.
+- 생성 시간은 DB에 저장된 시각으로 계산할 수 있는 것만 보여 준다: 무료 첫 칸 완성(무료 단계 시작 `reading_free_runs.started_at` → 첫 무료 최종문 `reading_sections.created_at`), 무료 단계 완료(→ `reading_free_runs.completed_at`), 유료 권한 뒤 첫 장 완성(구매 권한 `entitlements.created_at` → 첫 유료 최종문), 유료 권한 뒤 전체 완료(→ `generation_jobs.completed_at`). 유료 권한 뒤 시간에는 앞의 무료 단계가 끝나기를 기다린 시간도 들어 있다.
+- 실제 화면에 보이기까지의 시간은 서버가 알 수 없어 보여 주지 않는다. 화면은 2초마다 저장 상태를 받아 그리므로 최종문 저장 시각보다 그만큼 늦게 보일 수 있고, 브라우저가 그린 시각은 서버로 보내지 않는다. 측정하려면 브라우저 쪽 계측이 따로 필요하다.
+
+```sql
+-- 1) 풀이 하나의 단계별 합계 (무료/유료 × 질문 정리/Pass 1/Pass 2/후속 질문)
+select tier, step, calls, calls_with_usage, calls_without_usage, input_tokens, cached_input_tokens, uncached_input_tokens,
+       output_tokens, reasoning_tokens, total_tokens, usage_complete, started_at, ended_at, models, prompt_versions
+from public.llm_call_usage
+where reading_id = '<풀이 ID>'
+order by tier, step;
+
+-- 2) 호출별 내역 (재시도와 재작성도 각각 한 줄)
+select step, tier, unit_id, followup_id, model_requested, model_actual, prompt_version, schema_version, persona_version,
+       outcome, error_code, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, usage_received, started_at, ended_at
+from public.llm_calls
+where reading_id = '<풀이 ID>'
+order by started_at, id;
+
+-- 3) 후속 질문별 호출 합계 (followups.usage에 남긴 합계와 같아야 한다)
+select f.id, f.status, f.prompt_version, count(c.id) as calls, sum(c.input_tokens) as input_tokens,
+       sum(c.cached_input_tokens) as cached_input_tokens, sum(c.output_tokens) as output_tokens,
+       f.usage ->> 'inputTokens' as recorded_input_tokens, f.usage ->> 'outputTokens' as recorded_output_tokens, f.created_at
+from public.followups f
+left join public.llm_calls c on c.followup_id = f.id
+where f.reading_id = '<풀이 ID>'
+group by f.id, f.status, f.prompt_version, f.usage, f.created_at
+order by f.created_at;
+
+-- 4) 생성 시간 (DB에 저장된 시각으로 계산할 수 있는 것만. 실제 화면 표시 시각은 없다)
+select r.id as reading_id,
+       (select min(s.created_at) from public.reading_sections s where s.reading_id = r.id and s.tier = 'free') - fr.started_at as free_first_section,
+       fr.completed_at - fr.started_at as free_done,
+       (select min(s.created_at) from public.reading_sections s where s.reading_id = r.id and s.tier = 'paid') - e.created_at as paid_first_section,
+       case when j.status = 'completed' then j.completed_at - e.created_at end as paid_done
+from public.readings r
+left join public.reading_free_runs fr on fr.reading_id = r.id
+left join public.entitlements e on e.reading_id = r.id
+left join public.generation_jobs j on j.reading_id = r.id
+where r.id = '<풀이 ID>';
+
+-- 5) 관리자 화면과 같은 묶음 (최근 호출 순 풀이 20개의 단계별·풀이별·전체 합계)
+select public.admin_llm_usage(20);
+```
+
+적용: 이 migration을 앱 배포 전에 먼저 적용한다. 실제 운영 DB에 적용했는지는 이 문서의 작성 시점에 확인하지 않았다 (`NOT_RUN`). 위 SQL은 테스트용 Postgres(PGlite)에 실제 migration을 적용해 실행되는지 확인한다 (`tests/unit/mujin-admin-usage.test.ts`).
