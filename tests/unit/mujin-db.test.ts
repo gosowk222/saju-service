@@ -408,6 +408,28 @@ describe("무료 단계 점유 (reading_free_runs)", () => {
     expect((await claimFree(other, await createReading(other), { dailyLimit: 1 })).reason).toBe("claimed");
   });
 
+  it("구매 권한(entitlements)이 있는 풀이는 하루 무료 시작 수를 넘어도 시작하고, 권한이 없는 풀이는 daily_limited다 (20261113130000)", async () => {
+    const user = await member();
+    const [a, b, c, d] = [await createReading(user), await createReading(user), await createReading(user), await createReading(user)];
+    expect((await claimFree(user, a, { dailyLimit: 2 })).reason).toBe("claimed");
+    expect((await claimFree(user, b, { dailyLimit: 2 })).reason).toBe("claimed");
+    // 권한 없음 + 한도 초과: 행을 만들지 않는다.
+    expect(await claimFree(user, c, { dailyLimit: 2 })).toEqual({ claimed: false, reason: "daily_limited", run: null });
+    expect(await count(`select count(*)::int as n from public.reading_free_runs where reading_id = $1`, [c])).toBe(0);
+
+    // 이용권을 쓰면(권한과 유료 작업이 생김) 하루 한도를 세지 않고 무료 단계를 시작한다.
+    await grant(user);
+    expect(await redeem(user, c)).toMatchObject({ outcome: "redeemed" });
+    expect(await claimFree(user, c, { dailyLimit: 2 })).toMatchObject({ claimed: true, reason: "claimed", run: { status: "running", attempts: 1 } });
+    // 그 밖의 판정은 그대로다: 점유 중이면 running, 반납하면 이어받는다.
+    expect((await claimFree(user, c, { dailyLimit: 2 })).reason).toBe("running");
+    expect(await releaseFree(c, 1)).toBe(true);
+    expect(await claimFree(user, c, { dailyLimit: 2 })).toMatchObject({ claimed: true, run: { attempts: 2 } });
+
+    // 권한이 없는 다른 새 풀이는 여전히 한도에 걸린다 (권한 있는 풀이의 시작도 지금처럼 센다).
+    expect(await claimFree(user, d, { dailyLimit: 2 })).toEqual({ claimed: false, reason: "daily_limited", run: null });
+  });
+
   it("다른 회원의 풀이나 없는 풀이는 시작할 수 없다 (not_found)", async () => {
     const owner = await member();
     const other = await member();
