@@ -15,6 +15,7 @@
  * 캐릭터 이름 '무진 도사'는 간지 무진(戊辰)과 글자가 같다. 기둥 검사는 '무진 일주'처럼 기둥 이름이 바로 붙을 때만,
  * 글자 이름 검사는 '무토'·'진토'처럼 오행이 붙은 이름만 보므로 이름 자체는 걸리지 않는다.
  */
+import { claimedNumbers, numbersOf } from "@/domain/reading/numbers";
 import { checkExcluded, checkTextV2, percentsOf, SCENE_AS_FACT, type AllowedDates, type ExcludedQuestion } from "../reading/check";
 import { allowedChartTerms } from "../reading/lore";
 import type { ChartView } from "../reading/types";
@@ -191,38 +192,7 @@ function timingTexts(timing: MujinTiming | null): string[] {
   ].filter((text) => text.trim().length > 0);
 }
 
-/** 천 단위 쉼표(1,000)는 한 숫자로, 그 밖의 쉼표('1,2번')는 나눠 읽는다. */
-const NUMBER = /\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:\.\d+)?/g;
-
-const normalizeNumber = (raw: string) => {
-  const plain = raw.replace(/,/g, "");
-  const value = Number(plain);
-  return Number.isFinite(value) ? String(value) : plain;
-};
-
-/** 문장에 나온 모든 숫자 (허용 출처를 만들 때). */
-function numbersOf(texts: readonly string[]): Set<string> {
-  const values = new Set<string>();
-  for (const text of texts) for (const match of text.matchAll(NUMBER)) values.add(normalizeNumber(match[0]));
-  return values;
-}
-
-/**
- * 최종문에서 새로 나왔는지 볼 숫자. 날짜(4자리 연도+년, 1~2자리+월)와 비율(%)은 문장 검사가 허용 목록으로 따로 보므로 뺀다.
- * '3개월', '10분', '1년', '주 2회' 같은 기간·횟수는 여기서 본다.
- */
-function claimedNumbers(text: string): string[] {
-  const values: string[] = [];
-  for (const match of text.matchAll(NUMBER)) {
-    const raw = match[0];
-    const after = text.slice((match.index ?? 0) + raw.length);
-    if (/^\s*%/.test(after)) continue;
-    if (/^\d{4}$/.test(raw) && /^\s*년/.test(after)) continue;
-    if (/^\d{1,2}$/.test(raw) && /^\s*월/.test(after)) continue;
-    values.push(normalizeNumber(raw));
-  }
-  return values;
-}
+// 숫자 읽기(numbersOf, claimedNumbers)는 묘묘 2-pass와 함께 쓰려고 src/domain/reading/numbers.ts로 옮겼다 (동작은 같다).
 
 /** 원국 표의 가중 비율 (오행, 다섯 계열). 문장에는 정수로 반올림해 쓸 수 있다. */
 function tablePercents(plan: MujinPlan, chart: ChartView): string[] {
