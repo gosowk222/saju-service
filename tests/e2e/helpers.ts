@@ -7,6 +7,28 @@ export async function setControl(request: APIRequestContext, data: Record<string
   await request.post(`${GATEWAY}/__control`, { data });
 }
 
+/** 가짜 서버가 센 무진 호출 (tests/support/fake-gateway.ts의 stats.mujin). 누적값이라 이전 값과의 차이로 본다. */
+export interface MujinGatewayStats {
+  /** 스키마별 호출 수 (question = 질문 정리, pass1 = 평문 초안 묶음, pass2 = 무진 문장). */
+  calls: { question: number; pass1: number; pass2: number };
+  /** 장별 요청 수. Pass 1은 묶음 호출 안의 장을 하나씩 센다. */
+  sections: { pass1: Record<string, number>; pass2: Record<string, number> };
+  last: {
+    question: { items: number; facts: number; domains: string[] } | null;
+    pass1: {
+      sectionIds: string[];
+      tiers: string[];
+      questionRefs: string[];
+      hasTables: boolean;
+      timing: { luckStatus: string; luckReason: string | null; months: number } | null;
+      retryIssues: number;
+    } | null;
+    pass2: { sectionId: string; draftBlocks: number; userFacts: number; retryIssues: number } | null;
+    /** 기간 자료가 들어간 마지막 Pass 1 입력 (9·10장 묶음). */
+    timing: { luckStatus: string; luckReason: string | null; months: number } | null;
+  };
+}
+
 export async function gatewayStats(request: APIRequestContext) {
   const response = await request.get(`${GATEWAY}/__state`);
   return (await response.json()) as {
@@ -17,7 +39,13 @@ export async function gatewayStats(request: APIRequestContext) {
     tossConfirms: number;
     openaiModels: string[];
     lastOpenaiBody: Record<string, unknown>;
+    mujin: MujinGatewayStats;
   };
+}
+
+/** 장별 호출 수가 before 이후 얼마나 늘었는지. 늘어난 장만 남긴다. */
+export function callsSince(after: Record<string, number>, before: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(after).flatMap(([key, value]) => (value > (before[key] ?? 0) ? [[key, value - (before[key] ?? 0)]] : [])));
 }
 
 /** 토스 SDK 스크립트를 테스트용 대역으로 바꾼다. 실제 결제창이 아니다. */
@@ -175,4 +203,153 @@ export async function waitForCompletedReading(page: Page) {
   await skip.waitFor({ timeout: 40_000 }).catch(() => undefined);
   if (await skip.isVisible().catch(() => false)) await skip.click();
   await expect(page.getByText("풀이 완료")).toBeVisible({ timeout: 40_000 });
+}
+
+// ─── 무진의 종합 사주 (족자 상품) ─────────────────────────────
+
+export const MUJIN_PRODUCT = "mujin-overview";
+
+/** 원국표를 뺀 무료 칸 (기초 분석 4개와 1장). */
+export const MUJIN_FREE_SECTIONS = ["basics-structure", "basics-elements", "basics-stages", "basics-ten-gods", "ch1"] as const;
+/** 이용권·결제 뒤에 쓰는 칸 (2~10장과 마지막 정리). */
+export const MUJIN_PAID_SECTIONS = ["ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8", "ch9", "ch10", "closing"] as const;
+/** 화면 목차 순서 (상품 정의 src/domain/products/mujin-overview.ts의 순서). */
+export const MUJIN_TOC = ["chart", ...MUJIN_FREE_SECTIONS, ...MUJIN_PAID_SECTIONS];
+
+/** 가짜 서버의 무진 조절 값 기본값. 무진 테스트는 시작과 끝에 이 값으로 되돌린다 (다른 테스트 파일은 이 키를 모른다). */
+export const MUJIN_CONTROL_RESET = { mujinFail: null, mujinVoiceDelayMs: 0, mujinVoiceDelaySections: null };
+
+/** 족자의 칸 하나 (data-section-id). */
+export function mujinSection(page: Page, sectionId: string) {
+  return page.locator(`[data-section-id="${sectionId}"]`);
+}
+
+/** 화면에 그려진 칸의 순서. */
+export async function mujinSectionOrder(page: Page): Promise<string[]> {
+  return page.locator("[data-section-id]").evaluateAll((elements) => elements.map((element) => (element as HTMLElement).dataset.sectionId ?? ""));
+}
+
+export interface MujinInput {
+  nickname?: string;
+  gender?: "남성" | "여성";
+  yymmdd?: string;
+  place?: string;
+  placeResultName?: string;
+  /** 시진 이름(예: 신시). null이면 '시간을 몰라요'. */
+  time?: string | null;
+  /** 지금의 나: 일·학업 상태 선택지 이름 (최대 2개). */
+  work?: string[];
+  /** 지금의 나: 특히 궁금한 장 제목 (최대 2개). */
+  interests?: string[];
+  /** 지금의 나: 연애·결혼 상태 선택지 이름. */
+  relationship?: string;
+  /** 지금의 나: 가족 이야기 선택지 이름. */
+  family?: string[];
+  concern?: string;
+}
+
+const NEXT_OR_SKIP = /^(다음|건너뛰기)$/;
+
+/**
+ * 무진 대화형 입력을 확인 화면까지 채운다. 순서는 화면과 같다:
+ * 별명 → 성별 → 생년월일 → 출생지역 → 출생시각(지역의 시계 범위) → 지금의 나(선택) → 진짜 궁금한 점 → 확인.
+ */
+export async function fillMujinIntake(page: Page, input: MujinInput = {}) {
+  await page.getByLabel("별명").fill(input.nickname ?? "달빛");
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  await page.getByRole("button", { name: input.gender ?? "여성", exact: true }).click();
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  await page.getByLabel("생년월일 여섯 자리").fill(input.yymmdd ?? "980919");
+  await expect(page.locator("#date-result")).toContainText("년");
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  await page.getByLabel("출생지역 검색").fill(input.place ?? "서울");
+  await page.getByRole("button", { name: new RegExp(input.placeResultName ?? "서울특별시") }).first().click();
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  if (input.time === null) await page.getByRole("button", { name: /^시간을 몰라요/ }).click();
+  else await page.getByRole("button", { name: new RegExp(`^${input.time ?? "신시"}`) }).first().click();
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: "지금의 나" })).toBeVisible();
+  for (const label of input.work ?? []) await page.getByRole("button", { name: label, exact: true }).click();
+  for (const title of input.interests ?? []) await page.getByRole("button", { name: new RegExp(`^${title}`) }).click();
+  if (input.relationship) {
+    await page.locator("summary", { hasText: "지금의 연애·결혼 상태" }).click();
+    await page.getByRole("group", { name: "지금의 연애·결혼 상태" }).getByRole("button", { name: input.relationship, exact: true }).click();
+  }
+  if (input.family?.length) {
+    await page.locator("summary", { hasText: "가족 이야기에서 다루고 싶은 부분이 있나요?" }).click();
+    const group = page.getByRole("group", { name: "가족 이야기에서 다루고 싶은 부분" });
+    for (const label of input.family) await group.getByRole("button", { name: label, exact: true }).click();
+  }
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+
+  if (input.concern) await page.getByLabel("진짜 궁금한 점").fill(input.concern);
+  await page.getByRole("button", { name: NEXT_OR_SKIP }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "입력 확인" })).toBeVisible();
+}
+
+/** 대화형 입력으로 무진 풀이를 만들고 족자 화면(/readings/{id})으로 간다. 무료 부분 생성은 화면이 바로 시작한다. */
+export async function createMujinReading(page: Page, input: MujinInput = {}): Promise<string> {
+  await page.goto(`/readings/new?product=${MUJIN_PRODUCT}`);
+  await fillMujinIntake(page, input);
+  await page.getByRole("button", { name: "이 내용으로 풀이 받기" }).click();
+  await page.waitForURL(/\/readings\/[0-9a-f-]+$/);
+  return page.url().split("/readings/")[1]!;
+}
+
+/**
+ * 화면 입력을 거치지 않고 무진 풀이를 만든다 (입력 화면이 확인 대상이 아닌 테스트). 앱의 같은 API(POST /api/readings)를 쓴다.
+ * 족자 화면을 열기 전에는 생성이 시작되지 않는다.
+ */
+export async function createMujinReadingApi(
+  page: Page,
+  input: { nickname?: string; birthTime?: { status: "unknown" } | { status: "branch"; branch: string }; concern?: string; now?: Record<string, unknown> } = {},
+): Promise<string> {
+  const search = await page.request.get(`/api/places/search?q=${encodeURIComponent("서울")}`);
+  const { results } = (await search.json()) as { results: { geonameId: number; name: string }[] };
+  const place = results.find((item) => item.name === "서울특별시") ?? results[0]!;
+  const response = await page.request.post("/api/readings", {
+    data: {
+      productId: MUJIN_PRODUCT,
+      nickname: input.nickname ?? "달빛",
+      gender: "female",
+      yymmdd: "980919",
+      calendar: "solar",
+      isLeapMonth: false,
+      geonameId: place.geonameId,
+      birthTime: input.birthTime ?? { status: "branch", branch: "신" },
+      situationId: null,
+      concern: input.concern ?? "",
+      now: input.now ?? { work: [], interests: [], relationship: null, family: [] },
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  return ((await response.json()) as { readingId: string }).readingId;
+}
+
+/** 상담 장면 (족자 화면 맨 위). 실제 저장 상태로 정한 상태 표시(계산 중·작성 중·완료)가 있다. */
+export function mujinScene(page: Page) {
+  return page.getByRole("region", { name: "상담 장면" });
+}
+
+/**
+ * 구매 전 무료 부분(기초 분석 4개와 1장)이 모두 완성되고 무료 단계가 끝날 때까지 기다린다.
+ * 무료 단계가 끝나기 전에 이용권을 쓰면 유료 단계가 '아직 차례가 아님'으로 30초 쉬므로, 장면의 '무료 부분 완료'까지 본다.
+ */
+export async function waitForMujinFree(page: Page) {
+  await expect(mujinScene(page).getByText("무료 부분 완료", { exact: true })).toBeVisible({ timeout: 60_000 });
+  for (const sectionId of MUJIN_FREE_SECTIONS) await expect(mujinSection(page, sectionId).getByText("핵심 답", { exact: true })).toBeVisible();
+}
+
+/** 유료 장까지 모두 끝나 후속 질문 패널과 PDF 카드가 열릴 때까지 기다린다. */
+export async function waitForMujinComplete(page: Page) {
+  await expect(page.getByRole("heading", { name: "무진 도사에게 더 묻기" })).toBeVisible({ timeout: 90_000 });
+  await expect(mujinScene(page).getByText("완료", { exact: true })).toBeVisible();
+  for (const sectionId of [...MUJIN_FREE_SECTIONS, ...MUJIN_PAID_SECTIONS]) {
+    await expect(mujinSection(page, sectionId).getByText("핵심 답", { exact: true })).toBeVisible();
+  }
 }
