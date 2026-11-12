@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
-import { createPreview, freeTickets, gatewaySql, login, redeemFreeTicket, setControl } from "./helpers";
+import { createPreview, freeTickets, gatewaySql, login, redeemFreeTicket, setControl, waitForCompletedReading } from "./helpers";
 
 /**
  * 회원 역할(user/admin), 관리자 화면의 풀이 상품 이용 범위 설정, 관리자 무료 이용권 지급.
@@ -135,5 +135,28 @@ test("관리자가 고른 회원에게 무료 이용권을 한 장씩 주고, �
   await expect(page.getByText("무료 이용권은 다른 풀이에 이미 썼어요")).toBeVisible();
   const used = await gatewaySql<{ n: number }>(request, "select count(*)::int as n from public.free_tickets where user_id = $1 and status <> 'available'", [memberId]);
   expect(used[0]!.n).toBe(2);
+  await admin.close();
+});
+
+test("관리자 생성 사용량: 묘묘 2-pass 풀이가 단계별로 보이고, 상품 필터로 묘묘·무진을 나눠 본다", async ({ browser, request }) => {
+  const admin = await adminPage(browser, request);
+  await createPreview(admin.page);
+  await redeemFreeTicket(admin.page);
+  await waitForCompletedReading(admin.page);
+  const readingId = admin.page.url().split("/readings/")[1]!.split(/[?#]/)[0]!;
+
+  await admin.page.goto("/admin?usage=first-overview");
+  await expect(admin.page.getByRole("link", { name: "묘묘의 사주 참견" })).toHaveAttribute("aria-current", "page");
+  const card = admin.page.getByRole("listitem").filter({ hasText: readingId });
+  await expect(card.getByText("2-pass (myomyo-2pass-1.0.0)")).toBeVisible();
+  // 호출 단위 기록이 단계(초안, 캐릭터 문장)로 나뉘어 보인다. 원문은 없다.
+  await expect(card.getByRole("rowheader", { name: "최초 풀이 · 유료 · 초안 (Pass 1)" })).toBeVisible();
+  await expect(card.getByRole("rowheader", { name: "최초 풀이 · 유료 · 캐릭터 문장 (Pass 2)" })).toBeVisible();
+  await expect(card.getByText("사용량 완전")).toBeVisible();
+  await expect(admin.page.getByRole("region", { name: "상품별 합계" })).toContainText("묘묘의 사주 참견");
+
+  // 무진만 고르면 이 풀이는 보이지 않는다.
+  await admin.page.goto("/admin?usage=mujin-overview");
+  await expect(admin.page.getByRole("listitem").filter({ hasText: readingId })).toHaveCount(0);
   await admin.close();
 });
