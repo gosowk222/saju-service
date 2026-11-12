@@ -8,6 +8,9 @@
  * 결과 파일과 같은 이름의 .md를 만든다 (말풍선, 검사 문제, 말풍선 수와 길이). 검사를 통과했다고 문장 품질이 좋다는 뜻은 아니다.
  * 품질은 docs/personas/myomyo-evaluation.md의 기준으로 사람이 읽고 판단한다.
  *
+ * 묘묘 2-pass의 예시 사용·미사용 비교는 --task=two-pass를 준다 (scripts/myomyo-two-pass.ts, comparison.md를 쓴다).
+ *   npm run llm:render '--' --case=job-seeking --task=two-pass [--date=<기준일>]
+ *
  * 무진의 종합 사주는 --product=mujin-overview를 준다 (scripts/mujin-llm.ts, docs/personas/mujin-evaluation.md 3절).
  *   npm run llm:render '--' --product=mujin-overview --case=side-job-money [--reference=2026-11-12] [--dir=<사례 폴더>] [--draft=<경로>] [--voice=<경로>] [--out=<파일.md>]
  *   Pass 1·Pass 2 결과를 운영 검사(checkDraftSection, checkVoiceSection)로 읽고, 장마다 초안과 최종문을 나란히 놓은 comparison.md를 만든다.
@@ -35,6 +38,10 @@ function extractText(response: unknown): string | null {
 /** 묘묘의 사주 참견(first-overview) 결과 읽기. 무진을 더하기 전과 같다. */
 function renderMyomyo() {
   const entry = EVALUATION_CASES.find((item) => item.id === readArg("case"));
+  if (entry && readArg("task") === "two-pass") {
+    void import("./myomyo-two-pass").then((module) => module.renderMyomyoTwoPass(entry, readArg("date") ?? seoulDate()));
+    return;
+  }
   const file = readArg("file");
   if (!entry || !file) {
     console.log(`사용법: --case=${EVALUATION_CASES.map((item) => item.id).join("|")} --date=<기준일> --file=<결과 JSON> [--prompt=<버전>]`);
