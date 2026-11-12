@@ -1,5 +1,34 @@
 # 진행 상황
 
+## 무진 도사와 '무진의 종합 사주' (feat/mujin-scroll-reading, 2026-11-12)
+
+develop `4e52ead`에서 분기했다. 시작 문서와 결정·미확정 사항은 `docs/implementation/mujin/00_START_HERE.md`, 명세는 같은 폴더 01~07, 규칙은 `docs/rules/mujin-overview.md`, 캐릭터는 `docs/personas/mujin.md`, 평가와 실제 모델 확인 순서는 `docs/personas/mujin-evaluation.md`.
+
+| 항목 | 결정 |
+| --- | --- |
+| 상품 | `mujin-overview` 1.0.0, 족자(`format: "scroll"`). 무료: 원국표·기초 분석 4개·1장. 유료: 2~10장·마지막 정리. 가격 990원은 임시값(`priceStatus: provisional`) |
+| 캐릭터 | 무진 도사 1.0.0(존댓말). 생성 지시에는 `characterBlock`으로 한 번만, 대화형 입력 안내는 `lines.intake` |
+| 판단 | 기존 `first-overview.*` 3.1.0 결론 재사용 + 명세가 뺀 연결 제외 + 의미 태그(mujin-tags-1.0.0)로 신규 연결. 9장 대운 직전·현재·다음, 10장 절기 기준 12개월 4분야. 모두 unreviewed |
+| 생성 | 무료는 결제 전, 유료는 권한 뒤. Pass 1(캐릭터 없는 평문 초안, 장 묶음 스트림) → Pass 2(무진 문장, 장마다, 동시 2개). 묶음 `mujin-1.0.0`으로 버전 고정 |
+| 저장 | `reading_units`(초안, 서버 전용), `reading_sections`(최종문, 무료는 소유자·유료는 권한 있을 때만), `reading_free_runs`(무료 점유), 유료는 기존 `generation_jobs`. 기준일은 첫 유료 시작 때 고정 |
+| 토큰 | 호출 단위 `llm_calls`, 관리자 화면 '무진 생성 사용량'. 묘묘 `generation_attempts`는 그대로 |
+| 이용권 | 대상에 무진 추가(캠페인 그대로, 재지급 없음, 한 장은 한 풀이에만) |
+| 그대로 둔 것 | 묘묘 상품·캐릭터·프롬프트·스키마·생성·후속 질문·PDF, 모델과 추론 설정, 카카오 로그인, 관리자 공개 설정, `CHECKOUT_MODE` |
+| migration | `20261113120000_mujin_scroll.sql`, `20261113130000_mujin_free_run_entitled.sql` (운영 DB 미적용) |
+
+| 검사 | 결과 |
+| --- | --- |
+| typecheck, lint | 통과 (오류 0) |
+| 단위 테스트 (`npm test`) | 42개 파일 876개 통과 (규칙·계획·개인화·엔진·DB(PGlite, 실제 migration과 RLS)·실행기·상태·검사·프롬프트·후속 질문·PDF·사용량·스크립트) |
+| 브라우저 테스트 (`test:e2e:clean`, 빌드 포함, 가짜 서버) | 77개 통과 (묘묘 64개 그대로 + 무진 13개) |
+| 독립 리뷰 (유출·권한 / 생성 안정성 / 명세·회귀) | 결함 19건 중 고칠 것 모두 수정·재검증 (단계 단위 실패의 다시 시도, 구매한 풀이의 하루 한도 제외, 동시 호출 대기 뒤 시간 확인, 묘묘 생성 API의 무진 풀이 거부, 후속 질문의 12개월 밖 기간 계산 등) |
+| 실제 Postgres 동시성 (`test:db-concurrency`) | NOT_RUN (로컬 Postgres 없음, 17개 건너뜀) |
+| 실제 카카오 로그인·실제 결제 | NOT_RUN (가짜 서버 통과만) |
+| 실제 모델 | LIVE_NOT_RUN (문체 품질, 질문 정리 정확도, 실제 시간·토큰 미측정) |
+| 운영 DB migration 적용 | NOT_RUN (에이전트는 운영 DB에 접근하지 않음) |
+
+남은 일: 사용자의 실제 모델 평가(`npm run llm:export -- --product=mujin-overview`), 출시 가격, 상담 장면 아트(B01~B05), 비용 상한 값 확정, 판단 연결의 명리 감수, 운영 DB migration 적용, 실제 로그인·결제·동시성 확인.
+
 ## 명리 해석 지침, 묘묘 2.1.0, 최초 풀이 토큰 기록 (feat/myomyo-guide-token-usage, 2026-11-12)
 
 페르소나를 처음부터 다시 만든 작업(`refactor/myomyo-persona-rebuild`, reading-3.0.0)이 실제 생성에서 재시도까지 모두 실패해 되돌리고, 그 앞 상태(reading-2.9.0)에서 다시 시작했다. 진단과 변경은 `docs/READING_QUALITY.md` 23절, 지침과 원문 대응표는 `docs/READING_GUIDE.md`, 캐릭터는 `docs/personas/myomyo.md`, 평가는 `docs/personas/myomyo-evaluation.md`, 토큰은 `docs/LLM_OPERATIONS.md` "토큰 사용량 기록".
