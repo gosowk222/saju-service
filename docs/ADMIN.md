@@ -35,6 +35,7 @@ select user_id, role, note, updated_at from public.user_roles where role = 'admi
 | 이용 방식 | 현재 `CHECKOUT_MODE` (읽기 전용, 배포 환경 변수로 바꾼다) |
 | 회원과 무료 이용권 | 이름·이메일·회원 ID 앞자리로 찾고, 회원마다 "무료 이용권 1장 주기" |
 | 역할 바꾸기 | 위 SQL 안내 |
+| 무진 생성 사용량 | 최근 무진 풀이별로 단계(무료·유료 × 질문 분류·Pass 1·Pass 2·후속 질문)마다 호출 수, 사용량을 받은 호출 수, 입력·캐시 입력·출력 토큰과 합계, 사용량 완전 여부. 캐시 입력은 입력에 포함된 값이라 따로 더하지 않는다. DB 시각으로 계산한 생성 시간(무료 첫 칸·무료 완료·권한 뒤 첫 유료 칸·권한 뒤 전체 완료까지)도 함께 보인다. '화면에 실제로 보인 시각'은 서버가 알 수 없어 없다. 별명·질문·생성 문장은 보이지 않는다. 자료: `admin_llm_usage`(migration 20261113120000), 조회 SQL은 `docs/LLM_OPERATIONS.md` |
 
 ### 풀이 상품 이용 범위 (`app_settings.readings_open_to_all`)
 
