@@ -200,7 +200,7 @@ where reading_id = '<풀이 ID>';
 이 migration 전에 끝난 풀이는 시도 기록이 없어 `recorded_attempts = 0`, `usage_complete = false`로 보인다. 그 풀이는 `generation_jobs.usage`(완료한 시도 하나의 값. 예전 규칙이라 받지 못한 호출이 0으로 더해졌을 수 있다)만 있다. 없는 값을 0으로 채우거나 다시 생성하지 않는다.
 
 ```sql
--- 5) 이전 풀이: 완료한 시도의 사용량만
+-- 7) 이전 풀이: 완료한 시도의 사용량만
 select reading_id, status, attempts, llm_calls, usage ->> 'inputTokens' as input_tokens, usage ->> 'cachedInputTokens' as cached_input_tokens,
        usage ->> 'outputTokens' as output_tokens, usage ->> 'totalTokens' as total_tokens
 from public.generation_jobs

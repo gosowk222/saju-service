@@ -334,7 +334,7 @@ describe("사용량 화면 값 (순수 함수)", () => {
 });
 
 describe("운영 문서의 무진 사용량 SQL", () => {
-  it("docs/LLM_OPERATIONS.md '무진 호출 단위 사용량' 절의 SQL 5개가 실제 스키마에서 실행된다", async () => {
+  it("docs/LLM_OPERATIONS.md '무진 호출 단위 사용량' 절의 SQL 7개가 실제 스키마에서 실행된다", async () => {
     const doc = readFileSync(path.resolve(process.cwd(), "docs/LLM_OPERATIONS.md"), "utf8");
     const start = doc.indexOf("## 무진 호출 단위 사용량");
     expect(start).toBeGreaterThan(doc.indexOf("## 공식 문서 확인 결과"));
@@ -345,9 +345,12 @@ describe("운영 문서의 무진 사용량 SQL", () => {
       .flatMap((block) => block[1]!.split(/;\s*(?:\r?\n|$)/))
       .map((sql) => sql.replace(/^\s*--.*$/gm, "").trim())
       .filter(Boolean);
-    expect(statements).toHaveLength(5);
+    expect(statements).toHaveLength(7);
     const results: Record<string, unknown>[][] = [];
     for (const sql of statements) results.push(await svc(sql.replaceAll("'<풀이 ID>'", `'${readingId}'`)));
+    // 6) Pass 2 호출의 프롬프트 버전별 평균 토큰, 7) 장마다 넣은 문답 예시. 실행되고 칸 이름이 문서와 같은지만 본다.
+    expect(results[5]!.every((row) => "prompt_version" in row && "avg_input" in row && "avg_cached" in row)).toBe(true);
+    expect(results[6]!.every((row) => "section_id" in row && "examples" in row)).toBe(true);
 
     const pass1 = results[0]!.find((row) => row.tier === "free" && row.step === "pass1")!;
     expect(Number(pass1.total_tokens)).toBe(1200);

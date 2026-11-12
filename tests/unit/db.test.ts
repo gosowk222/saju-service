@@ -549,11 +549,15 @@ describe("최초 풀이 토큰 사용량 (20261112 migration)", () => {
       .flatMap((block) => block[1]!.split(/;\s*(?:\r?\n|$)/))
       .map((sql) => sql.replace(/^\s*--.*$/gm, "").trim())
       .filter(Boolean);
-    expect(statements.length).toBe(5);
+    // 1)~4) 풀이·시도·최근·후속 질문, 5) 문답 예시 전후 프롬프트 버전별 비교, 6) 풀이에 넣은 문답 예시, 그리고 이전 풀이 SQL.
+    expect(statements.length).toBe(7);
     const results = [];
     for (const sql of statements) results.push(await svc(sql.replaceAll("'<풀이 ID>'", `'${readingId}'`)));
     expect(Number((results[0]![0] as { total_tokens: string }).total_tokens)).toBe(1200);
     expect(Number((results[0]![0] as { uncached_input_tokens: string }).uncached_input_tokens)).toBe(400);
+    expect(Array.isArray(results[4])).toBe(true);
+    expect(results[5]).toHaveLength(1);
+    expect(Object.keys(results[5]![0] as object)).toEqual(["prompt", "catalog", "policy", "example_ids"]);
   });
 
   it("사용량 기록은 서버 전용이다: 본인도 브라우저 권한으로 읽거나 쓸 수 없다", async () => {
