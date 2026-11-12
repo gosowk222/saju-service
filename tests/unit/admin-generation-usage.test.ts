@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { generationPolicyLabel, loadGenerationUsage, partLabel, usageCells, type GenerationUsageReport } from "@/server/admin";
@@ -301,5 +303,24 @@ describe("관리자 생성 사용량 (묘묘·무진 함께)", () => {
   it("관리자가 아니면 읽지 못한다 (DB에서 역할을 다시 확인한다)", async () => {
     const user = await member();
     await expect(loadGenerationUsage(user, { limit: 20, product: null }, serviceClient())).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("docs/LLM_OPERATIONS.md 묘묘 2-pass·상품 통합 사용량 절의 SQL 5개가 실제 스키마에서 실행된다", async () => {
+    const doc = readFileSync(path.resolve(process.cwd(), "docs/LLM_OPERATIONS.md"), "utf8").replace(/\r\n/g, "\n");
+    const start = doc.indexOf("## 묘묘 2-pass와 상품 통합 생성 사용량");
+    expect(start).toBeGreaterThan(0);
+    const rest = doc.slice(start + 3);
+    const next = rest.indexOf("\n## ");
+    const section = next >= 0 ? rest.slice(0, next) : rest;
+    const statements = [...section.matchAll(/```sql\n([\s\S]*?)```/g)]
+      .flatMap((block) => block[1]!.split(/;\s*(?:\n|$)/))
+      .map((sql) => sql.replace(/^\s*--.*$/gm, "").trim())
+      .filter(Boolean);
+    expect(statements).toHaveLength(5);
+    const results: Record<string, unknown>[][] = [];
+    for (const sql of statements) results.push(await svc(sql.replaceAll("'<풀이 ID>'", `'${ids.B}'`)));
+    expect(results[1]).toHaveLength(4);
+    expect(results[2]).toEqual([{ attempt: 1, outcome: "completed", attempt_calls: 4, logged_calls: 4 }]);
+    expect(results[3]!.some((row) => row.prompt_version === "가상")).toBe(true);
   });
 });

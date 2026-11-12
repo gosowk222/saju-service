@@ -1,5 +1,20 @@
 # 진행 상황
 
+## 묘묘 2-pass, 기준 문답 12개, 묘묘·무진 사용량, 캐릭터 레지스트리 (feat/persona-registry-myomyo-2pass, 2026-11-13)
+
+`feat/persona-qa-examples`(`b0aa2fc`) 위에서 분기했다. 경위는 `docs/READING_QUALITY.md` 25절, 운영·SQL은 `docs/LLM_OPERATIONS.md`, 관리자는 `docs/ADMIN.md`, 캐릭터 추가 절차는 `docs/personas/adding-a-character.md`.
+
+| 항목 | 결정 |
+| --- | --- |
+| 예시 | 사용자가 준 12개 문답을 `myomyo-examples-2.0.0`으로 받은 그대로 담고, 04·05·08은 재작성 예시(중립 초안 → 묘묘 답변)로도 연결. 이전 묘묘 묶음과 섞지 않는다. 안내 문구 `example-guide-1.1.0` (사용자의 예시 사용 원칙) |
+| 2-pass | 새 묘묘 최초 풀이는 묶음 `myomyo-2pass-1.0.0`: Pass 1 `messenger-draft-1.0.0`(예시·캐릭터 없음) → Pass 2 `messenger-voice-1.0.0`(무진과 같은 의미 보존 계약, 예시 2개). 무진 실행기의 공통 부분을 `TwoPassRun`으로 분리해 두 상품이 같이 쓴다 |
+| 저장·재개 | 초안 `reading_units`(서버 전용), 검사를 통과한 단위 `reading_sections`, 화면 순서가 된 단위부터 `reading_messages`. Pass 2만 실패하면 저장된 초안으로 그 단위만, 시간 예산이 끝나면 반납하고 화면이 바로 이어 요청 |
+| 호환 | 실행 방식은 작업에 고정된 버전으로만: 묶음 ID면 2-pass, `reading-x.y.z`면 이전 1-pass로 끝까지, 모르는 버전은 재시도 불가 실패. 무진은 동작·지시 글자 그대로(해시 확인) |
+| 캐릭터 | `findPersona`가 모르는 캐릭터·버전을 현재 설정으로 바꾸지 않는다. 레지스트리(`createPersonaRegistry`), 상품의 `generation.bundle`, 후속 답변의 캐릭터·예시도 묶음에서. 테스트용 세 번째 캐릭터로 확인 |
+| 사용량 | 원인: 관리자 조회가 `llm_calls`만 읽었다 (묘묘 기록은 `generation_attempts`·`followups.usage`에 있었다). migration `20261114120000`: `llm_calls`에 시도 번호·캐릭터·묶음 칸, 시도 결과 `released`, `admin_generation_usage` (같은 사용량은 한 번만). 관리자 화면에 상품 필터·상품별 합계·단계·시도 |
+| 비교 자료 | `llm:export --task=two-pass` / `llm:render --task=two-pass` (같은 초안의 예시 사용·미사용 Pass 2, 모델 호출 없음) |
+| 바꾸지 않음 | 상품 주제·판단·분량·가격·질문 수·차감·권한, 엔진, 모델·추론 설정(이름만 `mujinDraft`→`draft`, `mujinVoice`→`voice`), 저장된 결과, 환경 변수 |
+
 ## 캐릭터 질문–답변 예시를 실제 생성에 연결 (feat/persona-qa-examples, 2026-11-13)
 
 `feat/mujin-scroll-reading`(`af2f702`) 위에서 분기했다. 설명은 `docs/personas/examples.md`, 경위는 `docs/READING_QUALITY.md` 24절, 운영·토큰은 `docs/LLM_OPERATIONS.md`.
