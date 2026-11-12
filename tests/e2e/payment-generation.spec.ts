@@ -155,7 +155,8 @@ test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", as
   expect(attempts.map((row) => row.outcome)).toEqual(["failed", "completed"]);
   expect(attempts[0]!.error_code).toBeTruthy();
   const done = attempts[1]!;
-  expect(done).toMatchObject({ prompt_version: "reading-3.1.0", persona_version: "2.1.0", usage_complete: true });
+  // 현재 최초 풀이 버전(reading-3.2.0, 묘묘 문답 예시 포함). 캐릭터 설정은 2.1.0 그대로다.
+  expect(done).toMatchObject({ prompt_version: "reading-3.2.0", persona_version: "2.1.0", usage_complete: true });
   expect(Number(done.total_tokens)).toBe(Number(done.input_tokens) + Number(done.output_tokens));
   expect(Number(done.input_tokens)).toBeGreaterThan(0);
   const [sum] = await gatewaySql<{ recorded_attempts: number; attempts: number; total_tokens: string; usage_complete: boolean }>(

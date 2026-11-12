@@ -670,7 +670,8 @@ test("묘묘 생성 API로 무진 풀이를 부르면 409로 거부하고 무진
   // 무진 화면에서는 무료 부분부터 유료 장까지 그대로 쓴다 (거부된 호출이 작업을 망가뜨리지 않았다).
   await page.goto(`/readings/${readingId}`);
   await waitForMujinComplete(page);
-  expect(await jobOf()).toMatchObject({ status: "completed", prompt_version: "mujin-1.0.0" });
+  // 현재 묶음(mujin-1.1.0, Pass 2·후속 답변에 무진 문답 예시)으로 고정된다.
+  expect(await jobOf()).toMatchObject({ status: "completed", prompt_version: "mujin-1.1.0" });
   expect(await freeTickets(request, userId)).toMatchObject([{ status: "completed", reading_id: readingId }]);
 });
 
