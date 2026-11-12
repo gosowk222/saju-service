@@ -102,7 +102,7 @@
 
 그래서 `npm run llm:check`, `npm run llm:compare`는 실제 키가 있어도 `LIVE_NOT_RUN`을 출력하고 끝난다. 실제 모델 확인은 개발 서버를 직접 열어 화면에서 풀이와 후속 질문을 만들어 보고, 아래 "토큰 사용량 기록"의 SQL(또는 서버 로그 `[generation] done`·`[followup] done`)로 호출 수와 토큰을 확인한다. 에이전트는 실제 호출을 하지 않는다 (AGENTS.md, CLAUDE.md).
 
-같은 입력으로 프롬프트 버전만 바꿔 비교하려면 모델을 부르지 않는 `npm run llm:export`로 지시·입력·출력 형식 파일을 만들어 플레이그라운드에서 실행하고, 결과를 `npm run llm:render`로 말풍선과 검사 결과로 읽는다 (`docs/personas/myomyo-evaluation.md` 0-2절).
+같은 입력으로 프롬프트 버전만 바꿔 비교하려면 모델을 부르지 않는 `npm run llm:export`로 지시·입력·출력 형식 파일을 만들어 플레이그라운드에서 실행하고, 결과를 `npm run llm:render`로 말풍선과 검사 결과로 읽는다 (`docs/personas/myomyo-evaluation.md` 0-2절). 무진의 종합 사주는 `--product=mujin-overview`로 장 묶음별 Pass 1·장별 Pass 2 요청을 만들고 초안·최종문 비교 문서를 읽는다 (아래 "무진 모델 비교").
 
 ## 호출 구조와 비용
 
@@ -299,3 +299,29 @@ select public.admin_llm_usage(20);
 ```
 
 적용: 이 migration을 앱 배포 전에 먼저 적용한다. 실제 운영 DB에 적용했는지는 이 문서의 작성 시점에 확인하지 않았다 (`NOT_RUN`). 위 SQL은 테스트용 Postgres(PGlite)에 실제 migration을 적용해 실행되는지 확인한다 (`tests/unit/mujin-admin-usage.test.ts`).
+
+## 무진 모델 비교 (`llm:export`·`llm:render`, 모델 호출 없음)
+
+무진의 종합 사주를 실제 모델로 평가할 때 쓴다. 실제 모델 실행은 사용자가 플레이그라운드에서 직접 한다 (비용은 사용자가 낸다). 에이전트는 실행 결과를 확인하지 못했다 (`LIVE_NOT_RUN`). 가짜 결과 파일로 파일 형식과 검사·비교 문서만 확인했다.
+
+- 두 명령은 모델을 부르지 않고 API 키와 OPENAI 환경 변수를 읽지 않는다 (요청 본문의 model 칸은 자리 표시다). `--product`를 주지 않으면(또는 `first-overview`) 묘묘 내보내기·읽기가 예전 그대로 돈다.
+- 운영 실행기(`src/server/scroll/runner.ts`)와 같은 함수와 순서로 계획과 요청을 만든다 (`scripts/mujin-llm.ts`): `analyzeMujinBirth` → 질문 정리(사례의 고정 가상 값을 `prepareScrollQuestionsWith`로 판정) → `computeMujinTiming`(기준일 고정) → `buildTimingSections` → `personalizeSections` → `buildDraftRequest`·`buildVoiceRequest`, 마지막 정리는 `buildClosingSection`. 같은 사례·같은 초안이면 운영 실행기가 보내는 지시·입력과 글자까지 같다 (`tests/unit/mujin-llm-scripts.test.ts`가 실행기를 가짜 LLM으로 돌려 비교한다).
+- 사례: `scripts/llm-cases.ts`의 `MUJIN_EVALUATION_CASES` (명세 07 4절 대표 평가 입력 8개를 사례 9개로, `docs/personas/mujin-evaluation.md` 2절). 질문 정리는 모델이 필요하므로 사례마다 정리 결과를 가상 값으로 고정해 쓰고, 그 사실을 사례 폴더의 `00-guide.md`와 `comparison.md` 머리말에 적는다.
+- 기준일: `--reference=YYYY-MM-DD`(기본 2026-11-12)가 9·10장 기간 재료와 질문 정리의 기준이다. 실행하는 날과 관계없이 같은 계획이 나온다.
+
+```powershell
+npm run llm:export '--' --product=mujin-overview --case=heavy-loss    # 요청 파일 (결과를 저장할 때마다 다시 실행)
+npm run llm:render '--' --product=mujin-overview --case=heavy-loss    # 저장한 결과로 비교 문서
+```
+
+| 순서 | 할 일 | 파일 (`docs/model-comparison/prompts/mujin/<기준일>_<사례>/`, git에 올리지 않음) |
+| --- | --- | --- |
+| 1 | `llm:export` 실행 | Pass 1 묶음 요청 `p1-<묶음>.instructions.txt`·`.input.json`·`.schema.json`·`.request.json`, 안내 `00-guide.md`(지금 실행할 요청), 궁금한 점이 있으면 참고용 `p0-question.*` |
+| 2 | 플레이그라운드에서 Pass 1 묶음 실행: 운영과 같은 모델, 추론 medium, 출력 한도 16,000. 지시에 `*.instructions.txt`, 입력에 `*.input.json`, 출력 형식(JSON schema)에 `*.schema.json` | 결과를 `p1-<묶음>.output.json`으로 저장. 묶음 하나를 저장할 때마다 1을 다시 실행하면 다음 묶음 입력에 앞 묶음의 장면 요약이 운영처럼 들어간다 |
+| 3 | `llm:export` 다시 실행 | 장별 Pass 2 요청 `p2-<장>.*`, 2~10장 초안이 모두 있으면 마지막 정리 Pass 1 요청 `p1-paid-closing.*` |
+| 4 | Pass 2 실행: 추론 medium, 출력 한도 8,000 | 결과를 `p2-<장>.output.json`으로 저장 |
+| 5 | `llm:render` 실행 | `comparison.md`: 장마다 초안과 최종문을 나란히 놓은 표, 운영 검사(`checkDraftSection`, `checkVoiceSection`) 문제 목록, 장별 글자 수와 편집 목표(실패 기준 아님), 평가 기록 표 |
+
+확인할 항목은 명세 07 4절의 무진 품질 평가 항목 9개다 (`docs/personas/mujin-evaluation.md` 1절, 초안과 최종문의 보존 항목은 3절). 검사 통과는 형식·근거·숫자 확인일 뿐 문체 품질 판정이 아니다.
+
+운영과 다른 점: 질문 정리는 고정 가상 값, 기준일은 하나로 고정, Pass 1은 스트림 대신 한 번에 받음, 앞 묶음 결과를 저장하지 않고 실행하면 장면 요약(usedScenes)이 비어 있음, 검사에 걸린 장의 다시 쓰기 요청은 만들지 않음 (비교를 위해 그 초안의 Pass 2 요청은 만든다). 자세한 순서는 `docs/personas/mujin-evaluation.md` 3절 '모델 없이 파일 만들기'.

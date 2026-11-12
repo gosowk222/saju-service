@@ -7,17 +7,23 @@
  *
  * 결과 파일과 같은 이름의 .md를 만든다 (말풍선, 검사 문제, 말풍선 수와 길이). 검사를 통과했다고 문장 품질이 좋다는 뜻은 아니다.
  * 품질은 docs/personas/myomyo-evaluation.md의 기준으로 사람이 읽고 판단한다.
+ *
+ * 무진의 종합 사주는 --product=mujin-overview를 준다 (scripts/mujin-llm.ts, docs/personas/mujin-evaluation.md 3절).
+ *   npm run llm:render '--' --product=mujin-overview --case=side-job-money [--reference=2026-11-12] [--dir=<사례 폴더>] [--draft=<경로>] [--voice=<경로>] [--out=<파일.md>]
+ *   Pass 1·Pass 2 결과를 운영 검사(checkDraftSection, checkVoiceSection)로 읽고, 장마다 초안과 최종문을 나란히 놓은 comparison.md를 만든다.
+ * --product를 주지 않으면(또는 first-overview) 아래 묘묘 읽기를 그대로 한다.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { findPersona } from "@/domain/personas";
 import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
+import { MUJIN_OVERVIEW } from "@/domain/products/mujin-overview";
 import { checkNarrationV2 } from "@/domain/reading/check";
 import { seoulDate } from "@/domain/reading/question";
 import type { NarrationOutputV2 } from "@/domain/reading/types";
 import { toStoredMessages } from "@/server/llm/narrate";
 import { CURRENT_READING_PROMPT, getNarrationSchema, NARRATION_SCHEMA_VERSION, personaVersionFor } from "@/server/llm/prompts";
-import { casePlan, EVALUATION_CASES, readArg } from "./llm-cases";
+import { casePlan, EVALUATION_CASES, readArg, readOption } from "./llm-cases";
 
 function extractText(response: unknown): string | null {
   const output = (response as { output?: { content?: { type?: string; text?: string }[] }[] }).output ?? [];
@@ -25,7 +31,8 @@ function extractText(response: unknown): string | null {
   return null;
 }
 
-function main() {
+/** 묘묘의 사주 참견(first-overview) 결과 읽기. 무진을 더하기 전과 같다. */
+function renderMyomyo() {
   const entry = EVALUATION_CASES.find((item) => item.id === readArg("case"));
   const file = readArg("file");
   if (!entry || !file) {
@@ -71,6 +78,25 @@ function main() {
   writeFileSync(target, report);
   console.log(report);
   console.log(`저장: ${target}`);
+}
+
+function main() {
+  const product = readOption("product");
+  if (product === MUJIN_OVERVIEW.id) {
+    // 무진 작성 계획·검사 모듈(scripts/mujin-llm.ts)은 무진을 고를 때만 불러온다.
+    import("./mujin-llm")
+      .then((mujin) => mujin.renderMujinCli())
+      .catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : error);
+        process.exitCode = 1;
+      });
+    return;
+  }
+  if (product !== undefined && product !== FIRST_OVERVIEW.id) {
+    console.log(`알 수 없는 상품: ${product} (--product=${FIRST_OVERVIEW.id}|${MUJIN_OVERVIEW.id})`);
+    return;
+  }
+  renderMyomyo();
 }
 
 main();
