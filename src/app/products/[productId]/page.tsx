@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense, type ReactNode } from "react";
+import { fillName } from "@/components/mujin/intake-model";
+import { ConsultScene } from "@/components/mujin/scene";
 import { sectionEyebrow } from "@/components/mujin/scroll-model";
 import { ProductHero } from "@/components/product-card";
 import { RichText } from "@/components/rich-text";
 import { LinkButton } from "@/components/ui/button";
 import { Badge, Card, Notice, PageHeader, PersonaAvatar } from "@/components/ui/layout";
 import { SkeletonBlock, SkeletonScreen } from "@/components/ui/skeleton";
-import { findPersona } from "@/domain/personas";
+import { faceOf, findPersona } from "@/domain/personas";
 import { findProduct, formatPrice, isMessengerProduct, isScrollProduct, type ScrollProductDefinition, type ScrollSectionSpec } from "@/domain/products";
 import { checkoutMode, FREE_TRIAL, grantsOpen, paymentsOpen } from "@/server/checkout/mode";
 
@@ -73,6 +75,10 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
   const provisional = product.priceStatus === "provisional";
   // 메신저 상품은 주제 목록을 보여 준다. 족자 상품은 ScrollContents가 무료·유료 칸을 나눠 보여 준다.
   const contents = (messenger?.topics ?? []).map((topic) => ({ id: topic.id, title: topic.title, summary: topic.summary }));
+  // 족자 상품(무진)은 상품 상세 첫 화면부터 상담 장면이 나오고(명세 03 1절), 하단 버튼으로 무진과의 대화형 입력을 시작한다.
+  // 첫 인사는 캐릭터 설정의 입력 첫 말(lines.intake.greet)이다. 아직 별명을 모르므로 이름 자리가 있으면 '손님'으로 부른다.
+  const intake = scroll ? persona?.lines.intake : undefined;
+  const startLabel = scroll ? "무진과 상담 시작하기" : "내 사주 입력하기";
 
   const facts = [
     scroll ? ["구성", scroll.contentsLabel] : ["분량", messenger?.expectedBubbles ?? ""],
@@ -89,6 +95,7 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
         {/* 배너는 화면 폭을 꽉 채우고, 나머지 내용만 좌우 여백을 둔다. */}
         <ProductHero product={product} />
         <div className="flex flex-col gap-7 px-5 py-6">
+          {persona && intake ? <ConsultScene face={faceOf(persona)} name={persona.name} mode="idle" line={fillName(intake.greet, "")} /> : null}
           <section className="flex flex-col gap-2">
             <h2 className="type-title">어떤 풀이인가요?</h2>
             <p className="type-body text-gray-700">{product.description}</p>
@@ -173,8 +180,9 @@ async function ProductDetail({ params }: { params: Promise<{ productId: string }
         <Suspense fallback={<span className="type-title type-price">{formatPrice(product.priceKrw)}</span>}>
           <PriceLabel productId={product.id} priceKrw={product.priceKrw} provisional={provisional} />
         </Suspense>
+        {/* 로그인하지 않았으면 입력 화면이 로그인을 거쳐 돌아온다 (기존 흐름 그대로). */}
         <LinkButton href={`/readings/new?product=${product.id}`} size="lg" className="flex-1">
-          내 사주 입력하기
+          {startLabel}
         </LinkButton>
       </div>
     </>

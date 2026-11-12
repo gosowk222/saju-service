@@ -72,10 +72,12 @@ function SceneMedia({ face, mode }: { face: PersonaFace; mode: SceneMode }) {
   const motionAllowed = useMotionAllowed();
   const [failed, setFailed] = useState<string | null>(null);
   if (!video || !motionAllowed || failed === video.src) return <SceneStill face={face} />;
+  // 비율은 분수 값(aspect-16/9)으로 쓴다. aspect-video는 테마 변수(--aspect-video)로 만들어지는데 globals.css가 테마 값을 모두 지워
+  // CSS가 생성되지 않는다 (docs/DESIGN_NOTES.md '토큰 밖의 값').
   return (
     <video
       key={video.src}
-      className="aspect-video w-full rounded-lg bg-primary-900 object-cover"
+      className="aspect-16/9 w-full rounded-lg bg-primary-900 object-cover"
       muted
       playsInline
       autoPlay

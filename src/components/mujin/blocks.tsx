@@ -101,8 +101,9 @@ function BlockView({ block }: { block: ScrollBlock }) {
     case "scene":
       // 가정해 보는 생활 장면. 메신저 장면 말풍선처럼 제목 없이 옅은 보라 면과 왼쪽 선으로만 구분하고,
       // 장면이라는 점은 가정하는 말투가 드러낸다. 색을 볼 수 없는 사용자에게만 화면 밖 글자로 알린다.
+      // 왼쪽 선은 1px이다. 디자인 시스템은 면을 1px 테두리로 나누고 2px는 포커스·일간 강조·선택에만 쓴다 (docs/DESIGN_NOTES.md).
       return (
-        <div className="rounded-r-md border-l-2 border-primary-300 bg-primary-50 px-4 py-4">
+        <div className="rounded-r-md border-l border-primary-300 bg-primary-50 px-4 py-4">
           <span className="sr-only">가정해 보는 장면: </span>
           <Paragraph text={block.text} className="type-body text-gray-900" />
         </div>
