@@ -16,7 +16,7 @@ import {
   type UserFactKind,
 } from "@/domain/mujin/types";
 import { addressFor, type Persona } from "@/domain/personas";
-import { seriousSignal, topicsOfSection, type ExampleRequest } from "@/domain/personas/examples";
+import { sectionOrdinal, seriousSignal, stableHash, topicsOfSection, type ExampleRequest } from "@/domain/personas/examples";
 import type { ProductDefinition, ScrollProductDefinition } from "@/domain/products/types";
 import { READING_GUIDE, READING_GUIDE_VERSION } from "@/domain/reading/guide";
 import { ClassifierOutputSchema, seoulDate, type ClassifierOutput, type Reaction } from "@/domain/reading/question";
@@ -646,9 +646,11 @@ const DRAFT_SCHEMAS: Readonly<Record<string, Schema<MujinDraftOutput>>> = {
 
 /**
  * Pass 2(mujin-voice-1.1.0)의 예시 선택 조건. 장의 주제와, 사용자가 처음 궁금한 점에 직접 쓴 사실만 본다 ('지금의 나' 선택지는 넣지 않는다).
- * seed는 풀이 ID와 장 ID라 장마다 다른 예시가 고르게 나오고, 같은 장의 재시도는 같은 예시를 받는다.
+ * 같은 풀이의 장들은 풀이 ID로 같은 후보 순서를 보고 장 순번만큼 돌려 고른다. 그래서 장마다 예시가 고르게 다르고,
+ * 같은 장의 재시도는 같은 예시를 받는다.
  */
 export function voiceExampleRequest(input: VoicePromptInput): Omit<ExampleRequest, "route"> {
+  const readingSeed = input.exampleSeed ?? "voice";
   return {
     topics: topicsOfSection(input.section.sectionId),
     long: true,
@@ -658,7 +660,9 @@ export function voiceExampleRequest(input: VoicePromptInput): Omit<ExampleReques
     limited: false,
     hourUnknown: input.hourKnown === false,
     hasLastTurn: false,
-    seed: `${input.exampleSeed ?? "voice"}:${input.section.sectionId}`,
+    seed: `${readingSeed}:${input.section.sectionId}`,
+    orderSeed: readingSeed,
+    rotation: stableHash(`rotation:${readingSeed}`) + sectionOrdinal(input.section.sectionId),
   };
 }
 

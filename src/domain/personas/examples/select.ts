@@ -12,9 +12,12 @@
  * 2. 무진 Pass 2는 재작성 예시 하나를 장의 주제로 먼저 고르고, 그 원문은 문답 후보에서 뺀다 (같은 글이 두 번 들어가지 않게).
  * 3. 반드시 채울 자리: 반응이 있으면 그 반응 예시 하나, 진지한 상황이면 진지한 예시 하나,
  *    긴 설명이 필요하면 긴 예시 하나 (Pass 2는 재작성 예시가 긴 설명 자리를 채운다).
- * 4. 남은 자리는 점수 순서로 채운다: 주제 일치, 질문 의도(비교·기간·확정 불가)와 표현 목적의 일치, 길이.
+ * 4. 남은 자리는 점수 순서로 채운다: 중심 주제 일치, 관련 주제(함께 다루는 주제) 일치, 질문 의도(비교·기간·확정 불가)와 표현 목적의 일치.
  *    이미 고른 예시와 주제가 같으면 점수를 깎는다. 긴 설명이 필요한 작성에는 짧은 반응 예시를 넣지 않는다.
- * 5. 점수가 비슷한 후보(최고 점수와 2점 안)끼리는 seed에서 나온 회전 값으로 하나를 고른다. 장마다·풀이마다 같은 문답만 붙지 않게 한다.
+ *    길이는 '긴 예시 한 자리'로만 챙기고 남은 자리의 점수에는 크게 넣지 않는다 (긴 예시 하나가 모든 풀이의 남은 자리를 차지하지 않게).
+ * 5. 점수가 비슷한 후보(최고 점수와 2점 안)끼리는 회전 값으로 하나를 고른다. 풀이마다 다르고 재시도에서는 같다.
+ *    무진 Pass 2는 같은 풀이의 장들이 같은 후보 순서를 보고 장 순번만큼 돌려 고른다 (같은 문답·재작성 예시가 여러 장에 몰리지 않게).
+ *    재작성 예시는 장의 첫 주제가 맞을 때만 그 예시를 고르고, 맞는 것이 없으면 차례대로 돌린다.
  * 주제가 맞는 예시가 없으면 공통(general) 예시와 점수가 남은 예시로 채운다. 후보가 아예 없으면 빈 결과를 돌려주고,
  * 호출한 쪽(example-block.ts)이 예시가 필요한 버전이면 오류로 처리한다 (조용히 0개로 보내지 않는다).
  */
@@ -24,8 +27,10 @@ export const EXAMPLE_POLICY_VERSION = "example-select-1.0.0";
 
 export interface ExampleRequest {
   readonly route: ExampleRoute;
-  /** 이번 작성의 주제. 앞일수록 중요하다. */
+  /** 이번 작성의 중심 주제. 앞일수록 중요하다 (질문 분야, 비중이 큰 주제, 장의 주제). */
   readonly topics: readonly ExampleTopic[];
+  /** 함께 다루지만 중심은 아닌 주제 (최초 풀이의 보통 비중 주제). 남은 자리를 이 주제의 예시로 고르게 채운다. */
+  readonly related?: readonly ExampleTopic[];
   /** 결론·이유·조건을 여러 문단으로 푸는 작성인가 (최초 풀이, Pass 2의 장). */
   readonly long: boolean;
   /** 사용자가 지금 힘들다고 직접 말했는가 (seriousSignal). 고른 상황의 일반적인 걱정은 넣지 않는다. */
@@ -39,6 +44,13 @@ export interface ExampleRequest {
   readonly hasLastTurn: boolean;
   /** 같은 작업 안에서 늘 같은 값 (예: 풀이 ID, 풀이 ID:장 ID, 후속 질문 ID). 비슷한 후보 사이의 순서만 정한다. */
   readonly seed: string;
+  /**
+   * 후보를 늘어놓는 순서의 값. 없으면 seed. 무진 Pass 2는 풀이 ID를 넣어 같은 풀이의 장들이 같은 순서를 보게 하고,
+   * rotation(장 순번)으로 차례대로 다른 후보를 고르게 한다 (같은 문답이 여러 장에 몰리지 않게).
+   */
+  readonly orderSeed?: string;
+  /** 비슷한 후보 가운데 몇 번째를 고를지. 없으면 seed에서 만든다. */
+  readonly rotation?: number;
 }
 
 export interface ExampleSelection {
@@ -63,23 +75,28 @@ export function stableHash(text: string): number {
   return hash >>> 0;
 }
 
-function topicScore(topics: readonly ExampleTopic[], wanted: readonly ExampleTopic[]): number {
+/** 중심 주제 일치: 첫 주제 6, 둘째 4, 그다음 2. 관련 주제만 맞으면 2, 공통(general) 예시는 1. */
+function topicScore(topics: readonly ExampleTopic[], wanted: readonly ExampleTopic[], related: readonly ExampleTopic[] = []): number {
   let best = 0;
   wanted.forEach((topic, index) => {
     if (topics.includes(topic)) best = Math.max(best, index === 0 ? 6 : index === 1 ? 4 : 2);
   });
+  if (!best && related.some((topic) => topics.includes(topic))) best = 2;
   if (!best && topics.includes("general")) best = 1;
   return best;
 }
 
-/** 후보가 될 수 없으면 null. */
-function exampleScore(example: CharacterExample, request: ExampleRequest, longQa: boolean): number | null {
+/**
+ * 후보가 될 수 없으면 null. 길이는 점수에 크게 넣지 않는다: 긴 설명이 필요하면 '긴 예시 한 자리'를 따로 채우고,
+ * 남은 자리는 주제와 목적으로 고른다 (긴 예시 하나가 모든 풀이의 남은 자리를 차지하지 않게).
+ */
+function exampleScore(example: CharacterExample, request: ExampleRequest): number | null {
   if (!example.routes.includes(request.route)) return null;
   if (example.reaction && example.reaction !== request.reaction) return null;
   if (example.serious && !request.serious) return null;
   if (example.needs?.hourUnknown && !request.hourUnknown) return null;
   if (example.needs?.lastTurn && !request.hasLastTurn) return null;
-  let score = topicScore(example.topics, request.topics);
+  let score = topicScore(example.topics, request.topics, request.related);
   if (request.reaction !== "none" && example.reaction === request.reaction) score += 8;
   if (request.serious && example.serious) score += 8;
   if (request.intents.includes("compare") && example.purposes.includes("compare")) score += 5;
@@ -87,8 +104,7 @@ function exampleScore(example: CharacterExample, request: ExampleRequest, longQa
   if ((request.limited || request.intents.includes("outcome")) && example.purposes.includes("uncertain")) score += 4;
   if (request.intents.includes("apply") && example.purposes.includes("apply")) score += 2;
   if (request.hourUnknown && example.needs?.hourUnknown) score += 4;
-  if (longQa) score += example.length === "long" ? 3 : example.length === "medium" ? 1 : -2;
-  else if (example.length !== "short") score += 1;
+  if (example.length !== "short") score += 1;
   return score;
 }
 
@@ -109,16 +125,17 @@ function pickNear<T>(candidates: readonly Candidate<T>[], rotation: number): T |
 
 export function selectExamples(catalog: ExampleCatalog, request: ExampleRequest): ExampleSelection {
   const limit = EXAMPLE_LIMITS[request.route];
-  const rotation = stableHash(`rotation:${request.seed}`);
-  const orderOf = (id: string) => stableHash(`${request.seed}:${id}`);
+  const rotation = request.rotation ?? stableHash(`rotation:${request.seed}`);
+  const orderOf = (id: string) => stableHash(`${request.orderSeed ?? request.seed}:${id}`);
 
   const rewrites: RewriteExample[] = [];
   const rewritePool = catalog.rewrites.filter((rewrite) => rewrite.routes.includes(request.route));
   for (let slot = 0; slot < limit.rewrites; slot += 1) {
+    // 재작성 예시는 장의 첫 주제가 맞을 때만 그 예시를 고르고, 맞는 것이 없으면 차례대로 돌린다 (한 예시가 여러 장에 몰리지 않게).
     const pick = pickNear(
       rewritePool
         .filter((rewrite) => !rewrites.includes(rewrite))
-        .map((rewrite) => ({ item: rewrite, score: topicScore(rewrite.topics, request.topics), order: orderOf(rewrite.id) })),
+        .map((rewrite) => ({ item: rewrite, score: topicScore(rewrite.topics, request.topics.slice(0, 1)), order: orderOf(rewrite.id) })),
       rotation + slot,
     );
     if (pick) rewrites.push(pick);
@@ -130,7 +147,7 @@ export function selectExamples(catalog: ExampleCatalog, request: ExampleRequest)
   const pool: Candidate<CharacterExample>[] = [];
   for (const example of catalog.examples) {
     if (usedSources.has(example.id)) continue;
-    const score = exampleScore(example, request, longQa);
+    const score = exampleScore(example, request);
     if (score !== null) pool.push({ item: example, score, order: orderOf(example.id) });
   }
 
@@ -217,7 +234,8 @@ export function topicOfDomain(domain: string): ExampleTopic | null {
 
 /** 무진 족자 장 ID → 예시 주제 (앞일수록 중요). */
 const MUJIN_SECTION_TOPICS: Readonly<Record<string, readonly ExampleTopic[]>> = {
-  chart: ["chart", "temperament"],
+  // 원국표·기초 분석 4개 장은 원국 설명이라 성향 예시를 몰아 붙이지 않고 차례대로 돌린다 (시각 미상이면 16번이 맞는다).
+  chart: ["chart"],
   ch1: ["temperament", "strengths"],
   ch2: ["strengths", "career"],
   ch3: ["career"],
@@ -234,6 +252,30 @@ const MUJIN_SECTION_TOPICS: Readonly<Record<string, readonly ExampleTopic[]>> = 
 export function topicsOfSection(sectionId: string): readonly ExampleTopic[] {
   if (sectionId.startsWith("basics-")) return MUJIN_SECTION_TOPICS.chart!;
   return MUJIN_SECTION_TOPICS[sectionId] ?? ["general"];
+}
+
+/** 무진 족자 장의 목차 순번 (예시를 장 순서대로 돌려 고를 때 쓴다). 모르는 장은 0. */
+const MUJIN_SECTION_ORDER = [
+  "chart",
+  "basics-structure",
+  "basics-elements",
+  "basics-stages",
+  "basics-ten-gods",
+  "ch1",
+  "ch2",
+  "ch3",
+  "ch4",
+  "ch5",
+  "ch6",
+  "ch7",
+  "ch8",
+  "ch9",
+  "ch10",
+  "closing",
+];
+
+export function sectionOrdinal(sectionId: string): number {
+  return Math.max(0, MUJIN_SECTION_ORDER.indexOf(sectionId));
 }
 
 /** 겹치는 주제를 빼고 순서를 지킨다. */

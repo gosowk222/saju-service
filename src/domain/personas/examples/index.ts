@@ -12,6 +12,7 @@ export * from "./types";
 export {
   EXAMPLE_LIMITS,
   EXAMPLE_POLICY_VERSION,
+  sectionOrdinal,
   seriousSignal,
   stableHash,
   topicOfDomain,

@@ -297,6 +297,38 @@ describe("2) 선택", () => {
     expect(rewrites.size).toBe(MUJIN_CATALOG.rewrites.length);
   });
 
+  it("쏠림: 서로 다른 평가 사례의 최초 풀이에 같은 예시가 몰리지 않고, 무진 한 풀이의 장들에 같은 문답·재작성 예시가 몰리지 않는다", () => {
+    const used = new Map<string, number>();
+    for (const entry of EVALUATION_CASES) {
+      const { examples } = getReadingPrompt("reading-3.2.0")(readingArgs(entry.id, `llm-export:${entry.id}`));
+      for (const id of examples!.ids) used.set(id, (used.get(id) ?? 0) + 1);
+    }
+    expect(Math.max(...used.values())).toBeLessThanOrEqual(4);
+    expect(used.size).toBeGreaterThanOrEqual(12);
+
+    const sections = MUJIN_OVERVIEW.scroll.sections.filter((section) => section.kind !== "chart").map((section) => section.id);
+    for (const readingSeed of ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "llm-export:side-job-money"]) {
+      const counts = new Map<string, number>();
+      for (const sectionId of sections) {
+        const built = buildVoiceRequest({
+          bundle: MUJIN_BUNDLES[MUJIN_BUNDLE_VERSION]!,
+          persona: MUJIN,
+          nickname: "가람",
+          section: { sectionId, title: sectionId, questions: [], targetChars: { min: 600, max: 1200 } },
+          draft: { sectionId, coreAnswer: "핵심", blocks: [{ type: "paragraph", questionIds: [], refs: [], text: "초안", items: [] }], scenes: [] },
+          userFacts: [],
+          hourKnown: true,
+          exampleSeed: readingSeed,
+        });
+        for (const id of built.examples!.ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      const rewrites = [...counts].filter(([id]) => id.startsWith("mujin-rw-"));
+      expect(rewrites, readingSeed).toHaveLength(4);
+      expect(Math.max(...rewrites.map(([, n]) => n)), readingSeed).toBeLessThanOrEqual(6);
+      expect(Math.max(...[...counts].filter(([id]) => !id.startsWith("mujin-rw-")).map(([, n]) => n)), readingSeed).toBeLessThanOrEqual(5);
+    }
+  });
+
   it("재현성: 같은 조건과 순서 값이면 늘 같은 예시다 (재시도·서버 재시작). 무작위를 쓰지 않는다", () => {
     for (const catalog of [MYOMYO_CATALOG, MUJIN_CATALOG]) {
       const first = [...sweep(catalog)].map(({ selection }) => [...selection.rewrites, ...selection.examples].map((item) => item.id).join(","));

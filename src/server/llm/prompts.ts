@@ -1529,9 +1529,11 @@ const questionTopic = (question: Pick<FocusQuestion, "domain" | "topicId">): Exa
 export function readingExampleRequest(args: ReadingPromptV2Args): Omit<ExampleRequest, "route"> {
   const { plan } = args;
   const lead = plan.topics.filter((topic) => topic.weight === "focus" || topic.weight === "lead").map((topic) => topicOfProductTopic(topic.topicId));
+  const standard = plan.topics.filter((topic) => topic.weight === "standard").map((topic) => topicOfProductTopic(topic.topicId));
   const userTexts = [...plan.questions.map((question) => question.summary), ...plan.userContext.filter((item) => item.source !== "situation").map((item) => item.text)];
   return {
     topics: uniqueTopics([...plan.questions.map(questionTopic), ...lead, ...(plan.timing.length ? (["timing"] as const) : [])]),
+    related: uniqueTopics(standard),
     long: true,
     serious: seriousSignal(userTexts),
     reaction: "none",
