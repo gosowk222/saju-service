@@ -50,7 +50,7 @@ const PROBABILITY_CLAIM = /확률|적중률/;
  */
 const FORBIDDEN_TOPIC =
   /진단명|처방(?:해|을|받)|(?:합격|재회|결혼|취업|당첨)(?:합니다|할 거예요|하게 됩니다|하게 될 거예요|할 겁니다)|(?:매수|매도)하세요|수익(?:이|을)\s*보장/;
-const SCENE_AS_FACT = /사주(?:에|로|가)\s*(?:나와|나옵|보면|확정|정해)|계산(?:상|결과|된)|반드시|확실(?:히|합니다|해요)|틀림없/;
+export const SCENE_AS_FACT = /사주(?:에|로|가)\s*(?:나와|나옵|보면|확정|정해)|계산(?:상|결과|된)|반드시|확실(?:히|합니다|해요)|틀림없/;
 
 function collectRefs(plan: ReadingPlan): Map<string, Set<string>> {
   const shared = [...plan.facts.map((fact) => fact.ref), ...plan.userContext.map((item) => item.ref)];
@@ -182,7 +182,7 @@ export function checkFollowup(output: FollowupOutput, plan: ReadingPlan, chart: 
 // ─── 2.0.0 검사 ──────────────────────────────────────────────
 
 /** 기간 분석에 있는 달·해만 날짜로 허용한다. 일(日) 단위 날짜는 기간 경계와 같을 때만 허용한다. */
-interface AllowedDates {
+export interface AllowedDates {
   readonly months: ReadonlySet<string>;
   readonly years: ReadonlySet<string>;
   readonly days: ReadonlySet<string>;
@@ -234,7 +234,7 @@ function checkDates(text: string, allowed: AllowedDates): string[] {
   return issues;
 }
 
-function percentsOf(texts: readonly string[]): Set<string> {
+export function percentsOf(texts: readonly string[]): Set<string> {
   const values = new Set<string>();
   for (const text of texts) for (const match of text.matchAll(PERCENT_VALUE)) values.add(match[1]!);
   return values;
@@ -290,7 +290,7 @@ export function catchphraseCounter(persona: Persona | undefined, scope: "reading
   return { count };
 }
 
-function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<string>, dates: AllowedDates, terms: ReadonlySet<string>): string[] {
+export function checkTextV2(text: string, chart: ChartView, percents: ReadonlySet<string>, dates: AllowedDates, terms: ReadonlySet<string>): string[] {
   const issues: string[] = [...checkAgainstChart(text, chart), ...checkDates(text, dates), ...chartTermIssues(text, terms)];
   if (STRONG_PROFANITY.test(text)) issues.push(`강한 욕설이나 비속어가 있습니다: ${text.slice(0, 40)}`);
   if (MONEY_CLAIM.test(text)) issues.push(`근거 없는 금액이 있습니다: ${text.slice(0, 40)}`);
@@ -317,7 +317,7 @@ const OUTSIDE_WORDS: Partial<Readonly<Record<QuestionDomain, RegExp>>> = {
 
 const squash = (text: string) => text.replace(/[\s.,!?~'"“”‘’()*]/g, "");
 
-function checkExcluded(texts: readonly string[], excluded: readonly ExcludedQuestion[]): string[] {
+export function checkExcluded(texts: readonly string[], excluded: readonly ExcludedQuestion[]): string[] {
   const issues: string[] = [];
   const joined = texts.join("\n");
   const squashed = squash(joined);

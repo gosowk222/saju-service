@@ -1779,7 +1779,7 @@ const QUESTION_RULES: Readonly<Record<string, string>> = {
   "question-1.3.0": QUESTION_RULES_1_3_0,
 };
 
-const QUESTION_JSON_SCHEMA = {
+export const QUESTION_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["items", "userFacts", "needsClarification", "reaction"],
