@@ -53,6 +53,10 @@ import { prepareScrollTimingWith } from "./timing";
  * - 저장 함수가 false를 돌려주면 다른 요청이 이어받은 것이다. 이 요청은 더 저장하지 않는다 (늦은 응답이 새 상태를 덮지 않음).
  * - 장의 tier는 상품 정의(ScrollSectionSpec.tier)에서 정한다. DB는 서버가 보낸 tier를 믿는다.
  * - 모든 LLM 호출은 llm_calls에 태그(단계, 무료·유료, 장·묶음 ID, 버전)와 함께 남는다. 로그에는 코드와 ID만 남긴다.
+ * - 모든 LLM 호출은 guardStart를 켠다: 프로세스 전역 동시 호출 자리를 기다린 뒤 남은 시간이 그 호출의 제한 시간보다 짧으면
+ *   보내지 않고 deadline_reached로 끝난다 (호출 기록 없음). 이때는 장 실패로 세지 않고 새 호출을 멈춘 뒤 반납(partial)한다.
+ * - 새 호출을 시작하기 전에는 멈춤(점유 잃음·다른 작업 오류)을 보고, 응답을 받은 뒤에는 점유를 잃었을 때만 버린다.
+ *   다른 작업 오류로 멈춘 실행도 이미 받은 결과는 검사해 저장한다 (저장 함수가 점유를 다시 확인한다).
  */
 
 export type ScrollRunResult = "completed" | "running" | "partial" | "failed" | "exhausted" | "locked" | "daily_limited" | "not_ready";
@@ -68,6 +72,11 @@ export interface RunnerDeps {
   readonly classify: ScrollClassifier;
 }
 
+/** 요청에 guardStart를 켜서 보낸다. 질문 정리처럼 요청을 다른 모듈이 만드는 호출에 쓴다. */
+function guarded(call: typeof callStructured): typeof callStructured {
+  return (request) => call({ ...request, guardStart: true });
+}
+
 function resolveDeps(partial: Partial<RunnerDeps> = {}): RunnerDeps {
   const call = partial.callStructured ?? callStructured;
   return {
@@ -76,9 +85,12 @@ function resolveDeps(partial: Partial<RunnerDeps> = {}): RunnerDeps {
     now: partial.now ?? Date.now,
     store: partial.store ?? createScrollStore(createSupabaseAdminClient()),
     computeTiming: partial.computeTiming ?? computeMujinTiming,
-    classify: partial.classify ?? scrollClassifier(call),
+    classify: partial.classify ?? scrollClassifier(guarded(call)),
   };
 }
+
+/** 동시 호출 자리를 기다린 뒤 남은 시간이 모자라 보내지 않은 호출 (callStructured의 guardStart). */
+const isNotSent = (error: unknown): boolean => error instanceof LlmError && error.code === "deadline_reached";
 
 const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
 
@@ -230,6 +242,8 @@ class TierRun {
   private halted = false;
   /** 시간 예산이 모자라 시작하지 않은 일이 있다. */
   private outOfTime = false;
+  /** 동시 호출 자리를 기다리다 남은 시간이 모자라 보내지 못한 호출이 있다 (deadline_reached). 새 호출을 시작하지 않는다. */
+  private notSent = false;
   /** Pass 2 작업이 던진 오류 (처음 것만). */
   private failure: unknown = null;
   private issueCount = 0;
@@ -289,6 +303,12 @@ class TierRun {
     return this.deps.now() + ms <= this.deadlineAt;
   }
 
+  /** 보내지 못한 호출(deadline_reached)이 있었다. 장 실패로 세지 않고 새 호출을 멈추며, 끝에서 반납(partial)한다. */
+  private markNotSent(): void {
+    this.notSent = true;
+    this.outOfTime = true;
+  }
+
   private noteModel(model: string | null): void {
     if (model) this.actualModel = model;
   }
@@ -337,6 +357,13 @@ class TierRun {
       });
       return result;
     } catch (error) {
+      if (isNotSent(error)) {
+        // 질문 정리를 보내지 못했다 (남은 시간 부족). 단계를 실패로 두지 않고 반납해 다음 요청이 이어 쓰게 한다.
+        this.markNotSent();
+        await this.queue.drain();
+        await this.recorder.flush();
+        return this.failure ? await this.failFrom(this.failure) : await this.finish();
+      }
       this.halted = true;
       await this.queue.drain();
       await this.recorder.flush();
@@ -479,7 +506,8 @@ class TierRun {
   private async draftChapters(): Promise<void> {
     for (const batch of this.product.scroll.draftBatches) {
       if (batch.tier !== this.tier || this.isClosingBatch(batch)) continue;
-      if (this.stopped) return;
+      // 멈췄거나 보내지 못한 호출이 있었으면 새 묶음을 시작하지 않는다.
+      if (this.stopped || this.notSent) return;
       const ids = batch.sectionIds.filter((id) => this.specs.get(id)?.tier === this.tier && this.sections.has(id) && needsDraft(this.units.get(id)));
       if (!ids.length) continue;
       if (!this.hasTime(LLM_SETTINGS.tasks.mujinDraft.timeoutMs)) {
@@ -519,12 +547,15 @@ class TierRun {
 
     for (let round = 0; round <= SCROLL_SETTINGS.retriesPerRun && pending.size > 0; round += 1) {
       if (this.stopped) return;
-      if (round > 0 && !this.hasTime(task.timeoutMs)) {
+      if (round > 0 && (this.notSent || !this.hasTime(task.timeoutMs))) {
         this.outOfTime = true;
         break;
       }
       const requested = ids.filter((id) => pending.has(id));
       const previousIssues = round > 0 ? unique(requested.flatMap((id) => (problems.get(id)?.issues ?? []).map(issueSummary))).slice(0, 15) : undefined;
+      // 다시 요청을 보내지 못하면 앞 시도의 문제를 그대로 기록한다.
+      const previousProblems = new Map(problems);
+      const previousError = lastError;
       problems.clear();
       lastError = null;
       const state: DraftRound = { batchId: batch.id, round, pending, handled: new Set(), problems, previousIssues };
@@ -542,7 +573,9 @@ class TierRun {
       let consumed = 0;
       const consume = async (text: string) => {
         const items = completedArrayItems(text, "sections");
-        while (consumed < items.length && !this.stopped) {
+        // 이미 받은 장 원소는 점유를 잃지 않았으면 검사해 저장한다. 다른 작업 오류로 멈춘 실행도 저장한다 (저장 함수가 점유를 다시 확인한다).
+        // 더 받지는 않는다 (onDelta가 stop을 돌려준다).
+        while (consumed < items.length && !this.lost) {
           const item = items[consumed];
           consumed += 1;
           await this.acceptDraft(item, state);
@@ -556,6 +589,8 @@ class TierRun {
           maxOutputTokens: task.maxOutputTokens,
           timeoutMs: task.timeoutMs,
           deadlineAt: this.deadlineAt,
+          // 동시 호출 자리를 기다린 뒤 남은 시간이 모자라면 보내지 않는다 (deadline_reached). 스트림 타이머도 자리를 얻은 뒤 시작한다.
+          guardStart: true,
           meter: this.meter,
           onCall: this.tags("pass1", batch.id, {
             promptVersion: this.bundle.draftPrompt,
@@ -574,6 +609,15 @@ class TierRun {
       } catch (error) {
         // 받기 시작한 뒤 끊긴 스트림도 이미 저장한 장은 그대로 둔다. 설정 오류와 저장소 오류는 단계 실패로 올린다.
         if (!(error instanceof LlmError) || error.isConfigurationError) throw error;
+        if (isNotSent(error)) {
+          // 보내지 않은 호출이다. 이 묶음의 장을 실패로 세지 않고 새 호출을 멈춘다 (반납 뒤 다음 요청이 이어 쓴다).
+          // 다시 요청하는 차례였으면 앞 시도에서 걸린 문제만 그 장의 실패로 남긴다.
+          this.markNotSent();
+          if (round === 0) return;
+          for (const [id, problem] of previousProblems) problems.set(id, problem);
+          lastError = previousError;
+          break;
+        }
         lastError = error;
       }
       if (this.stopped) return;
@@ -657,16 +701,17 @@ class TierRun {
     const userFacts = [...this.plan.nowFacts, ...section.materials.filter((material) => material.kind === "user-fact")];
     let previousIssues: string[] | undefined;
     let code = "validation_failed";
+    /** 실제로 보낸 Pass 2가 있었는가 (보내지 못한 호출은 세지 않는다). */
     let attempted = false;
 
     for (let round = 0; round <= SCROLL_SETTINGS.retriesPerRun; round += 1) {
-      if (this.stopped) return;
-      // 시간이 모자라면 시작하지 않는다. 저장된 초안으로 다음 요청이 이어 한다.
-      if (!this.hasTime(task.timeoutMs + SCROLL_SETTINGS.voiceStartMarginMs)) {
+      // 새 호출을 시작하기 전에는 멈춤(점유 잃음·다른 작업 오류)을 본다. 앞 시도가 있었으면 그 실패는 아래에서 기록한다.
+      if (this.stopped) break;
+      // 시간이 모자라거나 보내지 못한 호출이 있었으면 시작하지 않는다. 저장된 초안으로 다음 요청이 이어 한다.
+      if (this.notSent || !this.hasTime(task.timeoutMs + SCROLL_SETTINGS.voiceStartMarginMs)) {
         this.outOfTime = true;
         break;
       }
-      attempted = true;
       const request = buildVoiceRequest({
         bundle: this.bundle,
         persona: this.persona,
@@ -690,6 +735,8 @@ class TierRun {
           maxOutputTokens: task.maxOutputTokens,
           timeoutMs: task.timeoutMs,
           deadlineAt: this.deadlineAt,
+          // 동시 호출 자리를 기다린 뒤 남은 시간이 모자라면 보내지 않는다 (deadline_reached).
+          guardStart: true,
           meter: this.meter,
           onCall: this.tags("pass2", id, {
             promptVersion: this.bundle.voicePrompt,
@@ -700,12 +747,20 @@ class TierRun {
         });
       } catch (error) {
         if (!(error instanceof LlmError) || error.isConfigurationError) throw error;
+        if (isNotSent(error)) {
+          // 보내지 않은 호출이다. 장 실패로 세지 않고 새 호출을 멈춘다. 앞 시도가 있었으면 그 실패만 아래에서 기록한다.
+          this.markNotSent();
+          break;
+        }
+        attempted = true;
         code = error.code;
         break;
       }
+      attempted = true;
       this.noteModel(result.meta.actualModel);
-      // 늦게 도착한 응답은 점유를 잃었으면 저장하지 않는다.
-      if (this.stopped) return;
+      // 응답을 받은 뒤에는 점유를 잃었을 때만 버린다 (늦은 응답이 새 상태를 덮지 않게). 다른 작업 오류로 멈춘 실행도
+      // 검사를 통과한 결과는 저장한다. 저장 함수가 점유를 다시 확인한다.
+      if (this.lost) return;
       const content = result.parsed.section;
       const issues = checkVoiceSection(content, draft, section, this.ctx);
       if (!issues.length) {
@@ -738,7 +793,8 @@ class TierRun {
       code = "validation_failed";
       previousIssues = unique(issues.map(issueSummary)).slice(0, 15);
     }
-    if (!attempted || this.stopped) return;
+    // 실제로 보낸 시도의 실패만 기록한다. 점유를 잃었으면 기록하지 않는다 (저장 함수도 거부한다).
+    if (!attempted || this.lost) return;
     await this.failUnit(id, "voice", code);
   }
 

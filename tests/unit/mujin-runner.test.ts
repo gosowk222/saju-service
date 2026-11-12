@@ -360,11 +360,16 @@ interface FakeOptions {
   afterStream?: (call: StreamCall) => void;
   /** Pass 2 응답 전 (막기, 오류). n은 그 장의 몇 번째 호출인지. */
   beforeVoice?: (sectionId: string, n: number) => void | Promise<void>;
+  /** Pass 1 스트림을 보내기 전 (오류를 던지면 보내지 않은 호출이다). n은 몇 번째 스트림 시도인지. */
+  beforeStream?: (sections: readonly string[], n: number) => void | Promise<void>;
 }
 
 class FakeLlm {
   readonly streams: StreamCall[] = [];
   readonly voices: string[] = [];
+  /** 요청마다 받은 guardStart 값 (스트림·Pass 2). */
+  readonly guards: (boolean | undefined)[] = [];
+  private streamAttempts = 0;
   voiceStarted = 0;
   classifyCalls = 0;
   classifyOutput: MujinQuestionOutput = { items: [], userFacts: [], needsClarification: false, reaction: "none" };
@@ -381,6 +386,12 @@ class FakeLlm {
   ): Promise<StreamedResult<T>> => {
     const input = JSON.parse(request.input) as DraftInput;
     const round = input.fixTheseProblemsFromPreviousAttempt?.length ? 1 : 0;
+    this.guards.push(request.guardStart);
+    this.streamAttempts += 1;
+    await this.options.beforeStream?.(
+      input.sections.map((section) => section.sectionId),
+      this.streamAttempts,
+    );
     const call: StreamCall = { sections: input.sections.map((section) => section.sectionId), input, raw: request.input, stopped: false };
     this.streams.push(call);
     let text = "";
@@ -416,6 +427,7 @@ class FakeLlm {
   readonly call = (async <T,>(request: StructuredRequest<T>): Promise<StructuredResult<T>> => {
     const input = JSON.parse(request.input) as VoiceInput;
     const id = input.section.sectionId;
+    this.guards.push(request.guardStart);
     this.voices.push(id);
     this.voiceStarted += 1;
     await this.options.beforeVoice?.(id, this.voices.filter((entry) => entry === id).length);
@@ -449,6 +461,34 @@ function setup(options: FakeOptions = {}) {
 }
 
 const tierIds = (tier: ScrollTier) => MUJIN_OVERVIEW.scroll.sections.filter((section) => section.tier === tier && section.kind !== "chart").map((section) => section.id);
+
+/** 가짜 저장소의 지금 상태로 만든 화면 상태 (GET /scroll과 같은 함수). */
+function viewOf(env: ReturnType<typeof setup>, readingId: string, entitled = false) {
+  const phase = (row: RunRow | undefined) =>
+    row
+      ? {
+          status: row.status,
+          attempts: row.attempts,
+          leaseUntil: row.leaseUntil === null ? null : new Date(row.leaseUntil).toISOString(),
+          errorCode: row.errorCode,
+          errorRetryable: row.errorRetryable,
+        }
+      : null;
+  const job = env.store.jobs.get(readingId);
+  return buildScrollStateView({
+    reading: { id: readingId, persona_id: "mujin", nickname: "가람", created_at: new Date(START).toISOString(), chart: base.chart as ChartView },
+    product: MUJIN_OVERVIEW,
+    personaName: "무진 도사",
+    plan: base.plan,
+    entitled,
+    freeRun: phase(env.store.freeRuns.get(readingId)),
+    job: job ? { ...phase(job)!, referenceDate: job.referenceDate } : null,
+    units: [...env.store.units.entries()].filter(([key]) => key.startsWith(`${readingId}/`)).map(([, unit]) => unit),
+    finals: [...env.store.finals.entries()].filter(([key]) => key.startsWith(`${readingId}/`)).map(([, final]) => final),
+    timing: null,
+    now: env.clock.now,
+  });
+}
 
 /** 무료 단계를 끝낸 풀이 (유료 단계 테스트의 준비). */
 async function freeDone(env: ReturnType<typeof setup>, concern = ""): Promise<string> {
@@ -701,6 +741,34 @@ describe("무료 단계 (기초 분석 4개와 1장)", () => {
     expect(env.llm.classifyCalls).toBe(2);
   });
 
+  it("단계 전체가 실패하면(질문 정리 실패, 저장 오류) 장별 실패 기록이 없어도 화면에는 다시 시도할 실패 칸이 생긴다", async () => {
+    const env = setup();
+    env.llm.classifyError = new LlmError("timeout", "가상 시간 초과");
+    const classifyFailed = env.store.addReading(CONCERN);
+    expect(await env.run(classifyFailed, "free")).toBe("failed");
+    expect(await env.store.loadUnits(classifyFailed)).toEqual([]);
+    const first = viewOf(env, classifyFailed);
+    expect(first.free).toEqual({ status: "failed", canRetry: true, errorCode: "timeout" });
+    expect(first.sections.filter((section) => section.tier === "free" && section.kind !== "chart").map((section) => section.state)).toEqual(FREE_IDS.map(() => "failed"));
+
+    // 저장 RPC 오류: 앞 장은 완성됐고, 오류가 난 장과 그 뒤 장은 끝나지 않았다.
+    env.llm.classifyError = null;
+    const saveDraft = env.store.saveDraft.bind(env.store);
+    env.store.saveDraft = async (unit) => {
+      if (unit.unitId === "ch1") throw new Error("unit_draft_save_failed");
+      return saveDraft(unit);
+    };
+    const saveFailed = env.store.addReading();
+    expect(await env.run(saveFailed, "free")).toBe("failed");
+    expect(env.store.freeRuns.get(saveFailed)).toMatchObject({ status: "failed", errorCode: "internal", errorRetryable: true });
+    const second = viewOf(env, saveFailed);
+    expect(second.free.canRetry).toBe(true);
+    expect(second.sections.find((section) => section.id === "ch1")?.state).toBe("failed");
+    for (const section of second.sections.filter((entry) => entry.tier === "free" && entry.kind !== "chart" && entry.id !== "ch1")) {
+      expect(section.state).toBe(env.store.unit(saveFailed, section.id)?.status === "done" ? "done" : "failed");
+    }
+  });
+
   it("작업에 고정된 버전을 모르거나 모델이 설정되지 않았으면 호출 없이 재시도할 수 없는 실패로 정리한다", async () => {
     const env = setup();
     const unknown = env.store.addReading();
@@ -734,6 +802,155 @@ describe("무료 단계 (기초 분석 4개와 1장)", () => {
     });
     expect(env.llm.llmCalls).toBe(0);
     expect(env.store.freeRuns.size).toBe(0);
+  });
+});
+
+describe("보내지 않은 호출(deadline_reached)과 다른 작업 오류로 멈춘 실행", () => {
+  const notSent = () => new LlmError("deadline_reached", "가상: 동시 호출 자리를 기다리다 남은 시간이 모자람", 0);
+
+  it("실행기의 모든 호출은 자리를 얻은 뒤 남은 시간을 다시 보게 한다 (guardStart: Pass 1·Pass 2·질문 정리)", async () => {
+    const env = setup();
+    const classifyRequests: StructuredRequest<unknown>[] = [];
+    // 질문 정리는 실행기의 기본 분류기(실제 지시·형식)를 쓰고, 호출만 가짜로 받는다.
+    const call = (async <T,>(request: StructuredRequest<T>): Promise<StructuredResult<T>> => {
+      if (request.schemaName === "mujin_question_analysis") {
+        classifyRequests.push(request as StructuredRequest<unknown>);
+        return { parsed: request.parser.parse(CLASSIFIED), meta: meta(request.model) };
+      }
+      return env.llm.call(request);
+    }) as typeof callStructured;
+    const { classify: _unused, ...deps } = env.deps;
+    void _unused;
+    const readingId = env.store.addReading(CONCERN);
+    expect(await runScrollTier({ userId: USER, readingId, tier: "free", retry: false, deps: { ...deps, callStructured: call } })).toBe("completed");
+    expect(classifyRequests).toHaveLength(1);
+    expect(classifyRequests[0]!.guardStart).toBe(true);
+    expect(env.llm.guards.length).toBe(env.llm.streams.length + env.llm.voices.length);
+    expect(env.llm.guards.every((guard) => guard === true)).toBe(true);
+  });
+
+  it("Pass 2를 보낼 시간이 없으면 장 실패로 세지 않고 새 일을 멈춘 뒤 반납하고, 다음 요청이 저장된 초안으로 Pass 2만 다시 한다", async () => {
+    const env = setup({
+      beforeVoice: (id, n) => {
+        if (id === "ch1" && n === 1) throw notSent();
+      },
+    });
+    const readingId = env.store.addReading();
+    expect(await env.run(readingId, "free")).toBe("partial");
+    expect(env.store.unit(readingId, "ch1")).toMatchObject({ status: "drafted", voiceAttempts: 0, errorStage: null });
+    expect(env.store.log.filter((entry) => entry.startsWith("fail"))).toEqual([]);
+    expect(env.store.log).toContain("release:free@1");
+    expect(env.store.freeRuns.get(readingId)).toMatchObject({ status: "queued", errorCode: null });
+
+    const streams = env.llm.streams.length;
+    expect(await env.run(readingId, "free")).toBe("completed");
+    expect(env.llm.streams.length).toBe(streams);
+    expect(env.store.unit(readingId, "ch1")).toMatchObject({ status: "done", voiceAttempts: 1 });
+  });
+
+  it("Pass 1을 보낼 시간이 없으면 그 묶음의 장을 실패로 세지 않고, 같은 요청에서 다시 부르지 않고 반납한다", async () => {
+    const env = setup({
+      beforeStream: (_sections, n) => {
+        if (n === 1) throw notSent();
+      },
+    });
+    const readingId = env.store.addReading();
+    expect(await env.run(readingId, "free")).toBe("partial");
+    expect(env.llm.streams).toHaveLength(0);
+    expect(env.store.log).toEqual(["release:free@1"]);
+    expect(await env.store.loadUnits(readingId)).toEqual([]);
+
+    expect(await env.run(readingId, "free")).toBe("completed");
+    expect(env.store.freeRuns.get(readingId)).toMatchObject({ status: "completed", attempts: 2 });
+    expect(FREE_IDS.every((id) => env.store.unit(readingId, id)?.draftAttempts === 1)).toBe(true);
+  });
+
+  it("다시 요청하는 차례(검사에 걸린 장)에 보낼 시간이 없으면 앞 시도의 실패만 기록하고 반납한다", async () => {
+    const env = setup({
+      draft: (id, round, section) => (id === "basics-elements" && round === 0 ? badDraft(section) : undefined),
+      beforeStream: (_sections, n) => {
+        if (n === 2) throw notSent();
+      },
+    });
+    const readingId = env.store.addReading();
+    expect(await env.run(readingId, "free")).toBe("partial");
+    // 첫 묶음에서 검사에 걸린 장은 그 시도만 센다. 보내지 않은 다시 요청은 세지 않는다.
+    expect(env.store.unit(readingId, "basics-elements")).toMatchObject({ status: "failed", errorStage: "draft", draftAttempts: 1, errorCode: "validation_failed" });
+    expect(env.llm.streams.map((call) => call.sections)).toEqual([["basics-structure", "basics-elements", "basics-stages", "basics-ten-gods"]]);
+    expect(env.store.log).toContain("release:free@1");
+  });
+
+  it("질문 정리를 보낼 시간이 없으면 단계를 실패로 두지 않고 반납한다", async () => {
+    const env = setup();
+    env.llm.classifyError = notSent();
+    const readingId = env.store.addReading(CONCERN);
+    expect(await env.run(readingId, "free")).toBe("partial");
+    expect(env.store.freeRuns.get(readingId)).toMatchObject({ status: "queued", errorCode: null });
+    expect(env.llm.streams).toHaveLength(0);
+
+    env.llm.classifyError = null;
+    env.llm.classifyOutput = CLASSIFIED;
+    expect(await env.run(readingId, "free")).toBe("completed");
+  });
+
+  it("다른 작업의 저장 오류로 멈춰도, 이미 보낸 Pass 2의 응답이 검사를 통과하면 저장한다 (점유를 잃었을 때만 버린다)", async () => {
+    const voiceGate = gate();
+    const env = setup({ beforeVoice: (id) => (id === "basics-structure" ? voiceGate.promise : undefined) });
+    const saveDraft = env.store.saveDraft.bind(env.store);
+    let saveFailed = false;
+    env.store.saveDraft = async (unit) => {
+      if (unit.unitId === "basics-elements") {
+        saveFailed = true;
+        throw new Error("unit_draft_save_failed");
+      }
+      return saveDraft(unit);
+    };
+    const readingId = env.store.addReading();
+    const running = env.run(readingId, "free");
+    await vi.waitFor(() => expect(saveFailed && env.llm.voiceStarted >= 1).toBe(true), { timeout: 10_000 });
+    voiceGate.open();
+    expect(await running).toBe("failed");
+
+    expect(env.store.finals.has(`${readingId}/basics-structure`)).toBe(true);
+    expect(env.store.unit(readingId, "basics-structure")).toMatchObject({ status: "done", voiceAttempts: 1 });
+    // 멈춘 뒤에는 새 호출을 시작하지 않았다.
+    expect(env.llm.voices).toEqual(["basics-structure"]);
+    expect(env.llm.streams).toHaveLength(1);
+    expect(env.store.freeRuns.get(readingId)).toMatchObject({ status: "failed", errorCode: "internal", errorRetryable: true });
+  });
+
+  it("다른 작업 오류로 멈춰도, 이미 받은 Pass 1 장 원소는 검사해 저장하고 스트림은 끊는다", async () => {
+    const haltGate = gate();
+    const env = setup({
+      beforeVoice: async (id) => {
+        if (id !== "basics-structure") return;
+        await haltGate.promise;
+        throw new Error("가상 오류");
+      },
+    });
+    // 묶음의 장 원소를 한 번에 모두 보내는 스트림. 둘째 장을 저장하는 동안 첫 장의 Pass 2 작업이 오류로 실행을 멈춘다.
+    const stream = (async <T,>(request: StructuredRequest<T> & { readonly onDelta: (text: string, delta: string) => Promise<"continue" | "stop"> }): Promise<StreamedResult<T>> => {
+      const input = JSON.parse(request.input) as DraftInput;
+      const text = JSON.stringify({ sections: input.sections.map(draftFor) });
+      const stopped = (await request.onDelta(text, text)) === "stop";
+      request.onCall?.({ ...callLog(request.model), ...(stopped ? { outcome: "unknown" as const, usage: null } : {}) });
+      return { parsed: null, text, stopped, meta: meta(request.model) };
+    }) as unknown as typeof callStructuredStream;
+    const saveDraft = env.store.saveDraft.bind(env.store);
+    env.store.saveDraft = async (unit) => {
+      if (unit.unitId === "basics-elements") {
+        haltGate.open();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return saveDraft(unit);
+    };
+    const readingId = env.store.addReading();
+    expect(await runScrollTier({ userId: USER, readingId, tier: "free", retry: false, deps: { ...env.deps, callStructuredStream: stream } })).toBe("failed");
+    // 이미 받은 장 원소는 모두 저장했다. 저장한 장의 Pass 2와 다음 묶음(1장)은 시작하지 않았다.
+    for (const id of ["basics-structure", "basics-elements", "basics-stages", "basics-ten-gods"]) expect(env.store.unit(readingId, id)?.status).toBe("drafted");
+    expect(env.llm.voices).toEqual(["basics-structure"]);
+    expect(env.store.unit(readingId, "ch1")).toBeUndefined();
+    expect(env.store.freeRuns.get(readingId)).toMatchObject({ status: "failed", errorCode: "internal" });
   });
 });
 

@@ -636,6 +636,87 @@ describe("HTTP 요청 시도마다 호출 기록을 한 번 넘긴다 (onCall)",
   });
 });
 
+// ─── 동시 호출 자리를 기다린 뒤의 시간 확인 (guardStart) ───────────────────────────────
+
+/**
+ * 프로세스 전역 동시 호출 자리(LLM_SETTINGS.concurrency)를 모두 채운다. 응답하지 않는 요청이 holdMs 뒤 시간 초과로 자리를 비운다.
+ * 채운 요청은 시간 초과로 끝나며(다시 시도하지 않게 마감을 짧게 준다), 테스트 끝에서 모두 기다린다.
+ */
+function occupySlots(holdMs: number): Promise<unknown> {
+  const calls = Array.from({ length: LLM_SETTINGS.concurrency }, () => {
+    planned.push({ kind: "hang" });
+    return callStructured({ ...request(), timeoutMs: holdMs, deadlineAt: Date.now() + 10 });
+  });
+  return Promise.allSettled(calls);
+}
+
+describe("동시 호출 자리를 기다린 뒤 남은 시간을 다시 본다 (guardStart)", () => {
+  it("자리를 얻은 뒤 시간 제한 안에 마감을 넘길 수 있으면 요청을 보내지 않고 deadline_reached로 끝낸다 (호출 기록·사용량 없음, 다시 시도하지 않음)", async () => {
+    const held = occupySlots(600);
+    const { logs, onCall } = collect();
+    const meter = new UsageMeter();
+    planned.push({ kind: "json", text: JSON.stringify({ a: "보내지 않을 요청" }) });
+    const error = await callStructured({ ...request(), timeoutMs: 1_000, deadlineAt: Date.now() + 1_200, guardStart: true, meter, onCall }).catch((caught: unknown) => caught);
+    await held;
+    expect(error).toMatchObject({ code: "deadline_reached", calls: 0 });
+    expect((error as { isConfigurationError: boolean }).isConfigurationError).toBe(false);
+    expect(logs).toEqual([]);
+    expect(meter.calls).toBe(0);
+    // 가짜 서버가 받은 요청은 자리를 채운 요청뿐이다.
+    expect(received).toBe(LLM_SETTINGS.concurrency);
+  });
+
+  it("자리를 얻은 뒤 시간이 넉넉하면 그대로 보낸다", async () => {
+    const held = occupySlots(600);
+    const { logs, onCall } = collect();
+    planned.push({ kind: "json", text: JSON.stringify({ a: "b" }), usage: apiUsage(100, 10, 0) });
+    const result = await callStructured({ ...request(), timeoutMs: 1_000, deadlineAt: Date.now() + 5_000, guardStart: true, onCall });
+    await held;
+    expect(result.parsed).toEqual({ a: "b" });
+    expect(logs).toEqual([expect.objectContaining({ outcome: "usage", errorCode: null })]);
+  });
+
+  it("guardStart가 없으면 지금과 같다: 자리를 기다린 뒤 마감과 관계없이 보낸다 (묘묘 경로)", async () => {
+    const held = occupySlots(600);
+    const { logs, onCall } = collect();
+    planned.push({ kind: "json", text: JSON.stringify({ a: "b" }), usage: apiUsage(100, 10, 0) });
+    const result = await callStructured({ ...request(), timeoutMs: 1_000, deadlineAt: Date.now() + 1_200, onCall });
+    await held;
+    expect(result.parsed).toEqual({ a: "b" });
+    expect(logs).toEqual([expect.objectContaining({ outcome: "usage", errorCode: null })]);
+  });
+
+  it("스트림: 전체 시간 타이머는 자리를 얻은 뒤 시작한다 (기다리는 동안 타이머가 흐르지 않는다)", async () => {
+    // 자리는 800ms 뒤에 비고 스트림 제한은 500ms다. 자리를 기다리는 동안 타이머가 흐르면 보내기도 전에 끊긴다
+    // (그러면 보내지 않은 요청이 시간 초과로 기록되고 다시 시도한다).
+    const held = occupySlots(800);
+    const { logs, onCall } = collect();
+    const meter = new UsageMeter();
+    planned.push({ kind: "sse", text: JSON.stringify({ a: "자리를 얻은 뒤 받은 스트림" }), usage: apiUsage(300, 30, 0) });
+    const result = await callStructuredStream({ ...request(), timeoutMs: 500, deadlineAt: Date.now() + 2_000, guardStart: true, meter, onCall, onDelta: async () => "continue" });
+    await held;
+    expect(result.parsed).toEqual({ a: "자리를 얻은 뒤 받은 스트림" });
+    expect(result.meta.calls).toBe(1);
+    expect(logs).toEqual([expect.objectContaining({ outcome: "usage", errorCode: null })]);
+    expect(meter.summary()).toMatchObject({ calls: 1, complete: true });
+  });
+
+  it("스트림: 자리를 얻은 뒤 마감을 넘길 수 있으면 보내지 않고 deadline_reached로 끝낸다 (호출 기록·사용량 없음)", async () => {
+    const held = occupySlots(600);
+    const { logs, onCall } = collect();
+    const meter = new UsageMeter();
+    planned.push({ kind: "sse", text: JSON.stringify({ a: "보내지 않을 스트림" }) });
+    const error = await callStructuredStream({ ...request(), timeoutMs: 1_000, deadlineAt: Date.now() + 1_200, guardStart: true, meter, onCall, onDelta: async () => "continue" }).catch(
+      (caught: unknown) => caught,
+    );
+    await held;
+    expect(error).toMatchObject({ code: "deadline_reached", calls: 0 });
+    expect(logs).toEqual([]);
+    expect(meter.calls).toBe(0);
+    expect(received).toBe(LLM_SETTINGS.concurrency);
+  });
+});
+
 // ─── 호출 기록 저장기 ───────────────────────────────
 
 function capture() {

@@ -24,7 +24,12 @@ export type LlmErrorCode =
   | "incomplete"
   | "empty_response"
   | "invalid_output"
-  | "validation_failed";
+  | "validation_failed"
+  /**
+   * 요청을 보내지 않았다: 동시 호출 제한의 자리를 기다린 뒤 남은 시간이 그 요청의 제한 시간보다 짧았다 (guardStart).
+   * 재시도하지 않고 설정 오류도 아니다. 호출 기록(onCall)과 사용량(meter)을 남기지 않는다.
+   */
+  | "deadline_reached";
 
 /** 코드나 설정을 고치기 전까지 다시 시도해도 소용없는 오류. */
 const CONFIGURATION_ERRORS: ReadonlySet<LlmErrorCode> = new Set([
@@ -105,6 +110,13 @@ export interface StructuredRequest<T> {
   readonly timeoutMs?: number;
   /** 이 시각(epoch ms)을 넘길 재시도는 하지 않는다. */
   readonly deadlineAt?: number;
+  /**
+   * true이고 deadlineAt이 있으면, 동시 호출 제한의 자리를 얻은 뒤 남은 시간을 다시 본다 (첫 시도와 재시도 모두).
+   * 지금 보내면 timeoutMs 안에 끝나도 deadlineAt을 넘길 수 있으면 요청을 보내지 않고 deadline_reached로 끝낸다
+   * (onCall·meter 기록 없음). 스트림의 전체 시간 타이머는 자리를 얻은 뒤에 시작한다.
+   * 주지 않으면 지금과 같다 (자리를 기다리는 동안에도 스트림 타이머가 흐르고, 첫 시도는 마감을 보지 않는다).
+   */
+  readonly guardStart?: boolean;
   /** 요청마다 사용량을 기록한다. 응답을 받은 뒤 실패해도(형식 오류, 미완료) 받은 usage는 남는다. */
   readonly meter?: UsageMeter;
   /**
@@ -129,6 +141,15 @@ async function withConcurrencyLimit<R>(task: () => Promise<R>): Promise<R> {
     waiters.shift()?.();
   }
 }
+
+/** 자리를 얻은 뒤 남은 시간이 모자라 요청을 보내지 않았다 (guardStart). 호출 오류로 분류하지 않는다. */
+class StartDeadlineReached {}
+
+/** guardStart를 쓰는 요청이면 자리를 얻은 뒤 볼 마감 시각. 쓰지 않으면 null (지금과 같은 동작). */
+const startGuardOf = (request: { readonly guardStart?: boolean; readonly deadlineAt?: number }): number | null =>
+  request.guardStart === true && request.deadlineAt !== undefined ? request.deadlineAt : null;
+
+const deadlineReached = (calls: number) => new LlmError("deadline_reached", "남은 시간이 모자라 요청을 보내지 않았습니다.", calls);
 
 export function classifyProviderError(error: unknown): LlmError {
   if (error instanceof LlmError) return error;
@@ -282,12 +303,15 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
   }
 
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const guardDeadline = startGuardOf(request);
   for (let attempt = 0; ; attempt += 1) {
     const ledger = requestLedger(request);
     try {
       calls += 1;
       // temperature 등 모델 문서에서 확인하지 않은 옵션은 보내지 않는다.
       const response = await withConcurrencyLimit(() => {
+        // 자리를 기다리는 동안 시간이 흘렀다. 지금 보내면 마감을 넘길 수 있으면 보내지 않는다 (guardStart, 첫 시도와 재시도 모두).
+        if (guardDeadline !== null && Date.now() + timeout > guardDeadline) throw new StartDeadlineReached();
         ledger.begin();
         return client.responses.create(
           {
@@ -332,6 +356,8 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
         },
       };
     } catch (error) {
+      // 보내지 않은 요청은 호출 기록과 사용량을 남기지 않는다. calls는 실제로 보낸 요청 수다.
+      if (error instanceof StartDeadlineReached) throw deadlineReached(calls - 1);
       ledger.failed(error);
       const classified = classifyProviderError(error);
       ledger.report(classified.code);
@@ -382,15 +408,25 @@ export async function callStructuredStream<T>(
   }
 
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const guardDeadline = startGuardOf(request);
   for (let attempt = 0; ; attempt += 1) {
     let received = false;
     const ledger = requestLedger(request);
     // SDK의 timeout은 응답 헤더까지만 본다. 스트림 전체 시간은 여기서 끊는다.
+    // guardStart를 쓰면 타이머를 자리를 얻은 뒤에 시작한다 (자리를 기다린 시간이 생성 시간을 줄이거나 보내기 전에 끊지 않게).
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startTimer = () => {
+      timer = setTimeout(() => controller.abort(), timeout);
+    };
+    if (guardDeadline === null) startTimer();
     try {
       calls += 1;
       const streamed = await withConcurrencyLimit(async () => {
+        if (guardDeadline !== null) {
+          if (Date.now() + timeout > guardDeadline) throw new StartDeadlineReached();
+          startTimer();
+        }
         ledger.begin();
         // 스트림 응답에는 SDK가 _request_id를 붙이지 않으므로 withResponse로 헤더의 요청 ID를 함께 받는다 (요청·오류 처리는 같다).
         const { data: stream, request_id: streamRequestId } = await client.responses
@@ -482,6 +518,8 @@ export async function callStructuredStream<T>(
         },
       };
     } catch (error) {
+      // 보내지 않은 요청은 호출 기록과 사용량을 남기지 않는다. calls는 실제로 보낸 요청 수다.
+      if (error instanceof StartDeadlineReached) throw deadlineReached(calls - 1);
       // 화면 저장 중 오류(다른 요청이 이어받음 등)로 멈춘 호출도 토큰을 썼을 수 있다. usage는 모르는 호출로 남긴다.
       if (error instanceof DeltaHandlerFailure) {
         ledger.unknown();
