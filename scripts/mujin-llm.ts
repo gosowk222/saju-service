@@ -36,6 +36,7 @@ import type {
   UserFactKind,
 } from "@/domain/mujin/types";
 import { findPersona, type Persona } from "@/domain/personas";
+import { echoLines, exampleEchoes, findExampleCatalog, MUJIN_EXAMPLE_CATALOG_VERSION } from "@/domain/personas/examples";
 import { MUJIN_OVERVIEW } from "@/domain/products/mujin-overview";
 import type { ScrollDraftBatch, ScrollSectionSpec } from "@/domain/products/types";
 import { analyzeMujinBirth, computeMujinTiming } from "@/server/engine/mujin";
@@ -1038,6 +1039,13 @@ function sectionDetail(review: MujinSectionReview): string[] {
   return lines;
 }
 
+const MUJIN_CATALOG = findExampleCatalog(MUJIN_EXAMPLE_CATALOG_VERSION)!;
+
+/** 최종문(Pass 2 결과)의 핵심 답과 블록 문장. */
+function finalTexts(outputs: MujinOutputs): string[] {
+  return [...outputs.finals.values()].flatMap((final) => [final.coreAnswer, ...final.blocks.flatMap((block) => [block.text, ...block.items.map((item) => `${item.label} ${item.text}`)])]);
+}
+
 /** 장마다 초안과 최종문을 나란히 놓은 비교 문서 (Markdown). */
 export function renderMujinComparison(evaluation: MujinEvaluation, outputs: LoadedOutputs): string {
   const { entry } = evaluation;
@@ -1078,6 +1086,11 @@ export function renderMujinComparison(evaluation: MujinEvaluation, outputs: Load
     ),
     "",
     ...reviews.flatMap(sectionDetail),
+    "## 예시 문장 겹침 (참고)",
+    "",
+    // 예시 사용·미사용 묶음을 같은 기준으로 비교하도록 묶음과 관계없이 무진 카탈로그 전체(원문 21개)와 견준다.
+    ...echoLines(exampleEchoes(finalTexts(outputs), MUJIN_CATALOG.examples), MUJIN_CATALOG.version),
+    "",
     "## 평가 기록 (docs/personas/mujin-evaluation.md 1절)",
     "",
     "최종문만 처음부터 이어 읽고 항목마다 예 / 부분 / 아니오와 근거 문단을 적는다. 5번과 9번은 위 표에서 같은 장의 초안과 최종문을 나란히 본다.",

@@ -23,6 +23,7 @@ export {
 } from "./select";
 export { MYOMYO_EXAMPLE_CATALOG_VERSION } from "./myomyo";
 export { MUJIN_EXAMPLE_CATALOG_VERSION } from "./mujin";
+export { echoLines, exampleEchoes, type ExampleEcho } from "./echo";
 
 const CATALOGS: readonly ExampleCatalog[] = [MYOMYO_EXAMPLES_1_0_0, MUJIN_EXAMPLES_1_0_0];
 
