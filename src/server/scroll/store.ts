@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicBirthInput } from "sajuengine";
 import type { MujinPlan, MujinTimingBundle, ScrollDraftContent, ScrollSectionContent, ScrollTier } from "@/domain/mujin/types";
 import type { ChartView } from "@/domain/reading/types";
+import type { UnitFailure, UnitRecord as GenericUnitRecord, UnitStatus, UnitStore, UnitWrite as GenericUnitWrite } from "@/server/generation/two-pass";
 import { supabaseCallWriter, type LlmCallRow } from "@/server/llm/call-log";
 import { SCROLL_SETTINGS } from "./config";
 
@@ -51,21 +52,10 @@ export interface FinalSection {
   readonly content: ScrollSectionContent;
 }
 
-export type UnitStatus = "pending" | "drafted" | "done" | "failed";
+export type { UnitStatus };
 
-/** reading_units 한 행 (서버 전용). draft는 Pass 1 초안이며 브라우저로 보내지 않는다. */
-export interface UnitRecord {
-  readonly unitId: string;
-  readonly tier: ScrollTier;
-  readonly status: UnitStatus;
-  readonly draft: ScrollDraftContent | null;
-  readonly draftAttempts: number;
-  readonly voiceAttempts: number;
-  readonly errorStage: "draft" | "voice" | null;
-  readonly errorCode: string | null;
-  readonly errorRetryable: boolean | null;
-  readonly updatedAt: string | null;
-}
+/** reading_units 한 행 (서버 전용, 공통 정의는 two-pass.ts). draft는 Pass 1 초안이며 브라우저로 보내지 않는다. */
+export type UnitRecord = GenericUnitRecord<ScrollDraftContent>;
 
 /** 점유한 실행의 고정 설정 (claim이 처음 시작할 때 고정한 값). */
 export interface ClaimedRun {
@@ -92,20 +82,9 @@ export interface ClaimRequest {
   readonly maxAttempts: number;
 }
 
-/** 장 단위 저장의 공통 인자. tier는 상품 정의(ScrollSectionSpec.tier)에서 정한 값이어야 한다 (DB는 서버가 보낸 tier를 믿는다). */
-export interface UnitWrite {
-  readonly readingId: string;
-  readonly tier: ScrollTier;
-  /** 지금 점유한 실행의 시도 번호 (claim 결과의 attempts). */
-  readonly attempt: number;
-  readonly unitId: string;
-}
-
-export interface UnitFailure {
-  readonly saved: boolean;
-  readonly draftAttempts: number;
-  readonly voiceAttempts: number;
-}
+/** 장 단위 저장의 공통 인자 (공통 정의는 two-pass.ts). tier는 상품 정의(ScrollSectionSpec.tier)에서 정한 값이어야 한다. */
+export type UnitWrite = GenericUnitWrite;
+export type { UnitFailure };
 
 export interface AnalysisStore {
   loadAnalysis<T>(readingId: string, cacheKey: string): Promise<T | null>;
@@ -124,7 +103,7 @@ export function isFinalFreeFailure(run: { readonly status: string; readonly atte
 }
 
 /** 생성 실행기(runner.ts)가 쓰는 저장소. 테스트는 같은 모양의 가짜를 넣어 DB 없이 순서와 저장을 확인한다. */
-export interface ScrollStore extends AnalysisStore {
+export interface ScrollStore extends AnalysisStore, UnitStore<ScrollDraftContent, ScrollSectionContent> {
   loadReading(readingId: string, userId: string): Promise<{ readonly reading: ScrollReadingRecord; readonly plan: MujinPlan } | null>;
   hasEntitlement(readingId: string, userId: string): Promise<boolean>;
   /**

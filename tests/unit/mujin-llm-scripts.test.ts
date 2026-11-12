@@ -593,7 +593,7 @@ describe("운영 실행기(runScrollTier)와 같은 요청·같은 검사", () =
       expect(request.instructions).toBe(captured.instructions);
       expect(request.input).toBe(captured.input);
       expect([request.schemaName, request.jsonSchema]).toEqual([captured.schemaName, captured.jsonSchema]);
-      const body = requestBody(request, LLM_SETTINGS.tasks.mujinDraft);
+      const body = requestBody(request, LLM_SETTINGS.tasks.draft);
       expect([(body.reasoning as { effort: string }).effort, body.max_output_tokens]).toEqual([captured.reasoningEffort, captured.maxOutputTokens]);
     });
 
@@ -605,7 +605,7 @@ describe("운영 실행기(runScrollTier)와 같은 요청·같은 검사", () =
       const captured = voices.get(sectionId)!;
       expect(request.instructions).toBe(captured.instructions);
       expect(request.input).toBe(captured.input);
-      const body = requestBody(request, LLM_SETTINGS.tasks.mujinVoice);
+      const body = requestBody(request, LLM_SETTINGS.tasks.voice);
       expect([(body.reasoning as { effort: string }).effort, body.max_output_tokens]).toEqual([captured.reasoningEffort, captured.maxOutputTokens]);
     }
   });
@@ -695,8 +695,8 @@ describe("내보내기 파일 (llm:export)", () => {
       instructions: work.instructions,
       input: work.input,
       store: false,
-      max_output_tokens: LLM_SETTINGS.tasks.mujinDraft.maxOutputTokens,
-      reasoning: { effort: LLM_SETTINGS.tasks.mujinDraft.reasoningEffort },
+      max_output_tokens: LLM_SETTINGS.tasks.draft.maxOutputTokens,
+      reasoning: { effort: LLM_SETTINGS.tasks.draft.reasoningEffort },
       text: { format: { type: "json_schema", name: "mujin_draft", schema: work.jsonSchema, strict: true } },
     });
     expect(JSON.parse(read("p0-question.request.json"))).toMatchObject({ max_output_tokens: LLM_SETTINGS.tasks.classify.maxOutputTokens, text: { format: { name: "mujin_question_analysis" } } });

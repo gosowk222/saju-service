@@ -2,7 +2,7 @@ import "server-only";
 
 /**
  * 무진의 종합 사주(족자 상품) 생성 실행기 설정. 장 단위 2-pass 생성의 시간·점유·비용 상한을 한곳에 모은다.
- * 모델, 출력 한도, 장 하나의 호출 제한 시간은 LLM 설정(src/server/llm/config.ts의 tasks.mujinDraft·mujinVoice)이 정한다.
+ * 모델, 출력 한도, 장 하나의 호출 제한 시간은 LLM 설정(src/server/llm/config.ts의 tasks.draft·voice)이 정한다.
  *
  * - 무료 단계(기초 분석 4개와 1장)는 reading_free_runs로, 유료 단계(2~10장과 마지막 정리)는 generation_jobs로 점유한다.
  * - 요청 하나는 budgetMs 안에서 할 수 있는 만큼만 쓰고, 남은 장이 있으면 점유를 반납해 브라우저가 곧바로 다시 요청하게 한다.
