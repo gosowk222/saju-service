@@ -27,6 +27,10 @@ import { dateOnly, loadFinalSections, loadTimingBundle, type FinalSection, type 
  * - Pass 1 초안은 읽지 않는다. 장 진행 상태(reading_units)는 서버 클라이언트로 상태·시도 수만 읽는다.
  * - 화면 계약: 단계는 처음이면 idle, 다시 시작할 차례(반납됨·점유 만료)면 queued다 (화면은 이 둘일 때만 생성 요청을 보낸다).
  *   원국표 칸은 done·content null이다. writing은 실제로 쓰는 칸만이다 (초안을 저장해 Pass 2 중인 장, 지금 Pass 1 묶음의 장).
+ *   failed는 화면이 다시 시도를 그리는 칸이다 (다시 시도할 수 있는지는 그 단계의 canRetry로 정한다).
+ *   · 단계가 failed이면 그 단계의 끝나지 않은 칸은 모두 failed다. 질문 정리 실패·저장 오류처럼 장별 실패 기록 없이 단계만 실패해도 다시 시도할 칸이 생긴다.
+ *   · 단계가 진행 중(running·queued)이면 시도 수가 남은 실패 장은 곧 자동으로 다시 쓰므로 waiting(또는 지금 다시 쓰면 writing)이다.
+ *     시도 수를 다 쓴 장만 failed다.
  */
 
 type Db = SupabaseClient;
@@ -76,6 +80,9 @@ export interface ScrollStateInput {
 const leaseValid = (phase: PhaseRecord | null, now: number): boolean =>
   !!phase && phase.status === "running" && phase.leaseUntil !== null && Date.parse(phase.leaseUntil) > now;
 
+/** 단계가 아직 진행 중인가: 실행 중(점유가 만료됐어도 다음 요청이 이어받는다)이거나 반납되어 다시 시작할 차례다. */
+const inProgress = (phase: PhaseRecord | null): boolean => !!phase && (phase.status === "running" || phase.status === "queued");
+
 function phaseView(phase: PhaseRecord | null, maxRuns: number, now: number): ScrollPhaseView {
   if (!phase) return { status: "idle", canRetry: false, errorCode: null };
   switch (phase.status) {
@@ -114,9 +121,11 @@ function viewContent(content: ScrollSectionContent): ScrollSectionContent {
  * 저장 상태로 화면 상태를 만든다 (순수 함수). 장 순서는 상품 목차 순서다. 뒤 장이 먼저 완성돼도 순서를 바꾸지 않는다.
  *
  * 장 상태: 원국표 → done(content null). 유료이고 권한 없음 → locked(content null). 완성문 있음 → done.
- * 실패 → failed. 단, 그 단계가 지금 실행 중이고 이 장이 지난 실행에서 실패했으며 시도 수가 남았으면 이 실행이 다시 쓰므로
- * 실패로 보이지 않는다. 실행 중(점유 유효)이면: 초안 저장됨(Pass 2 중) → writing, 지금 Pass 1 묶음(초안이 필요한 장이
- * 남은 첫 묶음)의 장 → writing, 그 밖 → waiting. 실행 중이 아니면 waiting.
+ * 그 장의 단계가 failed → failed (장별 실패 기록이 없어도 단계 실패로 멈춘 칸에 다시 시도를 그리게 한다).
+ * 실패한 장: 시도 수를 다 썼거나 단계가 진행 중(running·queued)이 아니면 failed. 진행 중이고 시도 수가 남았으면 곧 다시 쓰므로
+ * waiting이다. 그 가운데 이번 점유를 시작하기 전에 실패해 지금 실행이 다시 쓰는 장(Pass 2 실패, 지금 Pass 1 묶음의 초안 실패)은 writing이다.
+ * 실행 중(점유 유효)이면: 초안 저장됨(Pass 2 중) → writing, 지금 Pass 1 묶음(초안이 필요한 장이 남은 첫 묶음)의 장 → writing,
+ * 그 밖 → waiting. 실행 중이 아니면 waiting.
  */
 export function buildScrollStateView(input: ScrollStateInput): ScrollStateView {
   const { product, entitled, now, reading } = input;
@@ -147,6 +156,8 @@ export function buildScrollStateView(input: ScrollStateInput): ScrollStateView {
     product.scroll.draftBatches.find((batch) => batch.tier === tier && batch.sectionIds.some((id) => specById.has(id) && needsDraft(specById.get(id)!)));
   const current = { free: currentBatch("free"), paid: currentBatch("paid") };
 
+  const inCurrentBatch = (spec: ScrollSectionSpec): boolean => current[spec.tier]?.sectionIds.includes(spec.id) ?? false;
+
   const stateOf = (spec: ScrollSectionSpec): { readonly state: SectionViewState; readonly content: ScrollSectionContent | null } => {
     if (spec.kind === "chart") return { state: "done", content: null };
     if (spec.tier === "paid" && !entitled) return { state: "locked", content: null };
@@ -154,11 +165,20 @@ export function buildScrollStateView(input: ScrollStateInput): ScrollStateView {
     if (content) return { state: "done", content: viewContent(content) };
     const unit = units.get(spec.id);
     const phase = phaseOf(spec);
-    if (unit?.status === "failed" && !retrying(unit, phase)) return { state: "failed", content: null };
+    // 단계가 실패로 끝났다 (장 실패, 질문 정리 실패, 저장 오류, 기준일·기간 재료 오류 등). 끝나지 않은 칸은 모두 실패로 보여
+    // 화면이 그 칸에서 다시 시도(phase.canRetry)를 그리게 한다. 장별 실패 기록(reading_units)이 없어도 같다.
+    if (phase?.status === "failed") return { state: "failed", content: null };
+    if (unit?.status === "failed") {
+      // 시도 수를 다 쓴 장은 더 쓰지 않는다. 단계가 진행 중이 아니면 다시 쓸 실행도 없다.
+      if (!attemptsLeft(unit) || !inProgress(phase)) return { state: "failed", content: null };
+      // 진행 중인 단계가 곧 다시 쓰는 장이다. 이번 점유 전에 실패한 장은 지금 실행이 다시 쓴다
+      // (Pass 2 실패는 저장된 초안으로 바로, Pass 1 실패는 그 장의 묶음 차례에).
+      if (retrying(unit, phase) && (unit.errorStage === "voice" || inCurrentBatch(spec))) return { state: "writing", content: null };
+      return { state: "waiting", content: null };
+    }
     if (leaseValid(phase, now)) {
-      // 여기까지 온 실패 장은 이 실행이 다시 쓰는 장이다.
-      if (unit?.status === "drafted" || (unit?.status === "failed" && unit.errorStage === "voice")) return { state: "writing", content: null };
-      if (current[spec.tier]?.sectionIds.includes(spec.id) && needsDraft(spec)) return { state: "writing", content: null };
+      if (unit?.status === "drafted") return { state: "writing", content: null };
+      if (inCurrentBatch(spec) && needsDraft(spec)) return { state: "writing", content: null };
     }
     return { state: "waiting", content: null };
   };

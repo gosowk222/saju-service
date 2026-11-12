@@ -141,7 +141,7 @@ describe("화면 상태 만들기 (순수 함수)", () => {
     expect(idle.sections.filter((section) => section.state === "writing")).toEqual([]);
   });
 
-  it("실패한 장은 failed다. 단, 지금 실행이 이어서 다시 쓰는 장(이번 시작 전에 실패했고 시도 수가 남음)은 작성 중·대기로 보인다", () => {
+  it("진행 중인 단계의 실패 장: 이번 시작 전에 실패한 장은 이 실행이 다시 쓰고(작성 중), 이번 실행에서 실패했지만 시도 수가 남은 장은 대기, 시도 수를 다 쓴 장만 실패다", () => {
     const before = new Date(NOW - 60_000).toISOString();
     const after = new Date(NOW - 500).toISOString();
     const view = buildScrollStateView(
@@ -158,10 +158,88 @@ describe("화면 상태 만들기 (순수 함수)", () => {
     expect(sectionOf(view, "basics-structure").state).toBe("writing");
     expect(sectionOf(view, "basics-elements").state).toBe("writing");
     expect(sectionOf(view, "basics-stages").state).toBe("failed");
-    expect(sectionOf(view, "basics-ten-gods").state).toBe("failed");
-    // 실행 중이 아니면 실패는 그대로 실패다.
+    // 이번 실행에서 실패했지만 시도 수가 남았다: 다음 요청이 곧 다시 쓴다 ('횟수를 모두 썼어요'가 아니다).
+    expect(sectionOf(view, "basics-ten-gods").state).toBe("waiting");
+    // 실행 중이 아니면(단계 기록 없음) 실패는 그대로 실패다.
     const stopped = buildScrollStateView(input({ units: [unit("basics-structure", { status: "failed", errorStage: "draft", draftAttempts: 1, updatedAt: before })] }));
     expect(sectionOf(stopped, "basics-structure").state).toBe("failed");
+  });
+
+  it("반납 직후(queued)나 점유가 만료된 단계도 시도 수가 남은 실패 장은 대기이고, 시도 수를 다 쓴 장만 실패다", () => {
+    const failedUnits = [
+      unit("basics-structure", { status: "failed", errorStage: "voice", voiceAttempts: 1 }),
+      unit("basics-elements", { status: "failed", errorStage: "draft", draftAttempts: 2 }),
+      unit("basics-stages", { status: "failed", errorStage: "voice", voiceAttempts: SCROLL_SETTINGS.voiceAttemptsPerUnit }),
+    ];
+    const released = buildScrollStateView(input({ freeRun: { ...running(), status: "queued", leaseUntil: null }, units: failedUnits }));
+    expect(released.free.status).toBe("queued");
+    expect(sectionOf(released, "basics-structure").state).toBe("waiting");
+    expect(sectionOf(released, "basics-elements").state).toBe("waiting");
+    expect(sectionOf(released, "basics-stages").state).toBe("failed");
+
+    const expired = buildScrollStateView(input({ freeRun: running(LEASE_MS + 1_000), units: failedUnits }));
+    expect(expired.free.status).toBe("queued");
+    expect(sectionOf(expired, "basics-structure").state).toBe("waiting");
+    expect(sectionOf(expired, "basics-stages").state).toBe("failed");
+
+    // 유료 단계도 같다.
+    const paid = buildScrollStateView(
+      input({
+        entitled: true,
+        job: { ...running(), status: "queued", leaseUntil: null, referenceDate: "2026-11-12" },
+        units: [unit("ch3", { status: "failed", errorStage: "draft", draftAttempts: 1 }), unit("ch4", { status: "failed", errorStage: "draft", draftAttempts: 3 })],
+      }),
+    );
+    expect(sectionOf(paid, "ch3").state).toBe("waiting");
+    expect(sectionOf(paid, "ch4").state).toBe("failed");
+  });
+
+  it("단계 전체가 실패로 끝났으면 장별 실패 기록이 없어도 그 단계의 끝나지 않은 칸은 모두 실패다 (원국표·완성 칸·잠긴 칸 제외)", () => {
+    // 질문 정리 실패처럼 장을 쓰기 전에 단계가 실패했다 (reading_units 행이 없다).
+    const classifyFailed = { status: "failed", attempts: 1, leaseUntil: null, errorCode: "timeout", errorRetryable: true };
+    const free = buildScrollStateView(input({ freeRun: classifyFailed }));
+    expect(free.free).toEqual({ status: "failed", canRetry: true, errorCode: "timeout" });
+    expect(sectionOf(free, "chart")).toMatchObject({ state: "done", content: null });
+    for (const id of ["basics-structure", "basics-elements", "basics-stages", "basics-ten-gods", "ch1"]) {
+      expect(sectionOf(free, id)).toMatchObject({ state: "failed", content: null });
+    }
+    // 권한이 없으면 유료 칸은 잠금 그대로다.
+    expect(free.sections.filter((section) => section.tier === "paid").every((section) => section.state === "locked")).toBe(true);
+
+    // 저장 오류로 단계가 실패했다: 완성된 칸은 그대로, 초안만 있거나 행이 없는 칸은 실패다. 다시 시도할 수 없으면 canRetry가 false다.
+    const saveFailed = buildScrollStateView(
+      input({
+        freeRun: { ...classifyFailed, errorCode: "internal", errorRetryable: false },
+        units: [unit("basics-structure", { status: "done" }), unit("basics-elements", { status: "drafted" })],
+        finals: [{ sectionId: "basics-structure", tier: "free", content: content("basics-structure") }],
+      }),
+    );
+    expect(saveFailed.free).toMatchObject({ status: "failed", canRetry: false });
+    expect(sectionOf(saveFailed, "basics-structure").state).toBe("done");
+    expect(sectionOf(saveFailed, "basics-elements")).toMatchObject({ state: "failed", content: null });
+    expect(sectionOf(saveFailed, "ch1").state).toBe("failed");
+
+    // 유료 단계가 단계 단위로 실패했다 (기준일 고정 실패 등): 유료의 끝나지 않은 칸만 실패이고 무료 칸은 그대로다.
+    const paid = buildScrollStateView(
+      input({
+        entitled: true,
+        freeRun: { status: "completed", attempts: 1, leaseUntil: null, errorCode: null, errorRetryable: null },
+        job: { status: "failed", attempts: 2, leaseUntil: null, errorCode: "reference_date_unavailable", errorRetryable: true, referenceDate: null },
+        units: [unit("ch2", { status: "done" })],
+        finals: [
+          { sectionId: "ch1", tier: "free", content: content("ch1") },
+          { sectionId: "ch2", tier: "paid", content: content("ch2") },
+        ],
+      }),
+    );
+    expect(paid.paid).toMatchObject({ status: "failed", canRetry: true, errorCode: "reference_date_unavailable" });
+    expect(sectionOf(paid, "ch1").state).toBe("done");
+    expect(sectionOf(paid, "ch2").state).toBe("done");
+    for (const id of ["ch3", "ch4", "ch5", "ch6", "ch7", "ch8", "ch9", "ch10", "closing"]) {
+      expect(sectionOf(paid, id)).toMatchObject({ state: "failed", content: null });
+    }
+    // 끝나지 않은 무료 칸은 무료 단계가 실패가 아니면 실패로 바꾸지 않는다.
+    expect(sectionOf(paid, "basics-elements").state).toBe("waiting");
   });
 });
 
