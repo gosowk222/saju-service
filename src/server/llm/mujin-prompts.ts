@@ -16,10 +16,12 @@ import {
   type UserFactKind,
 } from "@/domain/mujin/types";
 import { addressFor, type Persona } from "@/domain/personas";
+import { seriousSignal, topicsOfSection, type ExampleRequest } from "@/domain/personas/examples";
 import type { ProductDefinition, ScrollProductDefinition } from "@/domain/products/types";
 import { READING_GUIDE, READING_GUIDE_VERSION } from "@/domain/reading/guide";
 import { ClassifierOutputSchema, seoulDate, type ClassifierOutput, type Reaction } from "@/domain/reading/question";
 import { FAMILY_LABEL } from "@/domain/rules/materials";
+import { buildExampleBlock, usesExamples, type ExampleRecord } from "./example-block";
 import { QUESTION_JSON_SCHEMA, buildQuestionPrompt, characterBlock } from "./prompts";
 
 /**
@@ -34,9 +36,15 @@ import { QUESTION_JSON_SCHEMA, buildQuestionPrompt, characterBlock } from "./pro
  * 버전은 묶음(bundle) 하나로 고정한다. 작업은 시작할 때 묶음 ID를 고정하고, 재시도와 이어 쓰기도 같은 묶음으로 만든다.
  * 지시나 형식을 바꿀 때는 기존 항목을 고치지 않고 새 버전과 새 묶음을 더한다. 한 번 쓴 번호는 되돌린 작업의 것이라도 다시 쓰지 않는다.
  * 재료의 내부 ID(규칙·결론·근거 ID, 규칙 버전, 월운 ID)는 입력에 넣지 않는다. 모델은 작성용 ref만 본다.
+ *
+ * 묶음:
+ * - mujin-1.1.0 (현재): Pass 2 mujin-voice-1.1.0과 후속 mujin-followup-1.1.0이 무진 문답 예시를 쓴다 (예시 블록은 example-block.ts).
+ *   Pass 2는 장마다 재작성 예시 하나(중립 초안 → 같은 뜻의 무진 설명)와 문답 하나를 받는다. 지시·입력·출력 형식과
+ *   Pass 1(mujin-draft-1.0.0, 예시 없음)·질문 정리(mujin-question-1.0.0, 예시 없음)·무진 설정(1.0.0)은 1.0.0 묶음과 같다.
+ * - mujin-1.0.0: 1.1.0 이전에 이 묶음으로 시작한 단계(무료·유료 각각)만. 예시 없음.
  */
 
-export const MUJIN_BUNDLE_VERSION = "mujin-1.0.0";
+export const MUJIN_BUNDLE_VERSION = "mujin-1.1.0";
 
 export interface MujinBundle {
   readonly id: string;
@@ -64,6 +72,18 @@ export const MUJIN_BUNDLES: Readonly<Record<string, MujinBundle>> = {
     questionPrompt: "mujin-question-1.0.0",
     questionSchema: "mujin-question-schema-1.0.0",
     followupPrompt: "mujin-followup-1.0.0",
+    personaVersion: "1.0.0",
+    guideVersion: READING_GUIDE_VERSION,
+  },
+  "mujin-1.1.0": {
+    id: "mujin-1.1.0",
+    draftPrompt: "mujin-draft-1.0.0",
+    draftSchema: "mujin-draft-schema-1.0.0",
+    voicePrompt: "mujin-voice-1.1.0",
+    voiceSchema: "mujin-voice-schema-1.0.0",
+    questionPrompt: "mujin-question-1.0.0",
+    questionSchema: "mujin-question-schema-1.0.0",
+    followupPrompt: "mujin-followup-1.1.0",
     personaVersion: "1.0.0",
     guideVersion: READING_GUIDE_VERSION,
   },
@@ -119,6 +139,8 @@ export interface BuiltRequest<T> {
   readonly schemaName: string;
   readonly jsonSchema: Record<string, unknown>;
   readonly parser: z.ZodType<T>;
+  /** 지시에 넣은 문답 예시 (예시를 쓰는 버전에서만, 그 밖은 null). 생성 기록에 남기고 모델 요청에는 지시 안의 블록으로만 간다. */
+  readonly examples: ExampleRecord | null;
 }
 
 export interface MujinDraftOutput {
@@ -141,6 +163,10 @@ export interface VoicePromptInput {
   /** 사용자가 알려 준 사실 (지금의 나, 궁금한 점에서 정리한 사실). 뜻을 바꾸지 않도록 함께 넘긴다. */
   readonly userFacts: readonly MujinMaterial[];
   readonly previousIssues?: readonly string[];
+  /** 출생 시각을 아는지 (mujin-voice-1.1.0의 예시 선택에만 쓴다. 입력에는 넣지 않는다). */
+  readonly hourKnown?: boolean;
+  /** 문답 예시를 고르는 순서 값 (풀이 ID). 장 ID와 합쳐 장마다 다른 예시가 고르게 나오고, 재시도에서는 같다. */
+  readonly exampleSeed?: string;
 }
 
 export interface MujinVoiceOutput {
@@ -618,8 +644,33 @@ const DRAFT_SCHEMAS: Readonly<Record<string, Schema<MujinDraftOutput>>> = {
   "mujin-draft-schema-1.0.0": { name: "mujin_draft", jsonSchema: DRAFT_JSON_SCHEMA_1_0_0, parser: DraftParser },
 };
 
-const VOICE_PROMPTS: Readonly<Record<string, (input: VoicePromptInput) => { readonly instructions: string; readonly input: string }>> = {
-  "mujin-voice-1.0.0": (input) => ({ instructions: [characterBlock(input.persona), VOICE_RULES_1_0_0].join("\n\n"), input: voiceInput1_0_0(input) }),
+/**
+ * Pass 2(mujin-voice-1.1.0)의 예시 선택 조건. 장의 주제와, 사용자가 처음 궁금한 점에 직접 쓴 사실만 본다 ('지금의 나' 선택지는 넣지 않는다).
+ * seed는 풀이 ID와 장 ID라 장마다 다른 예시가 고르게 나오고, 같은 장의 재시도는 같은 예시를 받는다.
+ */
+export function voiceExampleRequest(input: VoicePromptInput): Omit<ExampleRequest, "route"> {
+  return {
+    topics: topicsOfSection(input.section.sectionId),
+    long: true,
+    serious: seriousSignal(input.userFacts.filter((fact) => fact.source === "concern").map((fact) => fact.text)),
+    reaction: "none",
+    intents: [],
+    limited: false,
+    hourUnknown: input.hourKnown === false,
+    hasLastTurn: false,
+    seed: `${input.exampleSeed ?? "voice"}:${input.section.sectionId}`,
+  };
+}
+
+const VOICE_PROMPTS: Readonly<
+  Record<string, (input: VoicePromptInput) => { readonly instructions: string; readonly input: string; readonly examples: ExampleRecord | null }>
+> = {
+  "mujin-voice-1.0.0": (input) => ({ instructions: [characterBlock(input.persona), VOICE_RULES_1_0_0].join("\n\n"), input: voiceInput1_0_0(input), examples: null }),
+  // 1.0.0과 같은 지시·입력 끝에 무진 문답 예시 블록(재작성 예시 하나, 문답 하나)을 더한다.
+  "mujin-voice-1.1.0": (input) => {
+    const examples = buildExampleBlock("mujin-voice-1.1.0", input.persona, voiceExampleRequest(input));
+    return { instructions: [characterBlock(input.persona), VOICE_RULES_1_0_0, examples.text].join("\n\n"), input: voiceInput1_0_0(input), examples: examples.record };
+  },
 };
 
 const VOICE_SCHEMAS: Readonly<Record<string, Schema<MujinVoiceOutput>>> = {
@@ -640,18 +691,27 @@ function lookup<T>(table: Readonly<Record<string, T>>, version: string): T {
   return table[version]!;
 }
 
-/** Pass 1 초안 요청 (장 묶음 하나). 묶음에 없는 버전이면 prompt_version_unavailable을 던진다. */
+/** 모델 호출(callStructured·callStructuredStream)에 넘길 칸만. 예시 기록(examples)은 생성 기록에만 남기고 요청 인자에 섞지 않는다. */
+export function requestFields<T>(built: BuiltRequest<T>): Omit<BuiltRequest<T>, "examples"> {
+  return { instructions: built.instructions, input: built.input, schemaName: built.schemaName, jsonSchema: built.jsonSchema, parser: built.parser };
+}
+
+/**
+ * Pass 1 초안 요청 (장 묶음 하나). 묶음에 없는 버전이면 prompt_version_unavailable을 던진다.
+ * Pass 1은 캐릭터 없이 쓰는 중립 초안이라 문답 예시를 넣지 않는다 (examples는 늘 null).
+ */
 export function buildDraftRequest(input: DraftPromptInput): BuiltRequest<MujinDraftOutput> {
   const schema = lookup(DRAFT_SCHEMAS, input.bundle.draftSchema);
   const prompt = lookup(DRAFT_PROMPTS, input.bundle.draftPrompt)(input);
-  return { instructions: prompt.instructions, input: prompt.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser };
+  if (usesExamples(input.bundle.draftPrompt)) throw new Error(`examples_not_allowed: ${input.bundle.draftPrompt}`);
+  return { instructions: prompt.instructions, input: prompt.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser, examples: null };
 }
 
-/** Pass 2 무진 문장 요청 (장 하나). persona는 묶음의 무진 설정 버전이어야 한다. */
+/** Pass 2 무진 문장 요청 (장 하나). persona는 묶음의 무진 설정 버전이어야 한다. 1.1.0부터 무진 문답 예시가 지시 끝에 들어간다. */
 export function buildVoiceRequest(input: VoicePromptInput): BuiltRequest<MujinVoiceOutput> {
   const schema = lookup(VOICE_SCHEMAS, input.bundle.voiceSchema);
   const prompt = lookup(VOICE_PROMPTS, input.bundle.voicePrompt)(input);
-  return { instructions: prompt.instructions, input: prompt.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser };
+  return { instructions: prompt.instructions, input: prompt.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser, examples: prompt.examples };
 }
 
 /**
@@ -676,5 +736,5 @@ export function buildMujinQuestionRequest(input: {
     text: input.concern,
     lastTurn: null,
   });
-  return { instructions: instructionsFor(base.instructions), input: base.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser };
+  return { instructions: instructionsFor(base.instructions), input: base.input, schemaName: schema.name, jsonSchema: schema.jsonSchema, parser: schema.parser, examples: null };
 }

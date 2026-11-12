@@ -17,7 +17,7 @@ import {
 import type { LlmCallRecorder } from "@/server/llm/call-log";
 import { callStructured, type LlmCallLog } from "@/server/llm/client";
 import { LLM_SETTINGS } from "@/server/llm/config";
-import { buildMujinQuestionRequest, type MujinBundle, type MujinQuestionOutput } from "@/server/llm/mujin-prompts";
+import { buildMujinQuestionRequest, requestFields, type MujinBundle, type MujinQuestionOutput } from "@/server/llm/mujin-prompts";
 import type { UsageMeter } from "@/server/llm/usage";
 import { ScrollStepError } from "./config";
 import { SCROLL_QUESTION_KEY, createScrollStore, type AnalysisStore } from "./store";
@@ -88,7 +88,8 @@ export type ScrollClassifier = (input: ScrollClassifyInput) => Promise<MujinQues
 export function scrollClassifier(call: typeof callStructured = callStructured): ScrollClassifier {
   return async (input) => {
     const task = LLM_SETTINGS.tasks.classify;
-    const request = buildMujinQuestionRequest({ product: input.product, concern: input.concern, referenceDate: input.referenceDate, bundle: input.bundle });
+    // 질문 정리는 캐릭터 문장을 쓰지 않으므로 문답 예시가 없다.
+    const request = requestFields(buildMujinQuestionRequest({ product: input.product, concern: input.concern, referenceDate: input.referenceDate, bundle: input.bundle }));
     const result = await call({
       ...request,
       model: input.modelId,

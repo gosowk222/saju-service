@@ -199,7 +199,7 @@ describe("무료 단계 저장 (claim_free_run → save_unit_draft → save_unit
     const first = await store.claimFree({ ...claim, userId: user, readingId, maxAttempts: 8, dailyLimit: 10 });
     expect(first).toEqual({
       claimed: true,
-      run: { attempts: 1, modelId: "fake-model", promptVersion: "mujin-1.0.0", schemaVersion: bundle.draftSchema, reasoningEffort: "medium" },
+      run: { attempts: 1, modelId: "fake-model", promptVersion: "mujin-1.1.0", schemaVersion: bundle.draftSchema, reasoningEffort: "medium" },
     });
     expect(await store.claimFree({ ...claim, userId: user, readingId, maxAttempts: 8, dailyLimit: 10 })).toEqual({ claimed: false, reason: "running" });
     expect(await store.freeRunStatus(readingId)).toEqual({ status: "running", finalFailure: false });
@@ -523,7 +523,17 @@ describe("실행기와 실제 SQL 함수", () => {
       [readingId],
     );
     expect(free?.status).toBe("completed");
-    expect(job).toMatchObject({ status: "completed", prompt_version: "mujin-1.0.0", schema_version: bundle.voiceSchema });
+    expect(job).toMatchObject({ status: "completed", prompt_version: "mujin-1.1.0", schema_version: bundle.voiceSchema });
+    // 장마다 Pass 2 지시에 넣은 문답 예시의 버전과 ID가 최종문 기록(meta)에 남는다. 예시 문장은 남기지 않는다.
+    const metas = await sql<{ section_id: string; meta: { examples: { catalogVersion: string; policyVersion: string; ids: string[] } | null } }>(
+      `select section_id, meta from public.reading_sections where reading_id = $1`,
+      [readingId],
+    );
+    for (const row of metas) {
+      expect(row.meta.examples).toMatchObject({ catalogVersion: "mujin-examples-1.0.0", policyVersion: "example-select-1.0.0" });
+      expect(row.meta.examples!.ids[0]).toMatch(/^mujin-rw-/);
+      expect(JSON.stringify(row.meta)).not.toContain("무진:");
+    }
     expect(job?.reference_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const [ticket] = await sql<{ status: string }>(`select status from public.free_tickets where user_id = $1`, [user]);
     expect(ticket?.status).toBe("completed");

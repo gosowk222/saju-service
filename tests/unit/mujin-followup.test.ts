@@ -14,7 +14,13 @@ import { MUJIN_FEATURE_IDS } from "@/server/engine/features";
 import { analyzeTiming, type TimingRequest } from "@/server/engine/timing";
 import { createCallRecorder, type LlmCallRow } from "@/server/llm/call-log";
 import type { callStructured, callStructuredStream, LlmCallLog, StructuredRequest } from "@/server/llm/client";
-import { buildMujinFollowupRequest, hasMujinFollowupPrompt, MUJIN_FOLLOWUP_PROMPT_1_0_0, type MujinFollowupPromptInput } from "@/server/llm/mujin-followup-prompt";
+import {
+  buildMujinFollowupRequest,
+  hasMujinFollowupPrompt,
+  MUJIN_FOLLOWUP_PROMPT_1_0_0,
+  MUJIN_FOLLOWUP_PROMPT_1_1_0,
+  type MujinFollowupPromptInput,
+} from "@/server/llm/mujin-followup-prompt";
 import { MUJIN_BUNDLE_VERSION, MUJIN_BUNDLES } from "@/server/llm/mujin-prompts";
 import { buildFollowupPrompt, characterBlock, CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION } from "@/server/llm/prompts";
 import { askFollowup } from "@/server/readings/followup";
@@ -314,10 +320,12 @@ const promptInput = (overrides: Partial<MujinFollowupPromptInput> = {}): MujinFo
   ...overrides,
 });
 
-describe("무진 후속 질문 지시 (mujin-followup-1.0.0)", () => {
+describe("무진 후속 질문 지시 (mujin-followup-1.0.0·1.1.0)", () => {
   it("묶음의 후속 지시 이름과 같고, 무진 캐릭터 블록으로 시작하며 묘묘 전용 반말 문구가 없다", () => {
     const bundle = MUJIN_BUNDLES[MUJIN_BUNDLE_VERSION]!;
-    expect(bundle.followupPrompt).toBe(MUJIN_FOLLOWUP_PROMPT_1_0_0);
+    // 현재 묶음(mujin-1.1.0)은 1.0.0 지시 끝에 무진 문답 예시를 더한 1.1.0을 쓴다. 1.0.0도 남아 있다.
+    expect(bundle.followupPrompt).toBe(MUJIN_FOLLOWUP_PROMPT_1_1_0);
+    expect(hasMujinFollowupPrompt(MUJIN_FOLLOWUP_PROMPT_1_0_0)).toBe(true);
     expect(hasMujinFollowupPrompt(bundle.followupPrompt)).toBe(true);
     const request = buildMujinFollowupRequest(promptInput());
     expect(request.instructions.startsWith(characterBlock(MUJIN))).toBe(true);
@@ -349,7 +357,7 @@ describe("무진 후속 질문 지시 (mujin-followup-1.0.0)", () => {
       lastTurn: null,
       previousIssues: [],
     });
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.1.0");
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.2.0");
     expect(myomyo.instructions.startsWith(characterBlock(MYOMYO))).toBe(true);
     expect(myomyo.instructions).toContain("존댓말, 전문가의 인사말, 보고서 말투를 쓰지 않는다.");
   });
@@ -605,18 +613,34 @@ describe("무진 후속 질문 처리 (askScrollFollowup)", () => {
     expect(completed).toMatchObject({ followupId: FOLLOWUP_ID, userId: USER_ID, status: "answered", refs: [ch3.materials[0]!.ref] });
     expect(completed.meta).toMatchObject({
       modelId: "gpt-test",
-      promptVersion: "mujin-followup-1.0.0",
+      promptVersion: "mujin-followup-1.1.0",
       schemaVersion: "followup-output-2.2.0",
       personaVersion: MUJIN.version,
       usage: { calls: 2, inputTokens: 2000, cachedInputTokens: 1200, outputTokens: 400, totalTokens: 2400, complete: true },
-      analysis: { personaId: "mujin", personaVersion: MUJIN.version, bundle: MUJIN_BUNDLE_VERSION, timingReferenceDate: REFERENCE_DATE, sectionIds: ["ch3", "ch10"], reaction: "none" },
+      analysis: {
+        personaId: "mujin",
+        personaVersion: MUJIN.version,
+        bundle: MUJIN_BUNDLE_VERSION,
+        timingReferenceDate: REFERENCE_DATE,
+        sectionIds: ["ch3", "ch10"],
+        reaction: "none",
+        examples: { catalogVersion: "mujin-examples-1.0.0", policyVersion: "example-select-1.0.0", route: "followup", ids: expect.any(Array) },
+      },
     });
+    // 기록한 예시 ID가 실제로 모델에 보낸 지시의 예시 블록에 들어 있다 (입력에는 없다).
+    const recorded = (completed.meta as { analysis: { examples: { ids: string[] } } }).analysis.examples.ids;
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(request.instructions).toContain("[캐릭터 문답 예시: 무진 도사]");
+    for (const id of recorded) {
+      expect(request.instructions).toContain(`id="${id}"`);
+      expect(request.input).not.toContain(id);
+    }
     expect(record.failed).toEqual([]);
 
     // 호출 단위 기록: 질문 정리와 답변이 각각 한 줄이며 후속 질문 ID와 유료 단계, 버전이 붙는다.
     expect(rows.map((row) => [row.step, row.tier, row.unitId, row.followupId, row.promptVersion, row.schemaVersion, row.personaVersion])).toEqual([
       ["classify", "paid", null, FOLLOWUP_ID, "question-1.3.0", null, null],
-      ["followup", "paid", null, FOLLOWUP_ID, "mujin-followup-1.0.0", "followup-output-2.2.0", MUJIN.version],
+      ["followup", "paid", null, FOLLOWUP_ID, "mujin-followup-1.1.0", "followup-output-2.2.0", MUJIN.version],
     ]);
     expect(rows.every((row) => row.readingId === READING_ID && row.userId === USER_ID && row.productId === "mujin-overview")).toBe(true);
     // 호출 기록의 합은 followups.usage의 합계와 같다. 캐시 입력은 입력에 포함된 값이라 다시 더하지 않는다.

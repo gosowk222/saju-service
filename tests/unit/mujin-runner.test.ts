@@ -1020,7 +1020,10 @@ describe("유료 단계 (2~10장과 마지막 정리)", () => {
     expect(paidStreams.map((call) => call.input.timing !== null)).toEqual([false, false, false, true, false]);
     expect(PAID_IDS.every((id) => env.store.unit(readingId, id)?.status === "done" && env.store.unit(readingId, id)?.tier === "paid")).toBe(true);
     expect(env.store.log).toContain("complete:paid@1");
-    expect(env.store.completeMeta).toMatchObject({ llmCalls: expect.any(Number), versions: { bundle: "mujin-1.0.0", referenceDate: "2026-11-12" } });
+    expect(env.store.completeMeta).toMatchObject({
+      llmCalls: expect.any(Number),
+      versions: { bundle: "mujin-1.1.0", voicePrompt: "mujin-voice-1.1.0", exampleCatalog: "mujin-examples-1.0.0", examplePolicy: "example-select-1.0.0", referenceDate: "2026-11-12" },
+    });
     // 질문 정리는 무료 단계에서 한 번만 했다.
     expect(env.llm.classifyCalls).toBe(1);
     // 유료 단계는 모든 질문을 넘기고, 마지막 정리는 질문마다 답한다.
@@ -1085,7 +1088,8 @@ describe("호출 기록 태그", () => {
     expect(pick("paid", "pass2")).toEqual([...PAID_IDS].sort());
     expect(rows.every((row) => row.readingId === readingId && row.userId === USER && row.productId === "mujin-overview")).toBe(true);
     expect(rows.filter((row) => row.step === "pass1").every((row) => row.promptVersion === "mujin-draft-1.0.0" && row.personaVersion === null)).toBe(true);
-    expect(rows.filter((row) => row.step === "pass2").every((row) => row.promptVersion === "mujin-voice-1.0.0" && row.personaVersion === "1.0.0")).toBe(true);
+    // Pass 2는 문답 예시를 쓰는 mujin-voice-1.1.0 (묶음 mujin-1.1.0). 호출 기록의 prompt_version으로 예시 전후의 토큰을 나눠 볼 수 있다.
+    expect(rows.filter((row) => row.step === "pass2").every((row) => row.promptVersion === "mujin-voice-1.1.0" && row.personaVersion === "1.0.0")).toBe(true);
     expect(rows.filter((row) => row.step === "classify").every((row) => row.promptVersion === "mujin-question-1.0.0")).toBe(true);
     // 호출마다 새 키로 남는다 (재시도가 앞 기록을 덮지 않는다).
     expect(new Set(rows.map((row) => row.callKey)).size).toBe(rows.length);

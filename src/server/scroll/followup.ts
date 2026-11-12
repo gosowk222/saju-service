@@ -56,6 +56,7 @@ import type { TimingRequest } from "@/server/engine/timing";
 import { createCallRecorder, supabaseCallWriter, type LlmCallRecorder, type LlmCallStep } from "@/server/llm/call-log";
 import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmCallLog, type StreamedResult } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
+import type { ExampleRecord } from "@/server/llm/example-block";
 import {
   buildMujinFollowupRequest,
   MUJIN_FOLLOWUP_SCHEMA_VERSION,
@@ -713,7 +714,14 @@ export async function answerMujinFollowup(input: {
   readonly stream: typeof callStructuredStream;
   readonly meter: UsageMeter;
   readonly onCall?: (log: LlmCallLog) => void;
-}): Promise<{ readonly output: FollowupOutputV2; readonly actualModel: string | null; readonly calls: number; readonly issueCount: number }> {
+}): Promise<{
+  readonly output: FollowupOutputV2;
+  readonly actualModel: string | null;
+  readonly calls: number;
+  readonly issueCount: number;
+  /** 지시에 넣은 문답 예시 (mujin-followup-1.1.0부터, 그 전 버전은 null). */
+  readonly examples: ExampleRecord | null;
+}> {
   const task = LLM_SETTINGS.tasks.followup;
   const order = input.check.questionRefs;
   const sent = new Map<string, string[]>();
@@ -725,10 +733,12 @@ export async function answerMujinFollowup(input: {
   let actualModel: string | null = null;
   let calls = 0;
   let issueCount = 0;
+  let examples: ExampleRecord | null = null;
 
   for (let round = 0; round <= LLM_SETTINGS.validationRetries; round += 1) {
     if (round > 0 && input.deadlineAt !== undefined && Date.now() + task.timeoutMs > input.deadlineAt) break;
     const request = buildMujinFollowupRequest({ ...input.prompt, previousIssues, alreadySent: snapshot() });
+    examples = request.examples;
     const checker = mujinFollowupChecker(input.check, input.chart);
     const issues: string[] = [];
     const checkedSections = new Set<number>();
@@ -797,7 +807,7 @@ export async function answerMujinFollowup(input: {
         if (sent.size) issues.push("이미 답을 보내기 시작했으니 되묻지 말고 이어서 답한다.");
         else {
           const found = checker.clarify(question);
-          if (!found.length) return { output: { mode: "clarify", sections: [], clarifyQuestion: question }, actualModel, calls, issueCount };
+          if (!found.length) return { output: { mode: "clarify", sections: [], clarifyQuestion: question }, actualModel, calls, issueCount, examples };
           issues.push(...found);
         }
       } else {
@@ -811,7 +821,7 @@ export async function answerMujinFollowup(input: {
             clarifyQuestion: "",
           };
           // 길이 기준은 이미 보낸 뒤라 고칠 수 없다. 넘으면 기록만 한다.
-          return { output, actualModel, calls, issueCount: issueCount + (checker.overLength(texts) ? 1 : 0) };
+          return { output, actualModel, calls, issueCount: issueCount + (checker.overLength(texts) ? 1 : 0), examples };
         }
       }
     }
@@ -833,6 +843,8 @@ function analysisRecord(
     readonly sectionIds: readonly string[];
     /** 고정된 12개월 밖이라 따로 살펴본 분야·기간 (예: career:2028-07..2028-12). 질문 문장은 넣지 않는다. */
     readonly extraPeriods: readonly string[];
+    /** 답변 지시에 넣은 문답 예시의 카탈로그·정책 버전과 ID. 모델 없이 고정 문장으로 답했으면 null. */
+    readonly examples: ExampleRecord | null;
   },
 ) {
   return {
@@ -940,6 +952,8 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
     let timingReferenceDate: string | null = null;
     let sectionIds: readonly string[] = [];
+    /** 답변 지시에 넣은 문답 예시. 모델 없이 고정 문장으로 답하면 null이다. */
+    let examples: ExampleRecord | null = null;
     /** 고정된 12개월 밖이라 따로 계산(또는 저장된 것을 사용)한 분야·기간. */
     let extraPeriods: readonly string[] = [];
     const items = inScopeItems(analysis);
@@ -1003,6 +1017,8 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
           timing: material.timing,
           lastTurn: context.lastTurn,
           reaction: reactionOf(analysis),
+          // 문답 예시(mujin-followup-1.1.0부터)를 고르는 순서 값. 같은 질문의 재작성에서 같은 예시를 받는다.
+          exampleSeed: followupId,
         },
         check,
         chart: context.chart,
@@ -1015,6 +1031,7 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
         publish: (partial) => deps.store.publish(followupId, partial),
       });
       actualModel = answered.actualModel ?? actualModel;
+      examples = answered.examples;
 
       if (answered.output.mode === "clarify") {
         result = { status: "clarify", answer: `${answered.output.clarifyQuestion.trim()}\n\n${persona.lines.notCharged}`, refs: [] };
@@ -1052,6 +1069,7 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
           timingReferenceDate,
           sectionIds,
           extraPeriods,
+          examples,
         }),
       },
     });
