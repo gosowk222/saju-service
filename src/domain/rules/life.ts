@@ -100,10 +100,12 @@ function familyRule(sink?: RuleDetailSink): InquiryRule {
         hold: partial && (nearThreshold(resource, 25, 3) || nearThreshold(resource, 12, 3) || nearThreshold(wealth, 25, 3)),
         support: [families],
         caveats: [FAMILY_CAVEAT],
-        detail: textDetail("부모와의 관계", FAMILY_PARENTS[parents], [
-          `어머니·보살핀 어른으로 보는 ${percentText("resource", percents)}`,
-          `아버지·집안의 현실로 보는 ${percentText("wealth", percents)}`,
-        ]),
+        detail: textDetail(
+          "부모와의 관계",
+          FAMILY_PARENTS[parents],
+          [`어머니·보살핀 어른으로 보는 ${percentText("resource", percents)}`, `아버지·집안의 현실로 보는 ${percentText("wealth", percents)}`],
+          { variant: parents },
+        ),
       });
 
       const siblings = peer >= 30 && robbers >= 1 ? "rival" : peer <= 12 && !observedOnlyMissing(context, "peer") ? "alone" : peer >= 18 ? "close" : null;
@@ -114,10 +116,12 @@ function familyRule(sink?: RuleDetailSink): InquiryRule {
           hold: partial && nearThreshold(peer, siblings === "rival" ? 30 : siblings === "alone" ? 12 : 18, 3),
           support: [families],
           caveats: [FAMILY_CAVEAT],
-          detail: textDetail("형제·자매와의 관계", FAMILY_SIBLINGS[siblings], [
-            `형제·또래로 보는 ${percentText("peer", percents)}`,
-            ...(robbers ? [`원국에 겁재 ${robbers}개`] : []),
-          ]),
+          detail: textDetail(
+            "형제·자매와의 관계",
+            FAMILY_SIBLINGS[siblings],
+            [`형제·또래로 보는 ${percentText("peer", percents)}`, ...(robbers ? [`원국에 겁재 ${robbers}개`] : [])],
+            { variant: siblings },
+          ),
         });
       }
 
@@ -133,10 +137,15 @@ function familyRule(sink?: RuleDetailSink): InquiryRule {
           hold: !hourKnown(context) || (partial && nearThreshold(value, 25, 3)),
           support: [families],
           caveats: [FAMILY_CAVEAT],
-          detail: textDetail("자녀와의 인연", FAMILY_CHILDREN[children], [
-            `${gender === "male" ? "남성" : "여성"}의 자녀로 보는 ${percentText(childFamily, percents)}`,
-            ...(hourKnown(context) ? [] : ["태어난 시간을 몰라 자녀 자리(시주)는 보지 못함"]),
-          ]),
+          detail: textDetail(
+            "자녀와의 인연",
+            FAMILY_CHILDREN[children],
+            [
+              `${gender === "male" ? "남성" : "여성"}의 자녀로 보는 ${percentText(childFamily, percents)}`,
+              ...(hourKnown(context) ? [] : ["태어난 시간을 몰라 자녀 자리(시주)는 보지 못함"]),
+            ],
+            { variant: children },
+          ),
         });
       }
 
@@ -154,11 +163,16 @@ function familyRule(sink?: RuleDetailSink): InquiryRule {
           text: FAMILY_EARLY[early].claim,
           support: early === "turbulent" ? opposing : binding,
           caveats: [FAMILY_CAVEAT],
-          detail: textDetail("집안 분위기와 성장기", FAMILY_EARLY[early], [
-            early === "turbulent"
-              ? "연주(어린 시절 자리)와 월주(성장기·부모 자리) 사이에 충·형·원진 같은 부딪힘 관계"
-              : "연주(어린 시절 자리)와 월주(성장기·부모 자리) 사이에 합 관계",
-          ]),
+          detail: textDetail(
+            "집안 분위기와 성장기",
+            FAMILY_EARLY[early],
+            [
+              early === "turbulent"
+                ? "연주(어린 시절 자리)와 월주(성장기·부모 자리) 사이에 충·형·원진 같은 부딪힘 관계"
+                : "연주(어린 시절 자리)와 월주(성장기·부모 자리) 사이에 합 관계",
+            ],
+            { variant: early },
+          ),
         });
       }
       return out.drafts.slice(0, 4);
@@ -192,6 +206,7 @@ function friendsRule(sink?: RuleDetailSink): InquiryRule {
           "인복의 정도",
           FRIENDS_FORTUNE[fortune],
           gwiin.length ? [`원국에 ${gwiin.map((item) => GWIIN_LABEL[item.id]).join("·")} 신살 표지`] : [`귀인 신살 표지가 없고 ${percentText("peer", percents)}`],
+          { variant: fortune },
         ),
       });
 
@@ -201,7 +216,7 @@ function friendsRule(sink?: RuleDetailSink): InquiryRule {
         text: FRIENDS_IMAGE[first].claim,
         hold: partial && percents[first] - percents[second] <= IMAGE_HOLD_MARGIN,
         support: [families],
-        detail: textDetail("친구들이 보는 나", FRIENDS_IMAGE[first], [`십성 계열 중 ${percentText(first, percents)}가 가장 큼`]),
+        detail: textDetail("친구들이 보는 나", FRIENDS_IMAGE[first], [`십성 계열 중 ${percentText(first, percents)}가 가장 큼`], { variant: first }),
       });
 
       const usefulGods = findJudgment(context.evidence, "m01.assessment.useful-gods");
@@ -217,6 +232,7 @@ function friendsRule(sink?: RuleDetailSink): InquiryRule {
             aspect: "잘 맞는 친구 유형",
             basis: [`용신(가장 필요한 기운)이 ${elementText(useful)}로 계산됨`],
             action: "그런 친구와의 약속은 한 달에 한 번이라도 내가 먼저 잡아 보기",
+            variant: useful,
           },
         });
       }
@@ -237,6 +253,7 @@ function friendsRule(sink?: RuleDetailSink): InquiryRule {
               cost: "만나고 오면 이유 없이 지치고 내 일에 쓸 힘이 줄어요",
               change: "만나는 횟수와 시간을 미리 정해 두고 그 안에서만 만나기",
             },
+            variant: drain,
           },
         });
       }
@@ -273,6 +290,7 @@ function placeRule(sink?: RuleDetailSink): InquiryRule {
           aspect: "잘 맞는 지역과 환경",
           basis: [...basis, ...(drain ? [`기신(부담이 되는 기운)은 ${elementText(drain)}`] : [])],
           ...(drain ? { weakness: ELEMENT_PLACE_WEAKNESS[drain] } : {}),
+          variant: useful,
         },
       });
 
@@ -285,7 +303,7 @@ function placeRule(sink?: RuleDetailSink): InquiryRule {
         hold: move === "rooted",
         support: yeokma.length ? yeokma : [usefulGods],
         caveats: yeokma.length ? [SHINSAL_CAVEAT] : [TRADITION_CAVEAT],
-        detail: textDetail("해외·이동 운", MOVE_TEXT[move], [yeokma.length ? "원국에 역마 신살 표지" : "원국에 역마 신살 표지가 없음"]),
+        detail: textDetail("해외·이동 운", MOVE_TEXT[move], [yeokma.length ? "원국에 역마 신살 표지" : "원국에 역마 신살 표지가 없음"], { variant: move }),
       });
 
       const luck = ELEMENT_LUCK[useful];
@@ -302,6 +320,7 @@ function placeRule(sink?: RuleDetailSink): InquiryRule {
           action: `면접, 계약, 이사처럼 중요한 날에 ${luck.colors} 소품을 하나 챙기거나 ${withJosa(luck.direction, "을/를")} 향한 자리를 골라 보기${
             helpful ? `. 보조로는 ${ELEMENT_LUCK[helpful].colors}도 잘 맞음` : ""
           }`,
+          variant: useful,
         },
       });
 
@@ -311,7 +330,7 @@ function placeRule(sink?: RuleDetailSink): InquiryRule {
         hold: partial,
         support: [usefulGods],
         caveats: [TRADITION_CAVEAT],
-        detail: textDetail("생활 속 개운 습관", ELEMENT_HABIT[useful], basis),
+        detail: textDetail("생활 속 개운 습관", ELEMENT_HABIT[useful], basis, { variant: useful }),
       });
       return out.drafts.slice(0, 4);
     },
@@ -342,10 +361,15 @@ function energyRule(sink?: RuleDetailSink): InquiryRule {
         hold: isPartial(context),
         support,
         caveats: [HEALTH_CAVEAT],
-        detail: textDetail("에너지와 컨디션 관리", ENERGY_TEXT[key], [
-          ...(band ? [`일간의 힘이 ${STRENGTH_LABEL[context.assessment!.strength!]}`] : []),
-          ...(dominant && percent ? [`오행 중 ${dominant}(${ELEMENT_HANJA[dominant]})이 ${percent[dominant]}%로 가장 많음`] : []),
-        ]),
+        detail: textDetail(
+          "에너지와 컨디션 관리",
+          ENERGY_TEXT[key],
+          [
+            ...(band ? [`일간의 힘이 ${STRENGTH_LABEL[context.assessment!.strength!]}`] : []),
+            ...(dominant && percent ? [`오행 중 ${dominant}(${ELEMENT_HANJA[dominant]})이 ${percent[dominant]}%로 가장 많음`] : []),
+          ],
+          { variant: key },
+        ),
       });
       return out.drafts;
     },
@@ -386,11 +410,12 @@ function investmentRule(sink?: RuleDetailSink): InquiryRule {
         hold: partial && (nearThreshold(peer, 25, 3) || nearThreshold(resource, 25, 3) || nearThreshold(authority, 20, 3)),
         support: [families, style === "opportunity" ? pairObservation(context.evidence, "output", "wealth") : undefined],
         caveats: [INVEST_CAVEAT],
-        detail: textDetail("투자 성향과 방식", INVESTMENT_STYLE[style], [
-          `원국에 편재 ${indirect}개, 정재 ${direct}개, 겁재 ${robbers}개`,
-          percentText("peer", percents),
-          percentText(style === "study" ? "resource" : "wealth", percents),
-        ]),
+        detail: textDetail(
+          "투자 성향과 방식",
+          INVESTMENT_STYLE[style],
+          [`원국에 편재 ${indirect}개, 정재 ${direct}개, 겁재 ${robbers}개`, percentText("peer", percents), percentText(style === "study" ? "resource" : "wealth", percents)],
+          { variant: style },
+        ),
       });
       return out.drafts;
     },
@@ -419,7 +444,7 @@ function jobsRule(sink?: RuleDetailSink): InquiryRule {
         hold: partial && second !== undefined && nearThreshold(percents[top], percents[second], 5),
         support: [families],
         caveats: [JOB_CAVEAT],
-        detail: textDetail("어울리는 직업", FAMILY_JOBS[top], [`가장 큰 계열 ${percentText(top, percents)}`]),
+        detail: textDetail("어울리는 직업", FAMILY_JOBS[top], [`가장 큰 계열 ${percentText(top, percents)}`], { variant: top }),
       });
 
       const usefulGods = findJudgment(context.evidence, "m01.assessment.useful-gods");
@@ -435,6 +460,7 @@ function jobsRule(sink?: RuleDetailSink): InquiryRule {
             aspect: "인연 있는 업종",
             basis: [`용신(가장 필요한 기운)이 ${elementText(useful)}로 계산됨`, "오행의 전통 대응(업종)으로 옮김"],
             action: "진로나 이직을 고를 때 하는 일이 비슷하면 이 분야의 회사를 먼저 살펴보기",
+            variant: useful,
           },
         });
       }
