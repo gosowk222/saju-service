@@ -893,9 +893,10 @@ export async function runScrollTier(input: {
 
   if (tier === "paid") {
     // 권한 없이 유료 장을 시작하지 않는다 (DB의 claim과 저장 함수도 다시 확인한다). 무료 1장이 먼저 보여야 하고 질문 분석도 무료 단계에서 저장된다.
-    const [entitled, freeStatus] = await Promise.all([deps.store.hasEntitlement(readingId, userId), deps.store.freeRunStatus(readingId)]);
+    // 다만 무료 단계가 더 다시 시도할 수 없는 실패로 끝났으면, 구매한 유료 장까지 막지 않는다 (질문 분석이 없으면 유료 단계가 정리한다).
+    const [entitled, free] = await Promise.all([deps.store.hasEntitlement(readingId, userId), deps.store.freeRunStatus(readingId)]);
     if (!entitled) return "locked";
-    if (freeStatus !== "completed") return "not_ready";
+    if (free?.status !== "completed" && !free?.finalFailure) return "not_ready";
   }
 
   const claim = await claimTier(deps.store, { userId, readingId, tier, retry: input.retry });

@@ -13,7 +13,7 @@ import { SCROLL_SETTINGS } from "@/server/scroll/config";
 import type { ScrollClassifier } from "@/server/scroll/questions";
 import { runScrollTier, type RunnerDeps } from "@/server/scroll/runner";
 import { buildScrollStateView } from "@/server/scroll/state";
-import type { ClaimOutcome, ClaimRequest, FinalSection, ScrollReadingRecord, ScrollStore, UnitRecord, UnitWrite } from "@/server/scroll/store";
+import { isFinalFreeFailure, type ClaimOutcome, type ClaimRequest, type FinalSection, type ScrollReadingRecord, type ScrollStore, type UnitRecord, type UnitWrite } from "@/server/scroll/store";
 
 /**
  * 무진 생성 실행기(runner.ts). DB와 LLM 없이 가짜 저장소(SQL 함수와 같은 규칙)와 가짜 LLM을 넣어 순서와 저장을 확인한다.
@@ -76,6 +76,8 @@ class MemoryStore implements ScrollStore {
   readonly readings = new Map<string, { reading: ScrollReadingRecord; plan: MujinPlan }>();
   readonly entitled = new Set<string>();
   readonly freeRuns = new Map<string, RunRow>();
+  /** 무료 단계가 더 다시 시도할 수 없는 실패로 끝난 풀이. */
+  readonly finalFreeFailure = new Set<string>();
   readonly jobs = new Map<string, RunRow>();
   readonly units = new Map<string, UnitRecord>();
   readonly finals = new Map<string, FinalSection & { readonly meta: Record<string, unknown> }>();
@@ -202,7 +204,9 @@ class MemoryStore implements ScrollStore {
     return this.entitled.has(readingId);
   }
   async freeRunStatus(readingId: string) {
-    return this.freeRuns.get(readingId)?.status ?? null;
+    const run = this.freeRuns.get(readingId);
+    if (!run) return null;
+    return { status: run.status, finalFailure: this.finalFreeFailure.has(readingId) };
   }
   async claimFree(request: ClaimRequest & { readonly dailyLimit: number }) {
     return this.claim(this.freeRuns, request, true);
@@ -733,6 +737,17 @@ describe("무료 단계 (기초 분석 4개와 1장)", () => {
   });
 });
 
+describe("무료 단계 최종 실패 판정 (isFinalFreeFailure)", () => {
+  it("실패이면서 재시도 불가이거나 시작 횟수 상한에 닿았을 때만 최종 실패다", () => {
+    expect(isFinalFreeFailure({ status: "failed", attempts: 1, error_retryable: false }, 8)).toBe(true);
+    expect(isFinalFreeFailure({ status: "failed", attempts: 8, error_retryable: true }, 8)).toBe(true);
+    expect(isFinalFreeFailure({ status: "failed", attempts: 2, error_retryable: true }, 8)).toBe(false);
+    expect(isFinalFreeFailure({ status: "failed", attempts: 2, error_retryable: null }, 8)).toBe(false);
+    expect(isFinalFreeFailure({ status: "completed", attempts: 8, error_retryable: false }, 8)).toBe(false);
+    expect(isFinalFreeFailure({ status: "running", attempts: 8, error_retryable: null }, 8)).toBe(false);
+  });
+});
+
 describe("유료 단계 (2~10장과 마지막 정리)", () => {
   it("권한이 없으면 locked, 무료 단계가 끝나지 않았으면 not_ready이고 유료 Pass 1 호출은 0이다", async () => {
     const env = setup();
@@ -748,6 +763,30 @@ describe("유료 단계 (2~10장과 마지막 정리)", () => {
     env.store.entitled.add(closed);
     expect(await env.run(closed, "paid")).toBe("locked");
     expect(env.llm.streams.some((call) => call.sections.some((id) => PAID_IDS.includes(id)))).toBe(false);
+  });
+
+  it("무료 단계가 다시 시도할 수 없는 실패로 끝났으면 구매한 유료 장은 시작한다 (재시도 가능한 실패면 not_ready)", async () => {
+    const env = setup();
+    const readingId = env.store.addReading();
+    env.store.entitle(readingId);
+    env.store.freeRuns.set(readingId, {
+      status: "failed",
+      attempts: 2,
+      leaseUntil: null,
+      modelId: null,
+      promptVersion: null,
+      schemaVersion: null,
+      reasoningEffort: null,
+      errorCode: "units_failed",
+      errorRetryable: true,
+      referenceDate: null,
+    });
+    expect(await env.run(readingId, "paid")).toBe("not_ready");
+    expect(env.llm.llmCalls).toBe(0);
+
+    env.store.finalFreeFailure.add(readingId);
+    expect(await env.run(readingId, "paid")).not.toBe("not_ready");
+    expect(env.llm.streams.some((call) => call.sections.some((id) => PAID_IDS.includes(id)))).toBe(true);
   });
 
   it("권한이 있으면 유료 장을 모두 쓰고, 마지막 정리까지 마친 뒤 작업과 이용권을 함께 완료한다", async () => {

@@ -4,6 +4,7 @@ import type { PublicBirthInput } from "sajuengine";
 import type { MujinPlan, MujinTimingBundle, ScrollDraftContent, ScrollSectionContent, ScrollTier } from "@/domain/mujin/types";
 import type { ChartView } from "@/domain/reading/types";
 import { supabaseCallWriter, type LlmCallRow } from "@/server/llm/call-log";
+import { SCROLL_SETTINGS } from "./config";
 
 /**
  * 무진 족자 생성의 저장소 래퍼. 모든 쓰기는 supabase/migrations의 서버 전용 함수(RPC)로 한다
@@ -105,12 +106,25 @@ export interface AnalysisStore {
   saveAnalysis<T>(readingId: string, cacheKey: string, kind: "question" | "timing", version: string, payload: T): Promise<{ readonly saved: boolean; readonly payload: T }>;
 }
 
+export interface FreeRunState {
+  readonly status: string;
+  readonly finalFailure: boolean;
+}
+
+/** 무료 단계가 더 다시 시도할 수 없는 실패로 끝났는지. 재시도 가능 여부를 모르면(null) 시작 횟수만 본다. */
+export function isFinalFreeFailure(run: { readonly status: string; readonly attempts: number; readonly error_retryable: boolean | null }, maxRuns: number): boolean {
+  return run.status === "failed" && (run.error_retryable === false || run.attempts >= maxRuns);
+}
+
 /** 생성 실행기(runner.ts)가 쓰는 저장소. 테스트는 같은 모양의 가짜를 넣어 DB 없이 순서와 저장을 확인한다. */
 export interface ScrollStore extends AnalysisStore {
   loadReading(readingId: string, userId: string): Promise<{ readonly reading: ScrollReadingRecord; readonly plan: MujinPlan } | null>;
   hasEntitlement(readingId: string, userId: string): Promise<boolean>;
-  /** 무료 단계 실행 행의 상태 (queued | running | completed | failed). 행이 없으면 null. */
-  freeRunStatus(readingId: string): Promise<string | null>;
+  /**
+   * 무료 단계 실행 행의 상태 (queued | running | completed | failed). 행이 없으면 null.
+   * finalFailure: 실패했고 더 다시 시도할 수 없다(재시도 불가 오류이거나 시작 횟수 상한에 닿음).
+   */
+  freeRunStatus(readingId: string): Promise<FreeRunState | null>;
   claimFree(request: ClaimRequest & { readonly dailyLimit: number }): Promise<ClaimOutcome>;
   claimPaid(request: ClaimRequest): Promise<ClaimOutcome>;
   /** 첫 유료 생성 때 기준일을 고정하고, 이미 있으면 고정된 값을 돌려준다. 작업이 없거나 닫혔으면 null. */
@@ -270,10 +284,12 @@ export function createScrollStore(admin: Db): ScrollStore {
     },
 
     async freeRunStatus(readingId) {
-      const row = rowsOrNull(await admin.from("reading_free_runs").select("status").eq("reading_id", readingId).maybeSingle(), "scroll_free_run_load_failed") as {
-        status: string;
-      } | null;
-      return row?.status ?? null;
+      const row = rowsOrNull(
+        await admin.from("reading_free_runs").select("status, attempts, error_retryable").eq("reading_id", readingId).maybeSingle(),
+        "scroll_free_run_load_failed",
+      ) as { status: string; attempts: number; error_retryable: boolean | null } | null;
+      if (!row) return null;
+      return { status: row.status, finalFailure: isFinalFreeFailure(row, SCROLL_SETTINGS.freeMaxRuns) };
     },
 
     async claimFree(request) {

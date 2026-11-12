@@ -192,7 +192,7 @@ describe("무료 단계 저장 (claim_free_run → save_unit_draft → save_unit
       run: { attempts: 1, modelId: "fake-model", promptVersion: "mujin-1.0.0", schemaVersion: bundle.draftSchema, reasoningEffort: "medium" },
     });
     expect(await store.claimFree({ ...claim, userId: user, readingId, maxAttempts: 8, dailyLimit: 10 })).toEqual({ claimed: false, reason: "running" });
-    expect(await store.freeRunStatus(readingId)).toBe("running");
+    expect(await store.freeRunStatus(readingId)).toEqual({ status: "running", finalFailure: false });
 
     expect(await store.saveDraft({ readingId, tier: "free", attempt: 1, unitId: "ch1", draft: draftOf("ch1"), meta: { batchId: "free-ch1" } })).toBe(true);
     // 시도 번호가 다른 실행(이어받기 전의 늦은 응답)은 저장하지 못한다.
@@ -217,7 +217,7 @@ describe("무료 단계 저장 (claim_free_run → save_unit_draft → save_unit
 
     expect(await store.completeRun("free", readingId, 2, {})).toBe(false);
     expect(await store.completeRun("free", readingId, 1, {})).toBe(true);
-    expect(await store.freeRunStatus(readingId)).toBe("completed");
+    expect(await store.freeRunStatus(readingId)).toEqual({ status: "completed", finalFailure: false });
     expect(await store.claimFree({ ...claim, userId: user, readingId, maxAttempts: 8, dailyLimit: 10 })).toEqual({ claimed: false, reason: "completed" });
   });
 
@@ -230,7 +230,7 @@ describe("무료 단계 저장 (claim_free_run → save_unit_draft → save_unit
     expect(await store.claimFree(request)).toMatchObject({ claimed: true, run: { attempts: 1 } });
     expect(await store.releaseRun("free", readingId, 2)).toBe(false);
     expect(await store.releaseRun("free", readingId, 1)).toBe(true);
-    expect(await store.freeRunStatus(readingId)).toBe("queued");
+    expect(await store.freeRunStatus(readingId)).toEqual({ status: "queued", finalFailure: false });
     expect(await store.claimFree(request)).toMatchObject({ claimed: true, run: { attempts: 2 } });
     // 반납한 실행의 늦은 저장은 거부된다.
     expect(await store.saveDraft({ readingId, tier: "free", attempt: 1, unitId: "ch1", draft: draftOf("ch1"), meta: {} })).toBe(false);
