@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/layout";
@@ -17,6 +17,7 @@ interface RedeemResponse {
  */
 export function RedeemButton({ readingId }: { readingId: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const requestId = useRef<string | null>(null);
   const [pending, setPending] = useState(false);
   const [navigating, startNavigation] = useTransition();
@@ -36,7 +37,9 @@ export function RedeemButton({ readingId }: { readingId: string }) {
         setUsedElsewhere(result.readingId);
         return;
       }
-      startNavigation(() => router.replace(`/readings/${result.readingId}`));
+      const target = `/readings/${result.readingId}`;
+      // 족자 상품은 이용권을 쓰는 화면이 곧 풀이 화면이다. 주소가 같으면 이동 대신 서버 상태를 다시 그린다.
+      startNavigation(() => (pathname === target ? router.refresh() : router.replace(target)));
     } catch (failure) {
       // 네트워크가 끊겨 결과를 모르면 같은 요청 ID로 다시 보낸다. 서버는 이미 처리한 요청이면 같은 결과를 돌려준다.
       if (!(failure instanceof ClientApiError) || failure.status !== 0) requestId.current = null;

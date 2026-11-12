@@ -57,6 +57,15 @@ export class UsageMeter {
   }
 }
 
+/**
+ * 호출 단위 기록(client.ts의 LlmCallLog)을 UsageMeter와 같은 기록 종류로 바꾼다.
+ * 호출 기록을 모아 summarizeUsage로 합치면 같은 호출을 센 UsageMeter의 합계와 같다.
+ */
+export function usageRecordOf(log: { readonly outcome: UsageRecord["kind"]; readonly usage: LlmUsage | null }): UsageRecord {
+  if (log.outcome === "usage" && log.usage) return { kind: "usage", usage: log.usage };
+  return log.outcome === "rejected" ? { kind: "rejected" } : { kind: "unknown" };
+}
+
 export function summarizeUsage(records: readonly UsageRecord[]): UsageSummary {
   const used = records.flatMap((entry) => (entry.kind === "usage" ? [entry.usage] : []));
   const callsWithoutUsage = records.filter((entry) => entry.kind === "unknown").length;

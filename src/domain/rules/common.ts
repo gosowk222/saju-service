@@ -62,6 +62,12 @@ export interface RuleDetail {
   readonly counterNote?: string;
   readonly compare?: CompareDetail;
   readonly timing?: TimingDetail;
+  /**
+   * 규칙이 고른 변형 키 (문장표의 키. 예: 기본 성향 core의 "resource", 경계 boundary의 "porous").
+   * 여러 갈래를 함께 고르면 '+'로 잇는다 (예: 강점 환경 "munchang+hwagae"). 무진 의미 태그표(src/domain/mujin/tags.ts)의
+   * 열쇠로만 쓴다. 묘묘 작성 계획(toStatement)은 이 칸을 옮기지 않으므로 묘묘의 계획·프롬프트 입력은 바뀌지 않는다.
+   */
+  readonly variant?: string;
 }
 
 /** 규칙이 결론마다 남기는 세부 내용. 요청 하나에서만 쓰고 버린다. */

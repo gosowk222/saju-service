@@ -44,7 +44,12 @@ supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migratio
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261110120000_reading_quality.sql
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261111120000_kakao_only_free_trial.sql
 supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261111130000_admin_roles_and_settings.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261112120000_generation_usage.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261113120000_mujin_scroll.sql
+supabase db query --linked --project-ref <프로젝트 ref> -f supabase/migrations/20261113130000_mujin_free_run_entitled.sql
 ```
+
+마지막 두 파일은 무진의 종합 사주(장별 초안·최종문, 무료 단계 점유, 호출 단위 사용량, '지금의 나' 칸, 구매 권한이 있는 풀이의 무료 단계 하루 한도 제외)다. 이 파일을 적용하기 전의 DB에서는 `create_reading`이 '지금의 나'를 조용히 버리므로, 무진 상품을 여는 앱을 배포하기 전에 적용한다.
 
 세 번째 파일(카카오 회원 무료 이용권)을 적용한 뒤 기존 회원에게 이용권을 주려면 `select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');`을 한 번 실행합니다. 여러 번 실행해도 회원당 한 장입니다.
 

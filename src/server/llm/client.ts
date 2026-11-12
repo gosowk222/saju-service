@@ -2,7 +2,7 @@ import "server-only";
 import OpenAI from "openai";
 import type { z } from "zod";
 import { LLM_SETTINGS, LlmConfigError, liveCallBlockReason, requireApiKey } from "./config";
-import type { LlmUsage, UsageMeter } from "./usage";
+import type { LlmUsage, UsageMeter, UsageRecord } from "./usage";
 
 export type { LlmUsage } from "./usage";
 
@@ -24,7 +24,12 @@ export type LlmErrorCode =
   | "incomplete"
   | "empty_response"
   | "invalid_output"
-  | "validation_failed";
+  | "validation_failed"
+  /**
+   * 요청을 보내지 않았다: 동시 호출 제한의 자리를 기다린 뒤 남은 시간이 그 요청의 제한 시간보다 짧았다 (guardStart).
+   * 재시도하지 않고 설정 오류도 아니다. 호출 기록(onCall)과 사용량(meter)을 남기지 않는다.
+   */
+  | "deadline_reached";
 
 /** 코드나 설정을 고치기 전까지 다시 시도해도 소용없는 오류. */
 const CONFIGURATION_ERRORS: ReadonlySet<LlmErrorCode> = new Set([
@@ -65,6 +70,33 @@ export interface StructuredResult<T> {
   };
 }
 
+/**
+ * HTTP 요청 한 번(전송 재시도는 각각 한 번)의 기록. 호출 단위 사용량 표(llm_calls)에 태그와 함께 저장한다 (call-log.ts).
+ * 생성 문장, 지시, 입력 원문은 담지 않는다.
+ */
+export interface LlmCallLog {
+  /** 요청을 보낸 시각 (ISO). 동시 호출 제한을 기다린 시간은 넣지 않는다. */
+  readonly startedAt: string;
+  /** 응답·오류·중단으로 그 요청의 결과가 정해진 시각 (ISO). 다시 시도하기 전 대기 시간은 넣지 않는다. */
+  readonly endedAt: string;
+  /**
+   * UsageMeter 기록 종류와 같다. usage: API가 usage를 돌려줌, rejected: API가 오류 응답(4xx·5xx)을 돌려 생성하지 않음,
+   * unknown: 끊김·중단·시간 초과·onDelta의 stop처럼 usage를 받지 못함 (토큰이 쓰였을 수 있다).
+   */
+  readonly outcome: "usage" | "unknown" | "rejected";
+  /** API가 돌려준 값 그대로. 받지 못했으면 null (0으로 채우지 않는다). */
+  readonly usage: LlmUsage | null;
+  readonly requestedModel: string;
+  /** 응답(스트림은 응답 이벤트)에 적힌 실제 모델. */
+  readonly actualModel: string | null;
+  /** 공급자 응답 ID. 스트림은 시작 이벤트에서 받으므로 중간에 끊은 호출에도 남을 수 있다. */
+  readonly responseId: string | null;
+  /** 공급자 요청 ID (x-request-id 헤더). SDK의 응답 `_request_id`, `withResponse().request_id`, `APIError.requestID`에서 읽는다. */
+  readonly requestId: string | null;
+  /** 이 요청 시도의 오류 코드. 응답을 받은 뒤 형식 오류로 실패해도 usage는 그대로 두고 이 값을 채운다. 성공이면 null. */
+  readonly errorCode: LlmErrorCode | null;
+}
+
 export interface StructuredRequest<T> {
   readonly model: string;
   readonly instructions: string;
@@ -78,8 +110,20 @@ export interface StructuredRequest<T> {
   readonly timeoutMs?: number;
   /** 이 시각(epoch ms)을 넘길 재시도는 하지 않는다. */
   readonly deadlineAt?: number;
+  /**
+   * true이고 deadlineAt이 있으면, 동시 호출 제한의 자리를 얻은 뒤 남은 시간을 다시 본다 (첫 시도와 재시도 모두).
+   * 지금 보내면 timeoutMs 안에 끝나도 deadlineAt을 넘길 수 있으면 요청을 보내지 않고 deadline_reached로 끝낸다
+   * (onCall·meter 기록 없음). 스트림의 전체 시간 타이머는 자리를 얻은 뒤에 시작한다.
+   * 주지 않으면 지금과 같다 (자리를 기다리는 동안에도 스트림 타이머가 흐르고, 첫 시도는 마감을 보지 않는다).
+   */
+  readonly guardStart?: boolean;
   /** 요청마다 사용량을 기록한다. 응답을 받은 뒤 실패해도(형식 오류, 미완료) 받은 usage는 남는다. */
   readonly meter?: UsageMeter;
+  /**
+   * HTTP 요청 시도마다(전송 재시도 포함) 정확히 한 번 부른다. 결과 종류는 meter 기록과 같은 기준이고, 오류 코드는 그 시도가 끝날 때 채운다.
+   * 안에서 난 예외(비동기 거부 포함)는 무시하므로 호출 흐름·재시도·반환값이 바뀌지 않는다. 요청을 보내지 못한 경우(설정 오류, 실제 호출 차단)는 부르지 않는다.
+   */
+  readonly onCall?: (log: LlmCallLog) => void;
 }
 
 let activeCalls = 0;
@@ -97,6 +141,15 @@ async function withConcurrencyLimit<R>(task: () => Promise<R>): Promise<R> {
     waiters.shift()?.();
   }
 }
+
+/** 자리를 얻은 뒤 남은 시간이 모자라 요청을 보내지 않았다 (guardStart). 호출 오류로 분류하지 않는다. */
+class StartDeadlineReached {}
+
+/** guardStart를 쓰는 요청이면 자리를 얻은 뒤 볼 마감 시각. 쓰지 않으면 null (지금과 같은 동작). */
+const startGuardOf = (request: { readonly guardStart?: boolean; readonly deadlineAt?: number }): number | null =>
+  request.guardStart === true && request.deadlineAt !== undefined ? request.deadlineAt : null;
+
+const deadlineReached = (calls: number) => new LlmError("deadline_reached", "남은 시간이 모자라 요청을 보내지 않았습니다.", calls);
 
 export function classifyProviderError(error: unknown): LlmError {
   if (error instanceof LlmError) return error;
@@ -134,29 +187,78 @@ function readUsage(usage: OpenAI.Responses.ResponseUsage | null | undefined): Ll
   };
 }
 
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
+
 /**
  * 요청 하나의 사용량을 한 번만 기록하는 도우미. 응답을 받으면 usage를, 오류 응답(4xx·5xx)이면 생성하지 않은 호출로,
  * 연결이 끊기거나 중간에 멈춘 경우는 usage를 모르는 호출로 남긴다.
+ * onCall이 있으면 같은 결과에 시각·식별자·오류 코드를 붙여 그 요청 시도가 끝날 때 한 번 넘긴다 (report).
  */
-function requestLedger(meter: UsageMeter | undefined) {
+function requestLedger(request: { readonly model: string; readonly meter?: UsageMeter; readonly onCall?: (log: LlmCallLog) => void }) {
   let done = false;
+  let reported = false;
+  let startedAt = Date.now();
+  let endedAt: number | null = null;
+  let outcome: UsageRecord["kind"] = "unknown";
+  let received: LlmUsage | null = null;
+  let actualModel: string | null = null;
+  let responseId: string | null = null;
+  let requestId: string | null = null;
+  const settle = (entry: UsageRecord) => {
+    done = true;
+    endedAt = Date.now();
+    outcome = entry.kind;
+    received = entry.kind === "usage" ? entry.usage : null;
+    request.meter?.record(entry);
+  };
   return {
+    /** 동시 호출 제한을 통과해 요청을 보내기 직전. */
+    begin() {
+      startedAt = Date.now();
+    },
+    /** 응답·스트림 이벤트·응답 헤더에서 받은 식별자. 값이 있는 것만 남긴다. */
+    identify(found: { readonly model?: string | null; readonly id?: string | null; readonly requestId?: string | null }) {
+      if (found.model) actualModel = found.model;
+      if (found.id) responseId = found.id;
+      if (found.requestId) requestId = found.requestId;
+    },
     usage(usage: OpenAI.Responses.ResponseUsage | null | undefined) {
       if (done) return;
-      done = true;
       const read = readUsage(usage);
-      meter?.record(read ? { kind: "usage", usage: read } : { kind: "unknown" });
+      settle(read ? { kind: "usage", usage: read } : { kind: "unknown" });
     },
     unknown() {
       if (done) return;
-      done = true;
-      meter?.record({ kind: "unknown" });
+      settle({ kind: "unknown" });
     },
     failed(error: unknown) {
+      if (!requestId && error instanceof OpenAI.APIError && error.requestID) requestId = error.requestID;
       if (done) return;
-      done = true;
       const rejected = error instanceof OpenAI.APIError && typeof error.status === "number";
-      meter?.record(rejected ? { kind: "rejected" } : { kind: "unknown" });
+      settle(rejected ? { kind: "rejected" } : { kind: "unknown" });
+    },
+    /** 이 요청 시도의 기록을 onCall로 한 번만 넘긴다. onCall 안의 예외는 호출 흐름에 영향을 주지 않게 무시한다. */
+    report(errorCode: LlmErrorCode | null) {
+      if (reported || !request.onCall) return;
+      reported = true;
+      try {
+        const log: LlmCallLog = {
+          startedAt: new Date(startedAt).toISOString(),
+          endedAt: new Date(endedAt ?? Date.now()).toISOString(),
+          outcome,
+          usage: received,
+          requestedModel: request.model,
+          actualModel,
+          responseId,
+          requestId,
+          errorCode,
+        };
+        const returned: unknown = request.onCall(log);
+        if (isThenable(returned)) returned.then(undefined, () => undefined);
+      } catch {
+        // 기록 실패는 생성 실패가 아니다.
+      }
     },
   };
 }
@@ -201,13 +303,17 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
   }
 
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const guardDeadline = startGuardOf(request);
   for (let attempt = 0; ; attempt += 1) {
-    const ledger = requestLedger(request.meter);
+    const ledger = requestLedger(request);
     try {
       calls += 1;
       // temperature 등 모델 문서에서 확인하지 않은 옵션은 보내지 않는다.
-      const response = await withConcurrencyLimit(() =>
-        client.responses.create(
+      const response = await withConcurrencyLimit(() => {
+        // 자리를 기다리는 동안 시간이 흘렀다. 지금 보내면 마감을 넘길 수 있으면 보내지 않는다 (guardStart, 첫 시도와 재시도 모두).
+        if (guardDeadline !== null && Date.now() + timeout > guardDeadline) throw new StartDeadlineReached();
+        ledger.begin();
+        return client.responses.create(
           {
             model: request.model,
             instructions: request.instructions,
@@ -220,8 +326,10 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
             },
           },
           { timeout },
-        ),
-      );
+        );
+      });
+      // SDK가 JSON 응답에 x-request-id 헤더 값을 _request_id로 붙인다.
+      ledger.identify({ model: response.model, id: response.id, requestId: response._request_id });
       // 응답을 받았으면 형식 확인 전에 사용량부터 남긴다 (미완료·형식 오류로 실패해도 토큰은 쓰였다).
       ledger.usage(response.usage);
 
@@ -235,6 +343,7 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
       const parsed = request.parser.safeParse(json);
       if (!parsed.success) throw new LlmError("invalid_output", "출력 형식이 맞지 않습니다.");
 
+      ledger.report(null);
       return {
         parsed: parsed.data,
         meta: {
@@ -247,8 +356,11 @@ export async function callStructured<T>(request: StructuredRequest<T>): Promise<
         },
       };
     } catch (error) {
+      // 보내지 않은 요청은 호출 기록과 사용량을 남기지 않는다. calls는 실제로 보낸 요청 수다.
+      if (error instanceof StartDeadlineReached) throw deadlineReached(calls - 1);
       ledger.failed(error);
       const classified = classifyProviderError(error);
+      ledger.report(classified.code);
       const backoff = 500 * 2 ** attempt;
       const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
       if (RETRYABLE_TRANSPORT.has(classified.code) && attempt < LLM_SETTINGS.transportRetries && fitsDeadline) {
@@ -296,30 +408,45 @@ export async function callStructuredStream<T>(
   }
 
   const timeout = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const guardDeadline = startGuardOf(request);
   for (let attempt = 0; ; attempt += 1) {
     let received = false;
-    const ledger = requestLedger(request.meter);
+    const ledger = requestLedger(request);
     // SDK의 timeout은 응답 헤더까지만 본다. 스트림 전체 시간은 여기서 끊는다.
+    // guardStart를 쓰면 타이머를 자리를 얻은 뒤에 시작한다 (자리를 기다린 시간이 생성 시간을 줄이거나 보내기 전에 끊지 않게).
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const startTimer = () => {
+      timer = setTimeout(() => controller.abort(), timeout);
+    };
+    if (guardDeadline === null) startTimer();
     try {
       calls += 1;
       const streamed = await withConcurrencyLimit(async () => {
-        const stream = await client.responses.create(
-          {
-            model: request.model,
-            instructions: request.instructions,
-            input: request.input,
-            store: false,
-            max_output_tokens: request.maxOutputTokens,
-            reasoning: { effort: request.reasoningEffort as "low" },
-            text: {
-              format: { type: "json_schema", name: request.schemaName, schema: request.jsonSchema, strict: true },
+        if (guardDeadline !== null) {
+          if (Date.now() + timeout > guardDeadline) throw new StartDeadlineReached();
+          startTimer();
+        }
+        ledger.begin();
+        // 스트림 응답에는 SDK가 _request_id를 붙이지 않으므로 withResponse로 헤더의 요청 ID를 함께 받는다 (요청·오류 처리는 같다).
+        const { data: stream, request_id: streamRequestId } = await client.responses
+          .create(
+            {
+              model: request.model,
+              instructions: request.instructions,
+              input: request.input,
+              store: false,
+              max_output_tokens: request.maxOutputTokens,
+              reasoning: { effort: request.reasoningEffort as "low" },
+              text: {
+                format: { type: "json_schema", name: request.schemaName, schema: request.jsonSchema, strict: true },
+              },
+              stream: true,
             },
-            stream: true,
-          },
-          { timeout, signal: controller.signal },
-        );
+            { timeout, signal: controller.signal },
+          )
+          .withResponse();
+        ledger.identify({ requestId: streamRequestId });
         let text = "";
         let final: OpenAI.Responses.Response | null = null;
         let stopped = false;
@@ -339,15 +466,21 @@ export async function callStructuredStream<T>(
               ledger.unknown();
               break;
             }
+          } else if (event.type === "response.created") {
+            // 응답 ID와 실제 모델은 시작 이벤트에도 있다. 중간에 끊은 호출의 기록에도 남긴다.
+            ledger.identify(event.response);
           } else if (event.type === "response.refusal.delta") {
             throw new LlmError("refused", "모델이 응답을 거절했습니다.");
           } else if (event.type === "response.completed") {
             final = event.response;
+            ledger.identify(event.response);
             ledger.usage(event.response.usage);
           } else if (event.type === "response.incomplete") {
+            ledger.identify(event.response);
             ledger.usage(event.response.usage);
             throw new LlmError("incomplete", `응답이 완료되지 않았습니다: ${event.response.incomplete_details?.reason ?? "unknown"}`);
           } else if (event.type === "response.failed") {
+            ledger.identify(event.response);
             ledger.usage(event.response.usage);
             throw new LlmError("server_error", "응답 생성에 실패했습니다.");
           } else if (event.type === "error") {
@@ -368,6 +501,9 @@ export async function callStructuredStream<T>(
           parsed = null;
         }
       }
+      // 끝까지 받았는데 전체 형식이 맞지 않으면 기록에 invalid_output을 남긴다. 함수는 지금처럼 parsed: null로 돌려준다
+      // (호출한 쪽이 이미 받은 완성 단위를 쓸 수 있다).
+      ledger.report(!streamed.stopped && parsed === null ? "invalid_output" : null);
       return {
         parsed,
         text: streamed.text,
@@ -382,13 +518,17 @@ export async function callStructuredStream<T>(
         },
       };
     } catch (error) {
+      // 보내지 않은 요청은 호출 기록과 사용량을 남기지 않는다. calls는 실제로 보낸 요청 수다.
+      if (error instanceof StartDeadlineReached) throw deadlineReached(calls - 1);
       // 화면 저장 중 오류(다른 요청이 이어받음 등)로 멈춘 호출도 토큰을 썼을 수 있다. usage는 모르는 호출로 남긴다.
       if (error instanceof DeltaHandlerFailure) {
         ledger.unknown();
+        ledger.report(error.cause instanceof LlmError ? error.cause.code : null);
         throw error.cause;
       }
       ledger.failed(error);
       const classified = classifyProviderError(error);
+      ledger.report(classified.code);
       const backoff = 500 * 2 ** attempt;
       const fitsDeadline = request.deadlineAt === undefined || Date.now() + backoff + timeout <= request.deadlineAt;
       if (!received && RETRYABLE_TRANSPORT.has(classified.code) && attempt < LLM_SETTINGS.transportRetries && fitsDeadline) {

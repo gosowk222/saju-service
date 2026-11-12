@@ -3,7 +3,7 @@ import "server-only";
 /**
  * 이용 방식(결제 모드). 서버 설정 CHECKOUT_MODE 하나로 바꾼다. 클라이언트가 보낸 값은 쓰지 않는다.
  *
- * - free_trial (현재, 설정이 없을 때의 기본값): 카카오 회원에게 무료 이용권 한 장을 지급하고 이용권으로만 풀이를 받는다.
+ * - free_trial (현재, 설정이 없을 때의 기본값): 카카오 회원에게 무료 이용권 한 장을 지급하고 이용권으로만 풀이를 받는다 (대상 상품은 FREE_TRIAL.productIds).
  *   새 결제(주문 생성, 결제창, 결제 승인)는 서버에서 막는다. 토스 키가 없어도 동작한다.
  * - payment: 기존 토스페이먼츠 결제를 다시 연다. 새 무료 이용권 지급은 멈추고, 이미 지급한 미사용 이용권과
  *   이미 받은 풀이 권한은 그대로 쓴다. 테스트 키 제한(PAYMENTS_ALLOW_LIVE)은 그대로라 모드만 바꿔서 실결제가 되지 않는다.
@@ -38,6 +38,9 @@ export function paymentsOpen(mode: CheckoutMode): boolean {
  */
 export const FREE_TRIAL = {
   campaignId: "free-trial-2026-11",
-  /** 이용권으로 받을 수 있는 상품. 현재 '묘묘의 사주 참견' 하나다. */
-  productIds: ["first-overview"] as readonly string[],
+  /**
+   * 이용권으로 받을 수 있는 상품: '묘묘의 사주 참견', '무진의 종합 사주'.
+   * 캠페인 ID는 그대로라 상품을 더해도 새로 지급하지 않는다. 한 장은 두 상품 중 하나에만 쓰인다 (DB의 회원 단위 잠금).
+   */
+  productIds: ["first-overview", "mujin-overview"] as readonly string[],
 } as const;

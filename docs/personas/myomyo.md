@@ -1,6 +1,6 @@
 # 캐릭터 묘묘 (persona `myomyo` 2.1.0)
 
-첫 상품(`first-overview`, 현재 이름 "묘묘의 사주 참견")의 기본 캐릭터다. 등록된 캐릭터는 묘묘 하나다.
+첫 상품(`first-overview`, 현재 이름 "묘묘의 사주 참견")의 기본 캐릭터다. 두 번째 캐릭터 무진 도사(`mujin`, "무진의 종합 사주")는 [`mujin.md`](mujin.md)에 따로 정리한다.
 
 **설정의 원본은 코드다.** `src/domain/personas/index.ts`의 `MYOMYO`(현재 2.1.0)에 있다. 이 문서는 사람이 읽기 위한 설명이다. 설정을 바꿀 때는 코드를 고치고 `version`을 올린 뒤 이 문서를 함께 고친다. 프롬프트에는 `characterBlock`(`src/server/llm/prompts.ts`)으로 한 번만 옮기고, 작업 지시는 `[캐릭터]`를 가리키기만 한다.
 

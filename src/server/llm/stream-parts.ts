@@ -207,3 +207,110 @@ export function completedParts(text: string): StreamedParts {
   }
   return result;
 }
+
+const isJsonSpace = (char: string) => char === " " || char === "\n" || char === "\r" || char === "\t";
+
+/**
+ * 최상위 JSON 객체의 배열 칸(key)에서 이미 닫힌 원소만 순서대로 JSON.parse한 값으로 돌려준다. 아직 닫히지 않은 마지막 원소는 넣지 않는다.
+ * 문자열 안의 따옴표·역슬래시·괄호를 구분하고, 앞부분만 온 깨진 텍스트에서도 예외를 던지지 않는다.
+ *
+ * - 최상위 객체의 키만 본다. 다른 최상위 값 안이나 원소 안에 같은 이름의 키가 있어도 섞지 않는다.
+ * - 원소는 객체·배열·문자열·숫자·true·false·null 어느 것이든 된다. 객체·배열·문자열은 닫히는 순간 끝난 것으로 보고,
+ *   숫자·true·false·null은 뒤에 쉼표나 배열 끝(])이 와야 끝난 것으로 본다 (숫자는 글자가 더 이어질 수 있다).
+ * - 해석되지 않는 원소는 건너뛴다. 같은 응답의 더 긴 앞부분으로 다시 부르면 앞서 돌려준 원소 뒤에 새 원소만 붙는다.
+ * 받은 글자 전체를 처음부터 다시 훑는다 (completedParts와 같다). 정규식으로 잘라 내지 않는다.
+ */
+export function completedArrayItems(text: string, key: string): unknown[] {
+  const items: unknown[] = [];
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let stringStart = -1;
+  /** 최상위 값이 객체인지. 최상위가 배열이면 그 안의 문자열을 키로 읽지 않는다. */
+  let rootIsObject = false;
+  /** 최상위 객체에서 지금 값을 읽고 있는 키. */
+  let topKey: string | null = null;
+  let expectingValue = false;
+  /** key의 배열 값 안에 있는지. 그 배열 바로 안(depth 2)이 원소 자리다. */
+  let inTarget = false;
+  /** 지금 읽고 있는 원소의 시작 위치. 없으면 -1. */
+  let elementStart = -1;
+  /** 지금 원소가 숫자·true·false·null인지. */
+  let primitive = false;
+
+  const take = (slice: string) => {
+    const parsed = parse(slice);
+    if (parsed.ok) items.push(parsed.value);
+  };
+  const endPrimitive = (end: number) => {
+    if (primitive && elementStart >= 0) take(text.slice(elementStart, end).trim());
+    primitive = false;
+    elementStart = -1;
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') {
+        inString = false;
+        if (depth === 1 && rootIsObject) {
+          if (expectingValue) {
+            // 최상위 키의 문자열 값이 끝났다.
+            expectingValue = false;
+          } else {
+            const name = parse(text.slice(stringStart, index + 1));
+            topKey = name.ok && typeof name.value === "string" ? name.value : null;
+          }
+        } else if (depth === 2 && inTarget && elementStart === stringStart) {
+          take(text.slice(elementStart, index + 1));
+          elementStart = -1;
+        }
+      }
+      continue;
+    }
+    if (isJsonSpace(char)) continue;
+    if (char === '"') {
+      inString = true;
+      stringStart = index;
+      if (depth === 2 && inTarget && elementStart < 0) elementStart = index;
+    } else if (char === ":") {
+      if (depth === 1) expectingValue = true;
+    } else if (char === ",") {
+      if (depth === 1) expectingValue = false;
+      else if (depth === 2 && inTarget) endPrimitive(index);
+    } else if (char === "{" || char === "[") {
+      if (depth === 0) {
+        rootIsObject = char === "{";
+        topKey = null;
+        expectingValue = false;
+      } else if (depth === 1 && rootIsObject && expectingValue) {
+        inTarget = char === "[" && topKey === key;
+      } else if (depth === 2 && inTarget && elementStart < 0) {
+        elementStart = index;
+      }
+      depth += 1;
+    } else if (char === "}" || char === "]") {
+      if (depth === 2 && inTarget) {
+        // key의 배열이 닫힌다. 진행 중인 숫자·true·false·null은 배열 끝(])에서만 끝난 것으로 본다.
+        if (char === "]") endPrimitive(index);
+        primitive = false;
+        elementStart = -1;
+        inTarget = false;
+      } else if (depth === 3 && inTarget && elementStart >= 0 && !primitive) {
+        // 원소인 객체·배열이 닫힌다.
+        take(text.slice(elementStart, index + 1));
+        elementStart = -1;
+      }
+      // 최상위 키의 객체·배열 값이 닫혔다.
+      if (depth === 2) expectingValue = false;
+      if (depth > 0) depth -= 1;
+    } else if (depth === 2 && inTarget && elementStart < 0) {
+      // 숫자·true·false·null의 첫 글자.
+      elementStart = index;
+      primitive = true;
+    }
+  }
+  return items;
+}

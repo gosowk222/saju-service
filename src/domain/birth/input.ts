@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MujinNowSchema } from "../mujin/now";
 
 /**
  * 시진 선택지. 값은 sajuengine의 공개 값과 같아야 한다(tests/unit/engine.test.ts에서 확인).
@@ -62,6 +63,8 @@ export const DraftSchema = z.object({
   birthTime: BirthTimeChoiceSchema.nullable().default(null),
   situationId: z.string().max(40).nullable().default(null),
   concern: z.string().max(CONCERN_MAX).default(""),
+  /** 족자 상품(무진)의 '지금의 나'. 메신저 상품은 쓰지 않는다. */
+  now: MujinNowSchema.nullable().default(null),
 });
 
 export type Draft = z.infer<typeof DraftSchema>;
@@ -85,6 +88,8 @@ export const CreateReadingSchema = z.object({
     .string()
     .max(CONCERN_MAX)
     .transform((value) => value.trim()),
+  /** 족자 상품(무진)의 '지금의 나'. 서버는 상품 형식에 맞지 않는 값을 거부한다. */
+  now: MujinNowSchema.nullable().optional(),
 });
 
 export type CreateReadingInput = z.infer<typeof CreateReadingSchema>;

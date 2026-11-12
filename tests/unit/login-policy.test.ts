@@ -48,10 +48,11 @@ describe("결제 모드", () => {
     expect([grantsOpen("misconfigured"), paymentsOpen("misconfigured")]).toEqual([false, false]);
   });
 
-  it("캠페인 식별자는 DB 제약과 같고, 대상 상품은 묘묘의 사주 참견이다", () => {
+  it("캠페인 식별자는 DB 제약과 같고(무진을 더해도 그대로), 대상 상품은 묘묘의 사주 참견과 무진의 종합 사주다", () => {
     const migration = readdirSync(path.join(root, "supabase/migrations")).find((file) => file.includes("kakao_only_free_trial"))!;
     expect(read(`supabase/migrations/${migration}`)).toContain(`check (campaign_id in ('${FREE_TRIAL.campaignId}'))`);
-    expect(FREE_TRIAL.productIds).toEqual(["first-overview"]);
+    expect(FREE_TRIAL.campaignId).toBe("free-trial-2026-11");
+    expect(FREE_TRIAL.productIds).toEqual(["first-overview", "mujin-overview"]);
   });
 });
 

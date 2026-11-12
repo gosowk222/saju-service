@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { apiFetch, ClientApiError } from "@/lib/client-api";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Notice } from "@/components/ui/layout";
 
 export function PurchaseButton({ readingId, label }: { readingId: string; label: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, setPending] = useState(false);
   const [navigating, startNavigation] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,9 @@ export function PurchaseButton({ readingId, label }: { readingId: string; label:
       startNavigation(() => router.push(`/checkout/${orderId}`));
     } catch (failure) {
       if (failure instanceof ClientApiError && failure.code === "already_paid") {
-        startNavigation(() => router.replace(`/readings/${readingId}`));
+        const target = `/readings/${readingId}`;
+        // 족자 상품은 결제 영역이 풀이 화면 안에 있다. 주소가 같으면 이동 대신 서버 상태를 다시 그린다.
+        startNavigation(() => (pathname === target ? router.refresh() : router.replace(target)));
         return;
       }
       setError(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");

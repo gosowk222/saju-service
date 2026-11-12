@@ -40,6 +40,7 @@
 | `reading-2.0.0` / `narration-2.0.0` | 2.1.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만 |
 | `reading-1.0.0` / `narration-1.0.0` | 작성 재료 1.0.0으로 만든 이전 풀이를 이어서 생성할 때만 |
 | `followup-3.1.0` / `followup-output-2.2.0` | 현재 후속 질문 (캐릭터 묘묘 2.1.0, guide-1.0.0). reading-3.1.0과 같은 구성. 판단 규칙·입력·출력 형식은 2.9.0과 같다 |
+| `mujin-followup-1.0.0` / `followup-output-2.2.0` | 무진의 종합 사주 후속 질문 (캐릭터 무진 1.0.0, guide-1.0.0, 묶음 `mujin-1.0.0`의 `followupPrompt`). `[캐릭터: 무진 도사]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]` → 출력 조건. 묘묘 지시의 반말 전제 문구는 없다. 재료는 질문 분야와 이어지는 장(질문마다 한 장 이상, 모두 4개까지)의 작성 재료와 그 장 최종문 일부(장마다 1,200자까지), 기간 질문이면 첫 유료 생성 때 고정한 기준일의 기간 자료. 질문 정리는 묘묘와 같은 `question-1.3.0`. 횟수·범위·차감·무료 반응·되묻기 정책과 출력 형식은 묘묘와 같다 (`src/server/scroll/followup.ts`, `src/server/llm/mujin-followup-prompt.ts`) |
 | `followup-2.9.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.4.0). 2.8.0과 같고 예시·시범 대신 말투 견본 |
 | `followup-2.8.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 문단 3~5개(설명 문단은 두세 문장까지) |
 | `followup-2.7.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범, 중복을 덜어 낸 입력을 더했다. 출력 형식 2.2.0은 질문마다 refs 앞에 화면에 나가지 않는 메모 `angle`을 받는다 |
@@ -101,7 +102,7 @@
 
 그래서 `npm run llm:check`, `npm run llm:compare`는 실제 키가 있어도 `LIVE_NOT_RUN`을 출력하고 끝난다. 실제 모델 확인은 개발 서버를 직접 열어 화면에서 풀이와 후속 질문을 만들어 보고, 아래 "토큰 사용량 기록"의 SQL(또는 서버 로그 `[generation] done`·`[followup] done`)로 호출 수와 토큰을 확인한다. 에이전트는 실제 호출을 하지 않는다 (AGENTS.md, CLAUDE.md).
 
-같은 입력으로 프롬프트 버전만 바꿔 비교하려면 모델을 부르지 않는 `npm run llm:export`로 지시·입력·출력 형식 파일을 만들어 플레이그라운드에서 실행하고, 결과를 `npm run llm:render`로 말풍선과 검사 결과로 읽는다 (`docs/personas/myomyo-evaluation.md` 0-2절).
+같은 입력으로 프롬프트 버전만 바꿔 비교하려면 모델을 부르지 않는 `npm run llm:export`로 지시·입력·출력 형식 파일을 만들어 플레이그라운드에서 실행하고, 결과를 `npm run llm:render`로 말풍선과 검사 결과로 읽는다 (`docs/personas/myomyo-evaluation.md` 0-2절). 무진의 종합 사주는 `--product=mujin-overview`로 장 묶음별 Pass 1·장별 Pass 2 요청을 만들고 초안·최종문 비교 문서를 읽는다 (아래 "무진 모델 비교").
 
 ## 호출 구조와 비용
 
@@ -244,3 +245,85 @@ ChatGPT나 코딩 도구 구독은 API 사용 권한과 별개다.
 5. 문제가 생기면 `OPENAI_MODEL=gpt-5.6-luna`로 되돌리고 재배포한다.
 
 `NODE_ENV=production`이라는 이유로 모델이 바뀌지 않는다. 운영에서 `OPENAI_MODEL`이 비어 있으면 임의의 모델을 쓰지 않고 설정 오류로 처리한다.
+
+## 무진 호출 단위 사용량 (migration `20261113120000_mujin_scroll.sql`)
+
+무진의 종합 사주는 실제 LLM 호출(HTTP 요청) 하나마다 `llm_calls`에 한 줄을 남긴다. 전송 재시도, 검사 실패 뒤 재작성, 중간에 끊은 스트림도 각각 한 줄이다. 칸: 풀이(`reading_id`), 회원, 후속 질문(`followup_id`), 상품, 단계(`tier` free·paid, `step` classify·pass1·pass2·followup), 장·묶음(`unit_id`), 요청·실제 모델, 지시·출력 형식·캐릭터 버전, 추론 설정, 공급자 응답·요청 ID, 결과(`outcome`)와 오류 코드, 시작·끝 시각, 입력·캐시 입력·출력·추론 토큰, 사용량 수신 여부. 집계 뷰는 `llm_call_usage`, 관리자 조회 함수는 `admin_llm_usage(p_limit)`다. 묘묘 최초 풀이는 지금처럼 `generation_attempts`에만 남는다.
+
+- 집계 규칙은 위 "토큰 사용량 기록"과 같다. 캐시 입력은 입력에, 추론 토큰은 출력에 이미 들어 있어 다시 더하지 않는다 (합계 = 입력 + 출력). 받지 못한 값은 null이고 `usage_complete = false`로 표시한다.
+- 무진 후속 질문은 질문마다 `followups.usage`(합계)에 남기고, 호출마다 `llm_calls`(step classify·followup, tier paid, `unit_id` 없음, `followup_id`)에도 남긴다. 두 합계는 같아야 한다 (아래 SQL 3). 캐릭터 버전과 묶음, 기간 기준일은 `followups.analysis`의 `personaVersion`, `bundle`, `timingReferenceDate`에 있다.
+- 기록 저장은 기다리지 않고 시작하며, 저장에 실패해도 생성과 답변은 바뀌지 않는다 (서버 로그 `[llm-call] not recorded`에 오류 코드만 남는다).
+- 무진 실행기는 모든 호출에 `guardStart`를 준다. 프로세스 전역 동시 호출 자리(4)를 기다린 뒤 요청 하나의 남은 시간(270초 예산)이 호출 제한 시간보다 적으면 보내지 않고(`deadline_reached`) 점유를 반납한다. 보내지 않은 호출은 `llm_calls`에 남지 않고 장 시도 수로도 세지 않는다. `guardStart`가 없는 호출(묘묘)은 이전과 같다.
+- 무진 후속 질문이 고정 12개월 밖의 기간을 물으면(기간 규칙 분야, 사용자가 기간을 말함, 상품 최대 개월 안) 그 기간만 고정 기준일로 계산해 `reading_analyses`의 `mujin-timing-extra:{분야}:{시작}..{끝}@{기준일}` 키에 저장하고 다시 쓴다. 묘묘의 추가 기간 분석과 같은 정책이다.
+- 관리자 화면(`/admin`)의 "무진 생성 사용량"은 `admin_llm_usage(20)`을 서버 권한으로 불러 최근 호출 순 풀이 20개의 단계별 호출 수, 사용량 받은 호출 수, 입력·캐시 입력·출력 토큰, 합계, 완전 여부를 보여 준다. 관리자만 열리고(다른 사람에게는 404), 서버 함수도 관리자 역할을 DB에서 다시 확인한다. 별명·질문 원문·생성 문장은 담지 않는다.
+- 생성 시간은 DB에 저장된 시각으로 계산할 수 있는 것만 보여 준다: 무료 첫 칸 완성(무료 단계 시작 `reading_free_runs.started_at` → 첫 무료 최종문 `reading_sections.created_at`), 무료 단계 완료(→ `reading_free_runs.completed_at`), 유료 권한 뒤 첫 장 완성(구매 권한 `entitlements.created_at` → 첫 유료 최종문), 유료 권한 뒤 전체 완료(→ `generation_jobs.completed_at`). 유료 권한 뒤 시간에는 앞의 무료 단계가 끝나기를 기다린 시간도 들어 있다.
+- 실제 화면에 보이기까지의 시간은 서버가 알 수 없어 보여 주지 않는다. 화면은 2초마다 저장 상태를 받아 그리므로 최종문 저장 시각보다 그만큼 늦게 보일 수 있고, 브라우저가 그린 시각은 서버로 보내지 않는다. 측정하려면 브라우저 쪽 계측이 따로 필요하다.
+
+```sql
+-- 1) 풀이 하나의 단계별 합계 (무료/유료 × 질문 정리/Pass 1/Pass 2/후속 질문)
+select tier, step, calls, calls_with_usage, calls_without_usage, input_tokens, cached_input_tokens, uncached_input_tokens,
+       output_tokens, reasoning_tokens, total_tokens, usage_complete, started_at, ended_at, models, prompt_versions
+from public.llm_call_usage
+where reading_id = '<풀이 ID>'
+order by tier, step;
+
+-- 2) 호출별 내역 (재시도와 재작성도 각각 한 줄)
+select step, tier, unit_id, followup_id, model_requested, model_actual, prompt_version, schema_version, persona_version,
+       outcome, error_code, input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, usage_received, started_at, ended_at
+from public.llm_calls
+where reading_id = '<풀이 ID>'
+order by started_at, id;
+
+-- 3) 후속 질문별 호출 합계 (followups.usage에 남긴 합계와 같아야 한다)
+select f.id, f.status, f.prompt_version, count(c.id) as calls, sum(c.input_tokens) as input_tokens,
+       sum(c.cached_input_tokens) as cached_input_tokens, sum(c.output_tokens) as output_tokens,
+       f.usage ->> 'inputTokens' as recorded_input_tokens, f.usage ->> 'outputTokens' as recorded_output_tokens, f.created_at
+from public.followups f
+left join public.llm_calls c on c.followup_id = f.id
+where f.reading_id = '<풀이 ID>'
+group by f.id, f.status, f.prompt_version, f.usage, f.created_at
+order by f.created_at;
+
+-- 4) 생성 시간 (DB에 저장된 시각으로 계산할 수 있는 것만. 실제 화면 표시 시각은 없다)
+select r.id as reading_id,
+       (select min(s.created_at) from public.reading_sections s where s.reading_id = r.id and s.tier = 'free') - fr.started_at as free_first_section,
+       fr.completed_at - fr.started_at as free_done,
+       (select min(s.created_at) from public.reading_sections s where s.reading_id = r.id and s.tier = 'paid') - e.created_at as paid_first_section,
+       case when j.status = 'completed' then j.completed_at - e.created_at end as paid_done
+from public.readings r
+left join public.reading_free_runs fr on fr.reading_id = r.id
+left join public.entitlements e on e.reading_id = r.id
+left join public.generation_jobs j on j.reading_id = r.id
+where r.id = '<풀이 ID>';
+
+-- 5) 관리자 화면과 같은 묶음 (최근 호출 순 풀이 20개의 단계별·풀이별·전체 합계)
+select public.admin_llm_usage(20);
+```
+
+적용: 이 migration을 앱 배포 전에 먼저 적용한다. 실제 운영 DB에 적용했는지는 이 문서의 작성 시점에 확인하지 않았다 (`NOT_RUN`). 위 SQL은 테스트용 Postgres(PGlite)에 실제 migration을 적용해 실행되는지 확인한다 (`tests/unit/mujin-admin-usage.test.ts`).
+
+## 무진 모델 비교 (`llm:export`·`llm:render`, 모델 호출 없음)
+
+무진의 종합 사주를 실제 모델로 평가할 때 쓴다. 실제 모델 실행은 사용자가 플레이그라운드에서 직접 한다 (비용은 사용자가 낸다). 에이전트는 실행 결과를 확인하지 못했다 (`LIVE_NOT_RUN`). 가짜 결과 파일로 파일 형식과 검사·비교 문서만 확인했다.
+
+- 두 명령은 모델을 부르지 않고 API 키와 OPENAI 환경 변수를 읽지 않는다 (요청 본문의 model 칸은 자리 표시다). `--product`를 주지 않으면(또는 `first-overview`) 묘묘 내보내기·읽기가 예전 그대로 돈다.
+- 운영 실행기(`src/server/scroll/runner.ts`)와 같은 함수와 순서로 계획과 요청을 만든다 (`scripts/mujin-llm.ts`): `analyzeMujinBirth` → 질문 정리(사례의 고정 가상 값을 `prepareScrollQuestionsWith`로 판정) → `computeMujinTiming`(기준일 고정) → `buildTimingSections` → `personalizeSections` → `buildDraftRequest`·`buildVoiceRequest`, 마지막 정리는 `buildClosingSection`. 같은 사례·같은 초안이면 운영 실행기가 보내는 지시·입력과 글자까지 같다 (`tests/unit/mujin-llm-scripts.test.ts`가 실행기를 가짜 LLM으로 돌려 비교한다).
+- 사례: `scripts/llm-cases.ts`의 `MUJIN_EVALUATION_CASES` (명세 07 4절 대표 평가 입력 8개를 사례 9개로, `docs/personas/mujin-evaluation.md` 2절). 질문 정리는 모델이 필요하므로 사례마다 정리 결과를 가상 값으로 고정해 쓰고, 그 사실을 사례 폴더의 `00-guide.md`와 `comparison.md` 머리말에 적는다.
+- 기준일: `--reference=YYYY-MM-DD`(기본 2026-11-12)가 9·10장 기간 재료와 질문 정리의 기준이다. 실행하는 날과 관계없이 같은 계획이 나온다.
+
+```powershell
+npm run llm:export '--' --product=mujin-overview --case=heavy-loss    # 요청 파일 (결과를 저장할 때마다 다시 실행)
+npm run llm:render '--' --product=mujin-overview --case=heavy-loss    # 저장한 결과로 비교 문서
+```
+
+| 순서 | 할 일 | 파일 (`docs/model-comparison/prompts/mujin/<기준일>_<사례>/`, git에 올리지 않음) |
+| --- | --- | --- |
+| 1 | `llm:export` 실행 | Pass 1 묶음 요청 `p1-<묶음>.instructions.txt`·`.input.json`·`.schema.json`·`.request.json`, 안내 `00-guide.md`(지금 실행할 요청), 궁금한 점이 있으면 참고용 `p0-question.*` |
+| 2 | 플레이그라운드에서 Pass 1 묶음 실행: 운영과 같은 모델, 추론 medium, 출력 한도 16,000. 지시에 `*.instructions.txt`, 입력에 `*.input.json`, 출력 형식(JSON schema)에 `*.schema.json` | 결과를 `p1-<묶음>.output.json`으로 저장. 묶음 하나를 저장할 때마다 1을 다시 실행하면 다음 묶음 입력에 앞 묶음의 장면 요약이 운영처럼 들어간다 |
+| 3 | `llm:export` 다시 실행 | 장별 Pass 2 요청 `p2-<장>.*`, 2~10장 초안이 모두 있으면 마지막 정리 Pass 1 요청 `p1-paid-closing.*` |
+| 4 | Pass 2 실행: 추론 medium, 출력 한도 8,000 | 결과를 `p2-<장>.output.json`으로 저장 |
+| 5 | `llm:render` 실행 | `comparison.md`: 장마다 초안과 최종문을 나란히 놓은 표, 운영 검사(`checkDraftSection`, `checkVoiceSection`) 문제 목록, 장별 글자 수와 편집 목표(실패 기준 아님), 평가 기록 표 |
+
+확인할 항목은 명세 07 4절의 무진 품질 평가 항목 9개다 (`docs/personas/mujin-evaluation.md` 1절, 초안과 최종문의 보존 항목은 3절). 검사 통과는 형식·근거·숫자 확인일 뿐 문체 품질 판정이 아니다.
+
+운영과 다른 점: 질문 정리는 고정 가상 값, 기준일은 하나로 고정, Pass 1은 스트림 대신 한 번에 받음, 앞 묶음 결과를 저장하지 않고 실행하면 장면 요약(usedScenes)이 비어 있음, 검사에 걸린 장의 다시 쓰기 요청은 만들지 않음 (비교를 위해 그 초안의 Pass 2 요청은 만든다). 자세한 순서는 `docs/personas/mujin-evaluation.md` 3절 '모델 없이 파일 만들기'.

@@ -1,7 +1,7 @@
 import "server-only";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findMessengerProduct } from "@/domain/products";
 import { issueSummary } from "@/domain/reading/check";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type ReadingPlan, type StoredMessage } from "@/domain/reading/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -64,6 +64,11 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     admin.from("reading_internals").select("plan").eq("reading_id", readingId).maybeSingle(),
   ]);
   if (!reading || !internals) throw new ApiError(403, "not_entitled", "구매 후 이용할 수 있어요.");
+  // 메신저 상품의 생성 경로다. 족자 상품(무진)은 장별 생성(POST /api/readings/{id}/scroll/generate)만 쓴다.
+  // 생성 작업을 점유(claim_generation)하기 전에 막아, 무진 유료 작업의 시도 수와 고정된 프롬프트 버전이 바뀌지 않게 한다.
+  if (!findMessengerProduct(reading.product_id as string)) {
+    throw new ApiError(409, "unsupported_product", "이 풀이는 풀이 화면에서 이어서 만들어요.");
+  }
   const plan = internals.plan as AnyReadingPlan;
   const versions = PROMPTS_FOR_PLAN[plan.planVersion] ?? PROMPTS_FOR_PLAN["1.0.0"]!;
 
@@ -158,7 +163,7 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
     const persona = findPersona(reading.persona_id as string, personaVersionFor(config.promptVersion));
     if (!persona) throw new Error("persona_unavailable");
     personaVersion = persona.version;
-    const product = findProduct(reading.product_id as string);
+    const product = findMessengerProduct(reading.product_id as string);
     const chart = reading.chart as ChartView;
 
     let narration: NarrationInput;

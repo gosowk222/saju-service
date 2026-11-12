@@ -1,7 +1,8 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicBirthInput } from "sajuengine";
 import { findPersona } from "@/domain/personas";
-import { findProduct } from "@/domain/products";
+import { findMessengerProduct, findScrollProduct } from "@/domain/products";
 import { focusTopicsOf } from "@/domain/reading/focus";
 import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView } from "@/domain/reading/types";
@@ -13,6 +14,7 @@ import { classifyQuestion } from "@/server/llm/narrate";
 import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, personaVersionFor, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
 import { UsageMeter } from "@/server/llm/usage";
 import { internalReason } from "@/server/log";
+import { askScrollFollowup } from "@/server/scroll/followup";
 import { INITIAL_QUESTION_KEY, loadAnalysis, timingFor } from "./analysis";
 import { answerAnalyzedFollowup, isReactionOnly, routeWithoutItems, type FollowupStatus } from "./followup-core";
 
@@ -52,11 +54,23 @@ function analysisRecord(analysis: QuestionAnalysis, llmCalls: number) {
 }
 
 /**
+ * 소유자의 족자 상품(무진) 풀이인지. 행이 없거나(다른 회원의 풀이 등) 읽지 못하면 false이고,
+ * 그때는 아래 기존 경로의 begin_followup이 권한을 다시 확인한다.
+ */
+async function isScrollReading(admin: SupabaseClient, readingId: string, userId: string): Promise<boolean> {
+  const { data, error } = await admin.from("readings").select("product_id").eq("id", readingId).eq("user_id", userId).maybeSingle();
+  if (error || !data) return false;
+  return findScrollProduct((data as { product_id: string }).product_id) !== undefined;
+}
+
+/**
  * 후속 질문 처리. 상품 범위 안에서 기존 풀이 설명, 상황 적용, 필요한 기간 분석까지 한다.
  *
  * - 정상 답변이 저장될 때만 한 번 차감한다. 한 메시지 안의 소질문 여러 개도 한 번이다.
  * - 범위 밖 안내, 되묻기, 생성 실패, 저장 실패는 차감하지 않는다.
  * - 원국 계산은 저장된 작성 재료를 다시 쓰고, 기간 재료는 필요한 기간만 계산해 저장해 둔다.
+ * - 족자 상품(무진)은 같은 정책으로 장 단위 재료와 최종문을 써서 답하는 경로(src/server/scroll/followup.ts)로 보낸다.
+ *   아래 메신저 상품(묘묘)의 경로는 그대로다.
  */
 export async function askFollowup(input: {
   readonly userId: string;
@@ -66,6 +80,8 @@ export async function askFollowup(input: {
 }): Promise<FollowupResponse> {
   const { userId, readingId, clientRequestId, question } = input;
   const admin = createSupabaseAdminClient();
+
+  if (await isScrollReading(admin, readingId, userId)) return askScrollFollowup(input);
 
   const { data, error } = await admin.rpc("begin_followup", {
     p_user_id: userId,
@@ -126,7 +142,7 @@ export async function askFollowup(input: {
 
     // 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트에 맞는 캐릭터 설정을 쓴다 (followups.prompt_version으로 버전을 알 수 있다).
     const persona = findPersona(reading.data.persona_id as string, personaVersionFor(CURRENT_FOLLOWUP_PROMPT));
-    const product = findProduct(reading.data.product_id as string);
+    const product = findMessengerProduct(reading.data.product_id as string);
     if (!persona || !product) throw new Error("configuration_unavailable");
     const plan = internals.data.plan as AnyReadingPlan;
     const last = (previous.data ?? [])[0] as { question: string; answer: string | null } | undefined;

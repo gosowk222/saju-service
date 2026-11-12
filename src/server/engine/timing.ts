@@ -66,16 +66,31 @@ export interface TimingRequest {
   readonly period: QuestionPeriod;
 }
 
+/** 기간 계산에 쓰는 기능 ID (FEATURE_SET 안의 정의). */
+export interface TimingFeatureIds {
+  /** 세운과 그해 12개월 (targetKind year-months). */
+  readonly yearMonths: string;
+  /** 대운 (targetKind decade). */
+  readonly decade: string;
+}
+
+/** 첫 상품(묘묘)의 기간 기능. features를 주지 않으면 이 값을 쓴다. */
+const DEFAULT_TIMING_FEATURES: TimingFeatureIds = { yearMonths: FEATURE_IDS.yearMonths, decade: FEATURE_IDS.decade };
+
 /**
  * 시기 질문에 필요한 기간 재료만 계산한다. 원국 해석은 저장된 계획을 다시 쓰고, 여기서는
  * 요청 기간이 속한 세운·월운과 대운만 한 세션에서 계산한다. 일운은 계산하지 않는다.
+ * features는 선택 인자다. 무진은 시각 미상에서도 세운·월운 결과가 unavailable이 되지 않는 무진 기능을 넘긴다.
+ * 주지 않으면 첫 상품의 기능을 써서 지금과 같은 결과를 낸다.
  */
 export function analyzeTiming(input: {
   readonly birth: PublicBirthInput;
   readonly referenceDate: string;
   readonly requests: readonly TimingRequest[];
+  readonly features?: TimingFeatureIds;
 }): TimingAnalysis[] {
   const { birth, referenceDate, requests } = input;
+  const features = input.features ?? DEFAULT_TIMING_FEATURES;
   if (!requests.length) return [];
   const analysisInput = toAnalysisInput(birth);
   const timezoneId = birth.birthPlace.timezoneId;
@@ -93,14 +108,14 @@ export function analyzeTiming(input: {
     const limitations = new Set<string>();
     for (const year of [...years].sort()) {
       try {
-        results.push(session.execute(FEATURE_SET, { ...analysisInput, featureId: FEATURE_IDS.yearMonths, target: { kind: "year-months", year, timezoneId } }));
+        results.push(session.execute(FEATURE_SET, { ...analysisInput, featureId: features.yearMonths, target: { kind: "year-months", year, timezoneId } }));
       } catch {
         limitations.add(`${year}년 세운·월운을 계산하지 못했다.`);
       }
     }
     for (const at of decadeAt) {
       try {
-        results.push(session.execute(FEATURE_SET, { ...analysisInput, featureId: FEATURE_IDS.decade, target: { at, timezoneId } }));
+        results.push(session.execute(FEATURE_SET, { ...analysisInput, featureId: features.decade, target: { at, timezoneId } }));
       } catch {
         limitations.add("대운을 계산하지 못했다.");
       }

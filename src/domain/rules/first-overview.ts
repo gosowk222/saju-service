@@ -112,7 +112,7 @@ function temperamentRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && percents[first] - percents[second] <= PARTIAL_HOLD_MARGIN,
           support: [families],
-          detail: textDetail("핵심 특징", reading, [`십성 계열 중 ${percentText(first, percents)}가 가장 큼`]),
+          detail: textDetail("핵심 특징", reading, [`십성 계열 중 ${percentText(first, percents)}가 가장 큼`], { variant: first }),
         });
       } else {
         out.add({
@@ -120,7 +120,9 @@ function temperamentRule(sink?: RuleDetailSink): InquiryRule {
           text: TEMPERAMENT_BALANCED.claim,
           hold: partial && nearThreshold(percents[first], DOMINANT_MIN_PERCENT, 4),
           support: [families],
-          detail: textDetail("핵심 특징", TEMPERAMENT_BALANCED, [`가장 큰 계열도 ${percentText(first, percents)}로 25%에 이르지 않음`]),
+          detail: textDetail("핵심 특징", TEMPERAMENT_BALANCED, [`가장 큰 계열도 ${percentText(first, percents)}로 25%에 이르지 않음`], {
+            variant: "balanced",
+          }),
         });
       }
 
@@ -132,9 +134,12 @@ function temperamentRule(sink?: RuleDetailSink): InquiryRule {
             text: reading.claim,
             hold: partial && nearThreshold(percents[second], MIX_MIN_PERCENT, 4),
             support: [families, pairObservation(context.evidence, first, second)],
-            detail: textDetail("서로 다른 성향이 함께 나타나는 이유", reading, [
-              `${percentText(first, percents)}, ${percentText(second, percents)}가 함께 큼`,
-            ]),
+            detail: textDetail(
+              "서로 다른 성향이 함께 나타나는 이유",
+              reading,
+              [`${percentText(first, percents)}, ${percentText(second, percents)}가 함께 큼`],
+              { variant: [first, second].sort().join("|") },
+            ),
           });
         }
       }
@@ -149,7 +154,7 @@ function temperamentRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && borderline,
           support: [strength],
-          detail: textDetail("상황에 따른 반응", reading, [`일간의 힘이 ${STRENGTH_LABEL[context.assessment!.strength!]}으로 계산됨`]),
+          detail: textDetail("상황에 따른 반응", reading, [`일간의 힘이 ${STRENGTH_LABEL[context.assessment!.strength!]}으로 계산됨`], { variant: band }),
         });
         if (band !== "balanced") {
           const inner = first === "peer" || first === "resource";
@@ -159,10 +164,12 @@ function temperamentRule(sink?: RuleDetailSink): InquiryRule {
             text: condition.claim,
             hold: partial && borderline,
             support: [strength, families],
-            detail: textDetail("강점과 약점이 갈리는 조건", condition, [
-              `일간의 힘 ${STRENGTH_LABEL[context.assessment!.strength!]}`,
-              `가장 큰 계열 ${percentText(first, percents)}`,
-            ]),
+            detail: textDetail(
+              "강점과 약점이 갈리는 조건",
+              condition,
+              [`일간의 힘 ${STRENGTH_LABEL[context.assessment!.strength!]}`, `가장 큰 계열 ${percentText(first, percents)}`],
+              { variant: `${band}-${inner ? "inner" : "outer"}` },
+            ),
           });
         }
       }
@@ -193,7 +200,7 @@ function strengthsRule(sink?: RuleDetailSink): InquiryRule {
           key: "ability",
           text: ability.claim,
           support: [patternJudgment],
-          detail: textDetail("발휘하기 좋은 능력", ability, [`격국이 ${PATTERN_LABEL[pattern] ?? pattern}으로 계산됨`]),
+          detail: textDetail("발휘하기 좋은 능력", ability, [`격국이 ${PATTERN_LABEL[pattern] ?? pattern}으로 계산됨`], { variant: pattern }),
         });
       }
 
@@ -206,7 +213,11 @@ function strengthsRule(sink?: RuleDetailSink): InquiryRule {
           text: present.map((item) => SHINSAL_ENVIRONMENT[item.id]).join(" "),
           support: present.flatMap((item) => item.entries),
           caveats: [SHINSAL_CAVEAT],
-          detail: { aspect: "강점이 살아나는 환경", basis: present.map((item) => `원국에 ${SHINSAL_LABEL[item.id] ?? item.id} 신살 표지가 있음`) },
+          detail: {
+            aspect: "강점이 살아나는 환경",
+            basis: present.map((item) => `원국에 ${SHINSAL_LABEL[item.id] ?? item.id} 신살 표지가 있음`),
+            variant: present.map((item) => item.id).join("+"),
+          },
         });
       }
 
@@ -220,6 +231,7 @@ function strengthsRule(sink?: RuleDetailSink): InquiryRule {
           detail: {
             aspect: "능력을 실제 행동으로 연결하는 방법",
             basis: [`가장 약한 계열이 ${percentText(scarce, percents)}`],
+            variant: scarce,
           },
         });
       }
@@ -259,7 +271,7 @@ function careerRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && percents[first] - percents[second] <= PARTIAL_HOLD_MARGIN,
           support: [families],
-          detail: textDetail("일하는 방식", reading, [`가장 큰 계열 ${percentText(first, percents)}`]),
+          detail: textDetail("일하는 방식", reading, [`가장 큰 계열 ${percentText(first, percents)}`], { variant: first }),
         });
       }
 
@@ -273,6 +285,7 @@ function careerRule(sink?: RuleDetailSink): InquiryRule {
         support: [families, pairObservation(context.evidence, "authority", "resource")],
         detail: textDetail("조직과 업무 환경", fitReading, [percentText("authority", percents), percentText("peer", percents), percentText("output", percents)], {
           ...(tension ? { counterNote: `표현 기운(${percentText("output", percents)})도 강해서 위계가 너무 엄격한 조직에서는 답답함이 커질 수 있다.` } : {}),
+          variant: fit,
         }),
       });
 
@@ -296,6 +309,7 @@ function careerRule(sink?: RuleDetailSink): InquiryRule {
             `협업·경쟁 쪽 ${percentText("peer", percents)}`,
             `독자 산출 쪽 ${percentText("output", percents)}`,
           ],
+          variant: [`strong:${strongest.family}`, ...(weakest.value <= 15 ? [`weak:${weakest.family}`] : [])].join("+"),
         },
       });
 
@@ -321,7 +335,12 @@ function careerRule(sink?: RuleDetailSink): InquiryRule {
           support: winners.length ? winners.map((item) => evidenceOf(item.name)) : [families],
           counter: losers.map((item) => evidenceOf(item.name)),
           caveats: ["창업 자금, 경력, 고객 확보처럼 입력되지 않은 현실 조건은 판단하지 않았다."],
-          detail: { aspect: "취업·이직·창업의 조건 비교", basis: compare.criteria.map((item) => `${item.name}: ${item.reason}`), compare },
+          detail: {
+            aspect: "취업·이직·창업의 조건 비교",
+            basis: compare.criteria.map((item) => `${item.name}: ${item.reason}`),
+            compare,
+            variant: leading ?? "even",
+          },
         });
       }
       return out.drafts.slice(0, 4);
@@ -411,7 +430,7 @@ function wealthRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && (nearThreshold(wealth, 10, 3) || nearThreshold(output, 25, 3)),
           support: [families, pairObservation(context.evidence, "output", "wealth")],
-          detail: textDetail("수입 활동과 관련된 특징", reading, basis),
+          detail: textDetail("수입 활동과 관련된 특징", reading, basis, { variant: income }),
         });
       }
 
@@ -422,7 +441,9 @@ function wealthRule(sink?: RuleDetailSink): InquiryRule {
         text: keepingReading.claim,
         hold: partial && (nearThreshold(peer, 25, 3) || nearThreshold(authority, 20, 3)),
         support: [families],
-        detail: textDetail("돈을 유지하고 쓰는 방식", keepingReading, [percentText("peer", percents), percentText("authority", percents), percentText("resource", percents)]),
+        detail: textDetail("돈을 유지하고 쓰는 방식", keepingReading, [percentText("peer", percents), percentText("authority", percents), percentText("resource", percents)], {
+          variant: keeping,
+        }),
       });
 
       // 비겁이 평균(20%) 근처면 흔한 구조라, 비중이 크거나 겁재가 여럿일 때만 금전 관계의 약점으로 본다.
@@ -438,6 +459,7 @@ function wealthRule(sink?: RuleDetailSink): InquiryRule {
             "지출·동업·금전 관계에서 살필 점",
             reading,
             relation === "leaky" ? [percentText("peer", percents), `원국에 겁재 ${robbers}개`] : [percentText("peer", percents)],
+            { variant: relation },
           ),
         });
       }
@@ -474,7 +496,9 @@ function romanceRule(sink?: RuleDetailSink): InquiryRule {
         hold: partial && (nearThreshold(output, 25, 3) || nearThreshold(output, 12, 3)),
         support: [families, ...charm.flatMap((item) => item.entries)],
         caveats: charm.length ? [SHINSAL_CAVEAT] : [],
-        detail: textDetail("매력과 표현 방식", styleReading, [percentText("output", percents), ...charm.map((item) => `원국에 ${item.id} 신살 표지`)]),
+        detail: textDetail("매력과 표현 방식", styleReading, [percentText("output", percents), ...charm.map((item) => `원국에 ${item.id} 신살 표지`)], {
+          variant: [style, ...charm.map((item) => `charm:${item.id}`)].join("+"),
+        }),
       });
 
       const comfortFamily = tenGodFamily(dayBranchTenGod(context));
@@ -484,9 +508,12 @@ function romanceRule(sink?: RuleDetailSink): InquiryRule {
           key: "comfort",
           text: reading.claim,
           support: [families],
-          detail: textDetail("편안하게 느끼는 관계", reading, [
-            `배우자 자리로 보는 일지의 본기가 ${dayBranchTenGod(context)}(${FAMILY_LABEL[comfortFamily]}: ${FAMILY_MEANING[comfortFamily]})`,
-          ]),
+          detail: textDetail(
+            "편안하게 느끼는 관계",
+            reading,
+            [`배우자 자리로 보는 일지의 본기가 ${dayBranchTenGod(context)}(${FAMILY_LABEL[comfortFamily]}: ${FAMILY_MEANING[comfortFamily]})`],
+            { variant: comfortFamily },
+          ),
         });
       }
 
@@ -509,6 +536,7 @@ function romanceRule(sink?: RuleDetailSink): InquiryRule {
             "관계가 깊어지면서 드러나는 약점",
             reading,
             deepening === "solitude" ? ["원국에 고신·과숙 신살 표지"] : [`일지에 걸린 관계 표지: 대립 ${friction.length}개, 합 ${binding.length}개`],
+            { variant: deepening },
           ),
         });
       }
@@ -523,7 +551,9 @@ function romanceRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && nearThreshold(output, 25, 3),
           support: [families, findJudgment(context.evidence, "m01.assessment.strength")],
-          detail: textDetail("갈등과 조율 방식", reading, [percentText("output", percents), percentText("peer", percents), percentText("authority", percents)]),
+          detail: textDetail("갈등과 조율 방식", reading, [percentText("output", percents), percentText("peer", percents), percentText("authority", percents)], {
+            variant: conflict,
+          }),
         });
       }
       return out.drafts.slice(0, 4);
@@ -556,7 +586,7 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
         text: coopReading.claim,
         hold: partial && (nearThreshold(peer, 25, 3) || nearThreshold(peer, 12, 3)),
         support: [families],
-        detail: textDetail("동료·모임에서의 협력", coopReading, [percentText("peer", percents)]),
+        detail: textDetail("동료·모임에서의 협력", coopReading, [percentText("peer", percents)], { variant: cooperation }),
       });
 
       const yangin = shinsalEvidence(context.evidence, "yangin", null);
@@ -569,11 +599,16 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && nearThreshold(peer, competition === "rival" ? 25 : 15, 3) && !yangin.length,
           support: [families, ...yangin],
-          detail: textDetail("경쟁과 비교", reading, [
-            percentText("peer", percents),
-            ...((counts["겁재"] ?? 0) > 0 ? [`원국에 겁재 ${counts["겁재"]}개`] : []),
-            ...(yangin.length ? ["원국에 양인 신살 표지"] : []),
-          ]),
+          detail: textDetail(
+            "경쟁과 비교",
+            reading,
+            [
+              percentText("peer", percents),
+              ...((counts["겁재"] ?? 0) > 0 ? [`원국에 겁재 ${counts["겁재"]}개`] : []),
+              ...(yangin.length ? ["원국에 양인 신살 표지"] : []),
+            ],
+            { variant: competition },
+          ),
         });
       }
 
@@ -594,6 +629,7 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
             "거리와 경계 설정",
             reading,
             boundary === "recharge" ? ["원국에 화개·고신·과숙 중 하나 이상의 신살 표지"] : [`일간의 힘 ${band ?? "알 수 없음"}`, percentText("resource", percents), percentText("authority", percents)],
+            { variant: boundary },
           ),
         });
       }
@@ -607,11 +643,12 @@ function socialRule(sink?: RuleDetailSink): InquiryRule {
           text: reading.claim,
           hold: partial && conflict !== "avoid" && conflict !== "face" && nearThreshold(conflict === "direct" ? output : authority, conflict === "direct" ? 25 : 20, 3),
           support: [families, findJudgment(context.evidence, "m01.assessment.strength")],
-          detail: textDetail("갈등 상황의 반응", reading, [
-            ...((counts["상관"] ?? 0) > 0 ? [`원국에 상관 ${counts["상관"]}개`] : []),
-            percentText("output", percents),
-            percentText("authority", percents),
-          ]),
+          detail: textDetail(
+            "갈등 상황의 반응",
+            reading,
+            [...((counts["상관"] ?? 0) > 0 ? [`원국에 상관 ${counts["상관"]}개`] : []), percentText("output", percents), percentText("authority", percents)],
+            { variant: conflict },
+          ),
         });
       }
       return out.drafts.slice(0, 4);

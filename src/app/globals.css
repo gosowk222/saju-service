@@ -223,3 +223,49 @@
     animation-name: typing-dot-fade;
   }
 }
+
+/*
+ * 무진 족자: 책상 위 종이가 커지며 사라지고(paper-lift), 그 아래에서 족자가 펼쳐진다(scroll-unfurl).
+ * 둘 다 디자인 시스템의 '결과 드러남' 길이(duration-slow, 300ms)와 표준 곡선으로 같은 때에 한 번만 재생한다 (300ms 상한 안).
+ * 움직임을 줄이는 설정에서는 토큰 길이가 0ms가 되어 바로 끝난 모습으로 보인다. 이동 거리는 간격 토큰을 쓴다.
+ */
+@keyframes paper-lift {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(var(--space-7)) scale(1.6);
+  }
+}
+@utility animate-paper-lift {
+  animation: paper-lift var(--duration-slow) var(--ease-standard) both;
+}
+@keyframes scroll-unfurl {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--space-8) * -1)) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-scroll-unfurl {
+  transform-origin: top center;
+  animation: scroll-unfurl var(--duration-slow) var(--ease-standard) both;
+}
+
+/* 바텀시트가 아래에서 올라온다 (디자인 시스템의 바텀시트 길이 duration-slow). 닫을 때는 바로 닫는다. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@utility animate-sheet {
+  animation: sheet-in var(--duration-slow) var(--ease-standard) both;
+}
