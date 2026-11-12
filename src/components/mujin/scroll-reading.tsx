@@ -15,13 +15,14 @@ import { ConsultScene } from "./scene";
 import {
   afterGenerate,
   anchorId,
+  CONNECTION_LOST_TEXT,
   decideGenerate,
+  failureText,
   haltDuration,
-  haltText,
   IDLE_CONTEXT,
   markRetrying,
   mergeScrollState,
-  phaseErrorText,
+  phaseAlerts,
   POLL_INTERVAL_MS,
   readingComplete,
   sceneStatus,
@@ -114,18 +115,25 @@ function WritingBody() {
   );
 }
 
+/** 그 단계를 다시 시도하는 버튼 (POST scroll/generate { tier, retry: true }). 마치지 못한 장만 다시 쓴다. */
+function RetryButton({ retrying, onRetry }: { retrying: boolean; onRetry: () => void }) {
+  return (
+    <Button variant="secondary" className="self-start" disabled={retrying} onClick={onRetry}>
+      <RotateCcw size={18} aria-hidden />
+      {retrying ? "다시 쓰는 중이에요" : "다시 시도하기"}
+    </Button>
+  );
+}
+
+/**
+ * 오류 칸. 그 칸 단계(phase)의 canRetry가 참이면 다시 시도 버튼을, 거짓이면 횟수를 다 썼다는 안내와 문의 안내를 보여 준다.
+ * 단계 전체가 실패하면(질문 정리·저장 오류 등) 서버가 끝나지 않은 칸을 모두 오류로 주므로, 어느 칸에서 눌러도 그 단계를 다시 시도한다.
+ */
 function FailedBody({ phase, retrying, onRetry }: { phase: ScrollPhaseView; retrying: boolean; onRetry: () => void }) {
   return (
     <div className="flex flex-col gap-3">
-      <Notice tone="danger">
-        {phaseErrorText(phase.errorCode)} {phase.canRetry ? "다시 시도하면 마치지 못한 장만 다시 쓰고, 이미 쓴 장은 그대로 둬요." : "다시 시도할 수 있는 횟수를 모두 썼어요. 고객센터로 문의해 주세요."}
-      </Notice>
-      {phase.canRetry ? (
-        <Button variant="secondary" className="self-start" disabled={retrying} onClick={onRetry}>
-          <RotateCcw size={18} aria-hidden />
-          {retrying ? "다시 쓰는 중이에요" : "다시 시도하기"}
-        </Button>
-      ) : null}
+      <Notice tone="danger">{failureText(phase)}</Notice>
+      {phase.canRetry ? <RetryButton retrying={retrying} onRetry={onRetry} /> : null}
     </div>
   );
 }
@@ -334,10 +342,8 @@ export function ScrollReading({ readingId, initialState, lines, face, personaNam
 
   const current = state.sections.find((section) => section.id === currentId);
   const subtitle = visible && current ? sectionLabel(current) : `${state.productName} · ${state.nickname} 님`;
-  const haltNotices = (["free", "paid"] as const).flatMap((tier) => {
-    const text = haltText(halted[tier], tier);
-    return text && !(tier === "paid" && !state.entitled) ? [text] : [];
-  });
+  // 멈춘 이유와, 오류 칸 없이 단계만 실패했을 때의 단계 안내·다시 시도 버튼 (그러지 않으면 다시 시도할 곳이 없어 멈춘다).
+  const alerts = phaseAlerts(state, context);
 
   return (
     <>
@@ -368,11 +374,18 @@ export function ScrollReading({ readingId, initialState, lines, face, personaNam
           onPaperLifted={() => setPaperGone(true)}
         />
 
-        {haltNotices.map((text) => (
-          <Notice key={text} tone="warning">
-            {text}
-          </Notice>
-        ))}
+        {alerts.map((alert) =>
+          alert.tone === "danger" ? (
+            <div key={`${alert.tier}-failed`} data-phase-alert={alert.tier} className="flex flex-col gap-3">
+              <Notice tone="danger">{alert.text}</Notice>
+              {alert.retry ? <RetryButton retrying={inFlight[alert.tier]} onRetry={() => retry(alert.tier)} /> : null}
+            </div>
+          ) : (
+            <Notice key={`${alert.tier}-halt`} tone="warning">
+              {alert.text}
+            </Notice>
+          ),
+        )}
         {notice ? <Notice tone="danger">{notice}</Notice> : null}
 
         {visible ? (
@@ -437,7 +450,7 @@ export function ScrollReading({ readingId, initialState, lines, face, personaNam
 
       {connectionLost ? (
         <p role="status" className="sticky bottom-5 z-10 mx-4 rounded-md bg-gray-800 px-4 py-4 text-center type-label font-normal text-white">
-          인터넷 연결이 끊겼어요. 풀이는 서버에서 계속 쓰고 있으니, 연결되면 이어서 보여 드릴게요.
+          {CONNECTION_LOST_TEXT}
         </p>
       ) : null}
 

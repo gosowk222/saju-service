@@ -64,10 +64,24 @@ export function phaseActive(status: PhaseStatus): boolean {
   return status === "queued" || status === "running";
 }
 
+const TIERS: readonly ScrollTier[] = ["free", "paid"];
+
+function phaseOf(state: ScrollStateView, tier: ScrollTier): ScrollPhaseView {
+  return tier === "free" ? state.free : state.paid;
+}
+
+/** 이 단계의 칸 가운데 오류(failed)로 보이는 칸이 있는가. 오류 칸은 그 안에서 다시 시도 버튼이나 문의 안내를 보여 준다. */
+function hasFailedSection(state: ScrollStateView, tier: ScrollTier): boolean {
+  return state.sections.some((section) => section.tier === tier && section.state === "failed");
+}
+
+/** 단계 단위 안내에서 무엇을 마치지 못했는지 (화면 문구의 목적어). */
+const PHASE_SUBJECT: Readonly<Record<ScrollTier, string>> = { free: "무료 부분을", paid: "이어지는 장을" };
+
 /** 이 단계가 아직 진행될 차례인가 (요청 중, 서버에서 진행 중, 또는 시작 전이면서 멈추지 않음). */
 function phaseMoving(state: ScrollStateView, tier: ScrollTier, context: DriverContext): boolean {
   if (tier === "paid" && !state.entitled) return false;
-  const phase = tier === "free" ? state.free : state.paid;
+  const phase = phaseOf(state, tier);
   if (context.inFlight[tier] || context.rerun?.[tier]) return true;
   if (context.halted[tier] && context.halted[tier] !== "cooldown") return false;
   return phaseActive(phase.status) || phase.status === "idle";
@@ -100,7 +114,7 @@ export function decideGenerate(state: ScrollStateView, context: DriverContext): 
   const startable = (tier: ScrollTier) => {
     if (context.inFlight[tier] || context.halted[tier]) return false;
     if (context.rerun?.[tier]) return true;
-    const phase = tier === "free" ? state.free : state.paid;
+    const phase = phaseOf(state, tier);
     return phase.status === "idle" || phase.status === "queued";
   };
   if (startable("free")) return "free";
@@ -201,6 +215,8 @@ export interface SceneStatus {
  * - 계산 중: 생성이 진행 중인데 아직 완성된 칸도, 작성 중인 칸도 없을 때.
  * - 작성 중: 실제로 쓰는 중(writing)인 칸이 있을 때.
  * - 완료: 그 단계가 끝났을 때. 연출을 위해 완료 표시를 늦추지 않는다.
+ * - 실패: 오류 칸이 있거나 단계가 실패했을 때. 다시 시도할 수 있을 때만 '다시 시도 필요'라고 하고,
+ *   무진의 '이 장만 다시 쓴다'는 말(sectionFailed)은 다시 시도할 수 있는 오류 칸이 있을 때만 쓴다.
  */
 export function sceneStatus(state: ScrollStateView, context: DriverContext): SceneStatus {
   const sections = writtenSections(state);
@@ -216,7 +232,17 @@ export function sceneStatus(state: ScrollStateView, context: DriverContext): Sce
   if (freeMoving) return { mode: "writing", line: "writingFree", badge: "다음 장 준비 중" };
   if (paidMoving) return { mode: "writing", line: "writingPaid", badge: "다음 장 준비 중" };
 
-  if (sections.some((section) => section.state === "failed")) return { mode: "reading", line: "sectionFailed", badge: "다시 시도 필요" };
+  const failing = TIERS.filter(
+    (tier) => (tier === "free" || state.entitled) && (hasFailedSection(state, tier) || phaseOf(state, tier).status === "failed"),
+  );
+  if (failing.length > 0) {
+    if (failing.some((tier) => hasFailedSection(state, tier) && phaseOf(state, tier).canRetry)) {
+      return { mode: "reading", line: "sectionFailed", badge: "다시 시도 필요" };
+    }
+    // 단계만 실패하고 오류 칸이 없을 때는 족자 위 단계 안내가 다시 시도 버튼을 보여 준다.
+    if (failing.some((tier) => phaseOf(state, tier).canRetry)) return { mode: "reading", line: null, badge: "다시 시도 필요" };
+    return { mode: "reading", line: null, badge: "문의 필요" };
+  }
   if (state.entitled && state.paid.status === "completed") return { mode: "reading", line: "paidDone", badge: "완료" };
   if (!state.entitled && state.free.status === "completed") return { mode: "reading", line: "freeDone", badge: "무료 부분 완료" };
   return { mode: "reading", line: null, badge: null };
@@ -256,28 +282,72 @@ export function anchorId(sectionId: string): string {
   return `section-${sectionId}`;
 }
 
-/** 단계 오류 코드의 안내 (화면 문구). 모르는 코드는 일반 안내를 쓴다. */
-export function phaseErrorText(errorCode: string | null): string {
+/**
+ * 단계 오류 코드의 안내 (화면 문구). subject는 무엇을 마치지 못했는지다 (오류 칸은 '이 장을', 족자 위 단계 안내는 '무료 부분을' 등).
+ * 모르는 코드는 일반 안내를 쓴다. 문의 안내는 retryGuide가 붙인다.
+ */
+export function phaseErrorText(errorCode: string | null, subject = "이 장을"): string {
   switch (errorCode) {
     case "rate_limited":
-      return "요청이 몰려 이 장을 마치지 못했어요.";
+      return `요청이 몰려 ${subject} 마치지 못했어요.`;
     case "timeout":
-      return "이 장을 쓰는 데 시간이 너무 오래 걸렸어요.";
+      return `${subject} 쓰는 데 시간이 너무 오래 걸렸어요.`;
     case "attempts_exhausted":
-      return "여러 번 시도했지만 이 장을 마치지 못했어요. 고객센터로 문의해 주세요.";
+      return `여러 번 시도했지만 ${subject} 마치지 못했어요.`;
     default:
-      return "일시적인 문제로 이 장을 마치지 못했어요.";
+      return `일시적인 문제로 ${subject} 마치지 못했어요.`;
   }
 }
 
-/** 단계가 스스로 멈춘 이유의 안내 (화면 문구). 안내할 것이 없으면 null. */
-export function haltText(reason: HaltReason | null, tier: ScrollTier): string | null {
+/**
+ * 다시 시도해도 같은 결과인 설정·버전 오류 (서버 실행기가 재시도 불가로 남기는 코드). 시도 횟수를 다 쓴 실패와 안내를 나눈다.
+ * 여기에 없는 코드로 다시 시도할 수 없으면 횟수를 다 쓴 것으로 안내한다 (장 시도 수 소진 units_failed, 시작 상한 attempts_exhausted 등).
+ */
+const UNRECOVERABLE_ERROR_CODES: ReadonlySet<string> = new Set([
+  "prompt_version_unavailable",
+  "plan_version_unavailable",
+  "model_not_configured",
+  "persona_unavailable",
+  "plan_section_missing",
+  "unknown_section",
+  "timing_too_large",
+  "live_call_blocked",
+  "model_not_found",
+  "permission_denied",
+  "auth_failed",
+  "bad_request",
+]);
+
+/** 실패 뒤 할 수 있는 일 (화면 문구). 다시 시도 버튼은 phase.canRetry일 때만 보인다. */
+export function retryGuide(phase: ScrollPhaseView): string {
+  if (phase.canRetry) return "다시 시도하면 마치지 못한 장만 다시 쓰고, 이미 쓴 장은 그대로 둬요.";
+  if (phase.errorCode && UNRECOVERABLE_ERROR_CODES.has(phase.errorCode)) return "지금은 이어서 쓸 수 없어요. 고객센터로 문의해 주세요.";
+  return "다시 시도할 수 있는 횟수를 모두 썼어요. 고객센터로 문의해 주세요.";
+}
+
+/** 오류 칸과 단계 단위 실패 안내 (화면 문구): 이유 + 할 수 있는 일. */
+export function failureText(phase: ScrollPhaseView, subject = "이 장을"): string {
+  return `${phaseErrorText(phase.errorCode, subject)} ${retryGuide(phase)}`;
+}
+
+/**
+ * 단계가 스스로 멈춘 이유의 안내 (화면 문구). 안내할 것이 없으면 null.
+ * failed는 그 단계의 저장 상태(phase)로 문구를 고른다: 다시 시도할 수 있으면 오류 칸의 버튼으로, 없으면 문의로 안내한다.
+ * 저장 상태가 아직 실패가 아니면(실패를 기록하기 전, 점유 시간이 남음) 잠시 뒤 다시 열면 이어서 쓴다.
+ */
+export function haltText(reason: HaltReason | null, tier: ScrollTier, phase?: ScrollPhaseView): string | null {
   switch (reason) {
+    case "failed":
+      if (phase?.status !== "failed") return `${PHASE_SUBJECT[tier]} 쓰다가 멈췄어요. 잠시 뒤 이 화면을 다시 열어 주세요.`;
+      return phase.canRetry
+        ? `${PHASE_SUBJECT[tier]} 쓰다가 멈췄어요. 오류가 난 장에서 다시 시도할 수 있어요.`
+        : `${PHASE_SUBJECT[tier]} 다 쓰지 못하고 멈췄어요. 고객센터로 문의해 주세요.`;
     case "daily_limited":
       return "오늘 시작할 수 있는 무료 풀이를 모두 썼어요. 내일 이 화면을 다시 열면 이어서 씁니다.";
     case "exhausted":
+      // 시작 횟수 상한에 닿은 단계는 다시 열어도 이어서 쓰지 않는다.
       return tier === "free"
-        ? "여러 번 시도했지만 무료 부분을 마치지 못했어요. 잠시 뒤 다시 열어 보시고, 계속되면 고객센터로 문의해 주세요."
+        ? "여러 번 시도했지만 무료 부분을 마치지 못했어요. 고객센터로 문의해 주세요."
         : "여러 번 시도했지만 이어지는 장을 마치지 못했어요. 이용권이나 결제는 이 풀이에 그대로 남아 있으니 고객센터로 문의해 주세요.";
     case "locked":
       return tier === "paid" ? "이어지는 장은 이용권이나 결제로 받은 뒤에 씁니다." : null;
@@ -287,6 +357,38 @@ export function haltText(reason: HaltReason | null, tier: ScrollTier): string | 
       return null;
   }
 }
+
+/** 족자 위 단계 안내 하나. danger는 단계 단위 실패이고, retry면 그 단계를 다시 시도하는 버튼을 함께 둔다. */
+export interface PhaseAlert {
+  readonly tier: ScrollTier;
+  readonly tone: "warning" | "danger";
+  readonly text: string;
+  readonly retry: boolean;
+}
+
+/**
+ * 족자 위(상담 장면 아래)에 보여 줄 단계 안내. 권한이 없으면 유료 단계는 안내하지 않는다.
+ * - 단계가 실패했는데 오류 칸이 하나도 없으면(모든 칸이 완성된 뒤 마무리 실패, 이전 응답 등) 이 안내가 실패 이유와 다시 시도 버튼을 맡는다.
+ *   그러지 않으면 화면에 다시 시도할 곳이 없어 생성이 멈춘다. 이때는 멈춘 이유 안내를 따로 두지 않는다 (같은 내용).
+ * - 그 밖에는 이 화면이 스스로 멈춘 이유(haltText)를 알린다. 오류 칸이 있으면 다시 시도 버튼은 오류 칸에 있다.
+ */
+export function phaseAlerts(state: ScrollStateView, context: DriverContext): PhaseAlert[] {
+  return TIERS.flatMap((tier): PhaseAlert[] => {
+    if (tier === "paid" && !state.entitled) return [];
+    const phase = phaseOf(state, tier);
+    if (phase.status === "failed" && !hasFailedSection(state, tier)) {
+      return [{ tier, tone: "danger", text: failureText(phase, PHASE_SUBJECT[tier]), retry: phase.canRetry }];
+    }
+    const text = haltText(context.halted[tier], tier, phase);
+    return text ? [{ tier, tone: "warning", text, retry: false }] : [];
+  });
+}
+
+/**
+ * 연결이 끊겼을 때의 안내 (화면 문구). 생성 요청 하나는 서버의 시간 예산 안에서만 쓰고, 그 뒤에는 이 화면이 다시 요청해야
+ * 이어서 쓴다. 그래서 서버가 계속 쓰고 있다고 약속하지 않는다.
+ */
+export const CONNECTION_LOST_TEXT = "인터넷 연결이 끊겼어요. 다 쓴 장은 저장되어 있으니, 연결되면 이어서 보여 드리고 남은 장도 이어서 쓸게요.";
 
 // ── 후속 질문 ─────────────────────────────────────────────
 

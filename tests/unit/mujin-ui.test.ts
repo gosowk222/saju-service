@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DraftSchema } from "@/domain/birth/input";
 import { EMPTY_NOW, FAMILY_OPTIONS, INTEREST_CHAPTER_IDS, MujinNowSchema, type FamilyId, type MujinNow } from "@/domain/mujin/now";
-import type { MujinMonths, NatalStageCell, PhaseStatus, ScrollSectionView, ScrollStateView, SectionViewState } from "@/domain/mujin/types";
+import type { MujinMonths, NatalStageCell, PhaseStatus, ScrollSectionView, ScrollStateView, ScrollTier, SectionViewState } from "@/domain/mujin/types";
+import { generatingDescription } from "@/components/free-ticket-card";
+import { buildScrollStateView, type PhaseRecord, type ScrollStateInput } from "@/server/scroll/state";
 import { findPersona, type PersonaIntakeLines } from "@/domain/personas";
 import { MUJIN_OVERVIEW } from "@/domain/products/mujin-overview";
 import {
@@ -27,7 +29,9 @@ import {
   afterGenerate,
   anchorId,
   byPosition,
+  CONNECTION_LOST_TEXT,
   decideGenerate,
+  failureText,
   firstFreeReady,
   formatFullDate,
   formatMonthDay,
@@ -43,6 +47,7 @@ import {
   MONTH_TONE_LABEL,
   monthFlags,
   paragraphs,
+  phaseAlerts,
   readingComplete,
   sceneStatus,
   scrollVisible,
@@ -81,7 +86,19 @@ function sectionsOf(states: SectionStates, entitled: boolean): ScrollSectionView
   });
 }
 
-function makeState(options: { free?: PhaseStatus; paid?: PhaseStatus; entitled?: boolean; sections?: SectionStates; readingId?: string } = {}): ScrollStateView {
+function makeState(
+  options: {
+    free?: PhaseStatus;
+    paid?: PhaseStatus;
+    entitled?: boolean;
+    sections?: SectionStates;
+    readingId?: string;
+    /** 단계별 canRetry (기본 false). */
+    retry?: Partial<Record<ScrollTier, boolean>>;
+    /** 단계별 오류 코드 (기본 null). */
+    errorCode?: Partial<Record<ScrollTier, string>>;
+  } = {},
+): ScrollStateView {
   const entitled = options.entitled ?? false;
   return {
     readingId: options.readingId ?? "reading-1",
@@ -99,8 +116,13 @@ function makeState(options: { free?: PhaseStatus; paid?: PhaseStatus; entitled?:
       tenGods: { cells: [], families: null },
     },
     entitled,
-    free: { status: options.free ?? "idle", canRetry: false, errorCode: null },
-    paid: { status: options.paid ?? (entitled ? "queued" : "locked"), canRetry: false, errorCode: null, referenceDate: null },
+    free: { status: options.free ?? "idle", canRetry: options.retry?.free ?? false, errorCode: options.errorCode?.free ?? null },
+    paid: {
+      status: options.paid ?? (entitled ? "queued" : "locked"),
+      canRetry: options.retry?.paid ?? false,
+      errorCode: options.errorCode?.paid ?? null,
+      referenceDate: null,
+    },
     sections: sectionsOf(options.sections ?? {}, entitled),
     timing: null,
   };
@@ -352,10 +374,10 @@ describe("족자가 펼쳐지는 때와 상담 장면 상태", () => {
     expect(paidDone).toEqual({ mode: "reading", line: "paidDone", badge: "완료" });
 
     const failed = sceneStatus(
-      makeState({ free: "completed", entitled: true, paid: "failed", sections: { ...all(FREE_WRITTEN, "done"), ch3: "failed" } }),
+      makeState({ free: "completed", entitled: true, paid: "failed", retry: { paid: true }, sections: { ...all(FREE_WRITTEN, "done"), ch3: "failed" } }),
       context(),
     );
-    expect(failed.line).toBe("sectionFailed");
+    expect(failed).toEqual({ mode: "reading", line: "sectionFailed", badge: "다시 시도 필요" });
   });
 
   it("상태 표시에 근거 없는 진행률이나 남은 시간을 쓰지 않는다", () => {
@@ -418,6 +440,166 @@ describe("늦게 도착한 상태 합치기와 다시 시도", () => {
     expect(readingComplete(makeState({ free: "completed", entitled: true, paid: "completed", sections: done }))).toBe(true);
     expect(readingComplete(makeState({ free: "completed", entitled: true, paid: "completed", sections: { ...done, ch9: "failed" } }))).toBe(false);
     expect(readingComplete(makeState({ free: "completed", entitled: false, sections: all(FREE_WRITTEN, "done") }))).toBe(false);
+  });
+});
+
+describe("단계 실패: 오류 칸 안내, 족자 위 단계 안내, 다시 시도", () => {
+  const failedPhase = (canRetry: boolean, errorCode: string | null = "timeout") => ({ status: "failed" as const, canRetry, errorCode });
+
+  it("단계가 실패해 끝나지 않은 칸이 오류로 오면 그 칸들이 다시 시도를 맡고, 족자 위에는 멈췄다는 안내만 둔다", () => {
+    // 질문 정리 실패처럼 무료 단계 전체가 실패한 경우. 서버는 끝나지 않은 무료 칸을 모두 오류(failed)로 준다.
+    const state = makeState({ free: "failed", retry: { free: true }, errorCode: { free: "server_error" }, sections: all(FREE_WRITTEN, "failed") });
+    // 다시 열었을 때(이 화면이 멈춘 적 없음)는 족자 위 안내가 없다. 오류 칸과 상담 장면이 알린다.
+    expect(phaseAlerts(state, context())).toEqual([]);
+    expect(sceneStatus(state, context())).toEqual({ mode: "reading", line: "sectionFailed", badge: "다시 시도 필요" });
+    // 이 화면의 요청이 실패로 끝났으면 족자 위에 멈췄다는 안내를 둔다 (버튼은 오류 칸에 있다).
+    const alerts = phaseAlerts(state, context({ halted: { free: "failed", paid: null } }));
+    expect(alerts).toEqual([{ tier: "free", tone: "warning", retry: false, text: expect.stringContaining("다시 시도") }]);
+    // 오류 칸 안내는 그 칸 단계의 canRetry로 다시 시도 버튼을 고른다.
+    expect(failureText(state.free)).toContain("다시 시도하면 마치지 못한 장만 다시 쓰고");
+  });
+
+  it("단계가 실패했는데 오류 칸이 하나도 없어도 족자 위에 단계 안내와 다시 시도 버튼을 둔다", () => {
+    // 무료 단계: 칸은 대기로 남았는데 단계만 실패 (예외 상태, 이전 서버 응답).
+    const free = makeState({ free: "failed", retry: { free: true }, errorCode: { free: "timeout" } });
+    expect(phaseAlerts(free, context({ halted: { free: "failed", paid: null } }))).toEqual([
+      { tier: "free", tone: "danger", retry: true, text: expect.stringContaining("무료 부분을") },
+    ]);
+    expect(sceneStatus(free, context())).toMatchObject({ mode: "reading", badge: "다시 시도 필요" });
+    // 유료 단계: 모든 유료 장이 완성됐는데 마무리 저장이 실패한 경우.
+    const paid = makeState({
+      free: "completed",
+      entitled: true,
+      paid: "failed",
+      retry: { paid: true },
+      sections: { ...all(FREE_WRITTEN, "done"), ...all(PAID_WRITTEN, "done") },
+    });
+    expect(phaseAlerts(paid, context())).toEqual([{ tier: "paid", tone: "danger", retry: true, text: expect.stringContaining("이어지는 장을") }]);
+    // 권한이 없으면 유료 단계 안내를 두지 않는다.
+    expect(phaseAlerts({ ...paid, entitled: false }, context())).toEqual([]);
+    // 다시 시도할 수 없으면 버튼 대신 횟수를 다 썼다는 안내와 문의 안내.
+    const exhausted = makeState({ free: "failed", errorCode: { free: "attempts_exhausted" } });
+    expect(phaseAlerts(exhausted, context())).toEqual([{ tier: "free", tone: "danger", retry: false, text: expect.stringContaining("고객센터") }]);
+    // 다시 시도를 누르면 단계가 진행 중으로 바뀌어 안내와 버튼이 사라진다.
+    expect(phaseAlerts(markRetrying(free, "free"), context())).toEqual([]);
+  });
+
+  it("멈춘 이유 '실패'에도 안내가 있고, 시도 횟수를 다 쓴 무료 단계에 다시 열어 보라고 하지 않는다", () => {
+    expect(haltText("failed", "free", failedPhase(true))).toContain("다시 시도");
+    expect(haltText("failed", "paid", failedPhase(false))).toContain("고객센터");
+    // 서버 저장 상태가 아직 실패가 아니면(실패 기록 전) 잠시 뒤 다시 열면 이어진다.
+    expect(haltText("failed", "free", { status: "running", canRetry: false, errorCode: null })).toContain("다시 열어");
+    expect(haltText("failed", "free")).not.toBeNull();
+    expect(haltText("exhausted", "free")).not.toContain("다시 열어");
+    expect(haltText("exhausted", "free")).toContain("고객센터");
+  });
+
+  it("오류 칸 안내: 다시 시도할 수 있으면 다시 시도를, 없으면 횟수 소진과 문의를, 설정 오류면 횟수 없이 문의를 안내한다", () => {
+    expect(failureText(failedPhase(true, "server_error"))).toContain("다시 시도하면 마치지 못한 장만 다시 쓰고");
+    const used = failureText(failedPhase(false, "units_failed"));
+    expect(used).toContain("횟수를 모두 썼어요");
+    expect(used).toContain("고객센터");
+    const config = failureText(failedPhase(false, "prompt_version_unavailable"));
+    expect(config).not.toContain("횟수");
+    expect(config).toContain("고객센터");
+    // 같은 문의 안내를 두 번 쓰지 않는다.
+    expect(failureText(failedPhase(false, "attempts_exhausted")).match(/고객센터/g)).toHaveLength(1);
+    // 실행 중인 단계에서 시도 수를 다 쓴 장 (단계 오류 코드 없음).
+    expect(failureText({ status: "running", canRetry: false, errorCode: null })).toContain("횟수를 모두 썼어요");
+    // 단계 단위 안내는 무엇을 마치지 못했는지 단계 이름으로 쓴다.
+    expect(failureText(failedPhase(true), "무료 부분을")).toContain("무료 부분을 쓰는 데");
+  });
+
+  it("다시 시도할 수 없는 실패만 남으면 상담 장면이 다시 시도하라고 하지 않는다", () => {
+    const scene = sceneStatus(makeState({ free: "failed", errorCode: { free: "attempts_exhausted" }, sections: all(FREE_WRITTEN, "failed") }), context());
+    expect(scene.mode).toBe("reading");
+    expect(scene.badge).not.toBe("다시 시도 필요");
+    expect(scene.line).toBeNull();
+    // 상태 표시에 숫자·진행률은 없다.
+    expect(scene.badge ?? "").not.toMatch(/\d|%/);
+  });
+});
+
+describe("서버 상태 계약과 화면: 단계 단위 실패 뒤에도 다시 시도할 곳이 있다", () => {
+  const NOW = Date.parse("2026-11-12T03:00:00.000Z");
+  const sample = makeState();
+  const input = (extra: Partial<ScrollStateInput>): ScrollStateInput => ({
+    reading: { id: "reading-1", persona_id: "mujin", nickname: "달빛", created_at: sample.createdAt, chart: sample.chart },
+    product: MUJIN_OVERVIEW,
+    personaName: "무진 도사",
+    plan: { hourKnown: true, tables: sample.tables },
+    entitled: false,
+    freeRun: null,
+    job: null,
+    units: [],
+    finals: [],
+    timing: null,
+    now: NOW,
+    ...extra,
+  });
+  const failedRun = (errorCode: string, attempts = 1): PhaseRecord => ({ status: "failed", attempts, leaseUntil: null, errorCode, errorRetryable: true });
+  const written = (view: ScrollStateView, tier: ScrollTier) => view.sections.filter((section) => section.tier === tier && section.kind !== "chart");
+
+  it("질문 정리 실패(장 기록 없음): 무료 칸이 모두 오류이고 다시 시도할 수 있으며, 누르면 대기로 돌아간다", () => {
+    const view = buildScrollStateView(input({ freeRun: failedRun("server_error") }));
+    expect(written(view, "free").map((section) => section.state)).toEqual(FREE_WRITTEN.map(() => "failed"));
+    expect(view.free.canRetry).toBe(true);
+    // 오류 칸이 다시 시도 버튼을 맡으므로 족자 위 단계 안내 상자는 없고, 화면이 스스로 다시 요청하지도 않는다.
+    expect(phaseAlerts(view, context()).filter((alert) => alert.tone === "danger")).toEqual([]);
+    expect(scrollVisible(view, context())).toBe(true);
+    expect(decideGenerate(view, context())).toBeNull();
+    expect(sceneStatus(view, context()).badge).toBe("다시 시도 필요");
+    const retrying = markRetrying(view, "free");
+    expect(written(retrying, "free").every((section) => section.state === "waiting")).toBe(true);
+    expect(retrying.free).toMatchObject({ status: "running", canRetry: false });
+  });
+
+  it("유료 단계 저장 오류(초안만 있는 장, 장 기록 없는 장): 끝나지 않은 유료 칸이 오류이고 완성된 장은 그대로다", () => {
+    const view = buildScrollStateView(
+      input({
+        entitled: true,
+        freeRun: { status: "completed", attempts: 1, leaseUntil: null, errorCode: null, errorRetryable: null },
+        job: { ...failedRun("internal"), referenceDate: "2026-11-12" },
+        units: [{ unitId: "ch2", status: "drafted", draftAttempts: 1, voiceAttempts: 0, errorStage: null, updatedAt: new Date(NOW).toISOString() }],
+        finals: [...FREE_WRITTEN, "ch3"].map((sectionId) => ({ sectionId, tier: sectionId === "ch3" ? "paid" : "free", content: { sectionId, coreAnswer: "가상", blocks: [] } })),
+      }),
+    );
+    const state = (id: string) => view.sections.find((section) => section.id === id)!.state;
+    expect(state("ch3")).toBe("done");
+    expect(state("ch2")).toBe("failed");
+    expect(state("closing")).toBe("failed");
+    expect(view.paid.canRetry).toBe(true);
+    expect(phaseAlerts(view, context()).filter((alert) => alert.tone === "danger")).toEqual([]);
+  });
+
+  it("단계 실패인데 모든 칸이 완성(마무리 저장 실패): 오류 칸이 없어도 족자 위 단계 안내에 다시 시도 버튼이 있다", () => {
+    const view = buildScrollStateView(
+      input({
+        freeRun: failedRun("internal"),
+        finals: FREE_WRITTEN.map((sectionId) => ({ sectionId, tier: "free", content: { sectionId, coreAnswer: "가상", blocks: [] } })),
+      }),
+    );
+    expect(written(view, "free").every((section) => section.state === "done")).toBe(true);
+    expect(phaseAlerts(view, context())).toEqual([{ tier: "free", tone: "danger", retry: true, text: expect.stringContaining("무료 부분을") }]);
+    expect(sceneStatus(view, context()).badge).toBe("다시 시도 필요");
+  });
+});
+
+describe("실제 동작과 맞는 안내 (무진)", () => {
+  it("무료 이용권 카드: 족자 상품은 화면을 닫아도 계속 만든다고 말하지 않고, 묘묘 문구는 그대로다", () => {
+    expect(generatingDescription("messenger", null)).toBe("화면을 닫아도 이어서 만들어요.");
+    expect(generatingDescription("messenger", "남은 무료 이용권 1장")).toBe("화면을 닫아도 이어서 만들어요. 남은 무료 이용권 1장.");
+    // 상품을 확인하지 못했을 때도 기존 문구를 쓴다.
+    expect(generatingDescription(null, null)).toBe("화면을 닫아도 이어서 만들어요.");
+    const scroll = generatingDescription("scroll", "남은 무료 이용권 1장");
+    expect(scroll).not.toContain("닫아도");
+    expect(scroll).toContain("풀이 화면을 다시 열면 이어서");
+    expect(scroll).toContain("남은 무료 이용권 1장");
+  });
+
+  it("족자 화면의 연결 끊김 안내는 서버가 계속 쓰고 있다고 약속하지 않는다", () => {
+    expect(CONNECTION_LOST_TEXT).toContain("연결이 끊겼어요");
+    expect(CONNECTION_LOST_TEXT).not.toMatch(/서버에서 계속|계속 쓰고 있/);
   });
 });
 
