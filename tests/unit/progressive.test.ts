@@ -145,6 +145,28 @@ describe("주제가 완성될 때마다 먼저 보여 주는 생성", () => {
     expect(result.meta.llmCalls).toBe(2);
   });
 
+  it("reading-3.2.0: 지시 끝에 묘묘 문답 예시가 있고, 검사에 걸려 이어 쓰는 요청도 같은 예시다. 넣은 예시를 결과 기록으로 돌려준다", async () => {
+    const broken = output();
+    const bad = { ...broken.topics[2]!, bubbles: broken.topics[2]!.bubbles.map((bubble, index) => (index === 1 ? { ...bubble, refs: ["s999"] } : bubble)) };
+    const first = { ...broken, topics: broken.topics.map((topic, index) => (index === 2 ? bad : topic)) };
+    const sent = topicIds.slice(0, 2);
+    const second = output({ topics: plan.topics.map((topic) => ({ topicId: topic.topicId, bubbles: sent.includes(topic.topicId) ? [] : topicBubbles(topic.topicId, 2) })) }, sent);
+
+    const { result, instructions, inputs } = await run([first, second]);
+    expect(config.promptVersion).toBe("reading-3.2.0");
+    expect(instructions).toHaveLength(2);
+    for (const text of instructions) expect(text.split("[캐릭터 문답 예시: 묘묘]").length - 1).toBe(1);
+    const block = (text: string) => text.slice(text.indexOf("[캐릭터 문답 예시: 묘묘]"));
+    expect(block(instructions[1]!)).toBe(block(instructions[0]!));
+    expect(result.meta.examples).toMatchObject({ catalogVersion: "myomyo-examples-1.0.0", policyVersion: "example-select-1.0.0", route: "reading" });
+    for (const id of result.meta.examples!.ids) expect(instructions[0]).toContain(`id="${id}"`);
+    for (const input of inputs) expect(JSON.stringify(input)).not.toContain("myomyo-");
+    // 이전 버전(reading-2.9.0)으로 시작한 작업은 예시 없이 이어 쓴다.
+    const legacy = await run([output()], { opening: null, focus: [], topics: [] }, true);
+    expect(legacy.instructions[0]).not.toContain("[캐릭터 문답 예시");
+    expect(legacy.result.meta.examples).toBeNull();
+  });
+
   it("이전 시도가 보낸 메시지가 있으면 그 뒤부터 이어 쓴다", async () => {
     const stored = [
       { topicId: null, text: "달빛 님, 반가워요." },

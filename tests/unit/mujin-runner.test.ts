@@ -1095,3 +1095,57 @@ describe("호출 기록 태그", () => {
     expect(new Set(rows.map((row) => row.callKey)).size).toBe(rows.length);
   });
 });
+
+describe("문답 예시 (묶음 mujin-1.1.0)", () => {
+  it("Pass 2 요청의 지시에만 무진 문답 예시가 들어가고, 장마다 실제로 넣은 ID가 최종문 기록에 남는다. 다시 쓰기 요청도 같은 예시다", async () => {
+    const env = setup();
+    const voices: { sectionId: string; instructions: string; input: string; retry: boolean }[] = [];
+    const drafts: string[] = [];
+    const call = env.llm.call;
+    const stream = env.llm.stream;
+    env.deps.callStructured = (async (request: StructuredRequest<unknown>) => {
+      const input = JSON.parse(request.input) as { section: { sectionId: string }; fixTheseProblemsFromPreviousAttempt?: string[] };
+      const sectionId = input.section.sectionId;
+      const retry = Boolean(input.fixTheseProblemsFromPreviousAttempt?.length);
+      voices.push({ sectionId, instructions: request.instructions, input: request.input, retry });
+      // 1장의 첫 Pass 2는 초안 블록을 빠뜨려 검사에 걸리게 한다 (문제 목록을 붙여 다시 요청한다).
+      if (sectionId === "ch1" && !retry) return { parsed: { section: { sectionId, coreAnswer: "핵심", blocks: [] } }, meta: meta(request.model) };
+      return call(request);
+    }) as unknown as typeof callStructured;
+    env.deps.callStructuredStream = (async (request: StructuredRequest<unknown> & { onDelta: (text: string, delta: string) => Promise<"continue" | "stop"> }) => {
+      drafts.push(request.instructions);
+      return stream(request);
+    }) as unknown as typeof callStructuredStream;
+
+    const readingId = await freeDone(env);
+    env.store.entitle(readingId);
+    expect(await env.run(readingId, "paid")).toBe("completed");
+
+    // Pass 1(중립 초안)에는 예시와 캐릭터가 없다.
+    expect(drafts.length).toBeGreaterThan(0);
+    for (const instructions of drafts) {
+      expect(instructions).not.toContain("[캐릭터 문답 예시");
+      expect(instructions).not.toContain("[캐릭터: 무진 도사]");
+    }
+    // Pass 2 지시에는 장마다 예시 블록이 한 번 있고, 저장 기록의 ID와 같다. 입력에는 예시가 없다.
+    expect(new Set(voices.map((voice) => voice.sectionId))).toEqual(new Set([...FREE_IDS, ...PAID_IDS]));
+    for (const voice of voices) {
+      expect(voice.instructions.split("[캐릭터 문답 예시: 무진 도사]").length - 1).toBe(1);
+      const examples = env.store.finals.get(`${readingId}/${voice.sectionId}`)!.meta.examples as { catalogVersion: string; policyVersion: string; ids: string[] };
+      expect(examples).toMatchObject({ catalogVersion: "mujin-examples-1.0.0", policyVersion: "example-select-1.0.0", route: "voice" });
+      expect(examples.ids).toHaveLength(2);
+      for (const id of examples.ids) {
+        expect(voice.instructions).toContain(`id="${id}"`);
+        expect(voice.input).not.toContain(id);
+      }
+    }
+    // 1장은 두 번 보냈고(첫 요청과 다시 쓰기), 두 지시의 예시 블록이 같다.
+    const ch1 = voices.filter((voice) => voice.sectionId === "ch1");
+    expect(ch1.map((voice) => voice.retry)).toEqual([false, true]);
+    const block = (text: string) => text.slice(text.indexOf("[캐릭터 문답 예시: 무진 도사]"));
+    expect(block(ch1[1]!.instructions)).toBe(block(ch1[0]!.instructions));
+    // 장마다 같은 문답 하나만 붙지 않는다.
+    const qa = new Set(voices.map((voice) => (env.store.finals.get(`${readingId}/${voice.sectionId}`)!.meta.examples as { ids: string[] }).ids[1]));
+    expect(qa.size).toBeGreaterThanOrEqual(4);
+  });
+});
