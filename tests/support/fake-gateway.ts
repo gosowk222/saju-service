@@ -59,6 +59,11 @@ const stats = {
   lastOpenaiBody: null as unknown,
   openaiModels: [] as string[],
   /**
+   * OpenAI 요청마다 스키마 이름과, 지시(instructions)의 캐릭터 문답 예시 블록에 든 예시 ID (없으면 빈 배열),
+   * 입력(input)에 예시 블록이 섞였는지. 앱이 실제로 보낸 HTTP 본문에서 읽는다 (누적값이다).
+   */
+  openaiExamples: [] as { schema: string; ids: string[]; inInput: boolean }[],
+  /**
    * 무진 호출 수와 마지막 입력 요약 (누적값이다. 테스트는 이전 값과의 차이로 본다).
    * calls: 스키마별 호출 수 (question = mujin_question_analysis, pass1 = mujin_draft, pass2 = mujin_voice). 실패 주입으로 오류를 돌려준 호출도 센다.
    * failed: 실패 주입으로 오류를 돌려준 호출 수 (question = 질문 정리 서버 오류).
@@ -497,10 +502,17 @@ async function sendStream(res: ServerResponse, text: string, model: string) {
   res.end();
 }
 
-function handleOpenai(body: { model: string; input: string; stream?: boolean; text: { format: { name: string } } }, res: ServerResponse) {
+function handleOpenai(body: { model: string; instructions?: string; input: string; stream?: boolean; text: { format: { name: string } } }, res: ServerResponse) {
   stats.openaiCalls += 1;
   stats.lastOpenaiBody = body;
   stats.openaiModels.push(body.model);
+  const instructions = body.instructions ?? "";
+  const block = instructions.includes("[캐릭터 문답 예시:") ? instructions.slice(instructions.indexOf("[캐릭터 문답 예시:")) : "";
+  stats.openaiExamples.push({
+    schema: body.text.format.name,
+    ids: [...block.matchAll(/<(?:rewrite-)?example id="([^"]+)"/g)].map((match) => match[1]!),
+    inInput: body.input.includes("[캐릭터 문답 예시"),
+  });
   const mode = control.openai;
   if (mode === "error-once") {
     control.openai = "ok";

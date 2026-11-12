@@ -99,6 +99,30 @@ test("요청 모델은 OPENAI_MODEL 설정을 따른다", async ({ page, request
   expect(body).not.toHaveProperty("temperature");
 });
 
+test("최초 풀이·후속 답변 요청의 지시에는 묘묘 문답 예시가, 입력에는 작성 재료만 들어간다 (가짜 OpenAI가 받은 HTTP 본문)", async ({ page, request }) => {
+  const before = (await gatewayStats(request)).openaiExamples.length;
+  await login(page, request);
+  await createPreview(page);
+  await redeemFreeTicket(page);
+  await waitForCompletedReading(page);
+  await page.getByRole("textbox", { name: "후속 질문" }).fill("강점을 일할 때는 어떻게 써?");
+  await page.getByRole("button", { name: "보내기" }).click();
+  await expect(page.getByText(/강점을 일할 때는 어떻게 써\?"에 대한 답변/)).toBeVisible();
+
+  const calls = (await gatewayStats(request)).openaiExamples.slice(before);
+  const written = calls.filter((call) => call.schema === "saju_narration_v2" || call.schema === "saju_followup_v2");
+  expect(written.map((call) => call.schema)).toEqual(expect.arrayContaining(["saju_narration_v2", "saju_followup_v2"]));
+  for (const call of written) {
+    expect(call.ids.length).toBeGreaterThanOrEqual(1);
+    expect(call.ids.every((id) => id.startsWith("myomyo-"))).toBe(true);
+    expect(call.inInput).toBe(false);
+  }
+  // 질문 정리 요청에는 예시를 넣지 않는다.
+  const classify = calls.filter((call) => call.schema === "saju_question_analysis");
+  expect(classify.length).toBeGreaterThan(0);
+  expect(classify.every((call) => call.ids.length === 0)).toBe(true);
+});
+
 test("풀이는 다시 열어도 저장된 내용을 쓰고 다시 생성하지 않는다", async ({ page, request }) => {
   await login(page, request);
   await createPreview(page);

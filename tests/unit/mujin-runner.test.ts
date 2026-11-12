@@ -1101,25 +1101,28 @@ describe("문답 예시 (묶음 mujin-1.1.0)", () => {
     const env = setup();
     const voices: { sectionId: string; instructions: string; input: string; retry: boolean }[] = [];
     const drafts: string[] = [];
-    const call = env.llm.call;
-    const stream = env.llm.stream;
-    env.deps.callStructured = (async (request: StructuredRequest<unknown>) => {
-      const input = JSON.parse(request.input) as { section: { sectionId: string }; fixTheseProblemsFromPreviousAttempt?: string[] };
-      const sectionId = input.section.sectionId;
-      const retry = Boolean(input.fixTheseProblemsFromPreviousAttempt?.length);
-      voices.push({ sectionId, instructions: request.instructions, input: request.input, retry });
-      // 1장의 첫 Pass 2는 초안 블록을 빠뜨려 검사에 걸리게 한다 (문제 목록을 붙여 다시 요청한다).
-      if (sectionId === "ch1" && !retry) return { parsed: { section: { sectionId, coreAnswer: "핵심", blocks: [] } }, meta: meta(request.model) };
-      return call(request);
-    }) as unknown as typeof callStructured;
-    env.deps.callStructuredStream = (async (request: StructuredRequest<unknown> & { onDelta: (text: string, delta: string) => Promise<"continue" | "stop"> }) => {
-      drafts.push(request.instructions);
-      return stream(request);
-    }) as unknown as typeof callStructuredStream;
+    const deps: Partial<RunnerDeps> = {
+      ...env.deps,
+      callStructured: (async (request: StructuredRequest<unknown>) => {
+        const input = JSON.parse(request.input) as { section: { sectionId: string }; fixTheseProblemsFromPreviousAttempt?: string[] };
+        const sectionId = input.section.sectionId;
+        const retry = Boolean(input.fixTheseProblemsFromPreviousAttempt?.length);
+        voices.push({ sectionId, instructions: request.instructions, input: request.input, retry });
+        // 1장의 첫 Pass 2는 초안 블록을 빠뜨려 검사에 걸리게 한다 (문제 목록을 붙여 다시 요청한다).
+        if (sectionId === "ch1" && !retry) return { parsed: { section: { sectionId, coreAnswer: "핵심", blocks: [] } }, meta: meta(request.model) };
+        return env.llm.call(request);
+      }) as unknown as typeof callStructured,
+      callStructuredStream: (async (request: StructuredRequest<unknown> & { onDelta: (text: string, delta: string) => Promise<"continue" | "stop"> }) => {
+        drafts.push(request.instructions);
+        return env.llm.stream(request);
+      }) as unknown as typeof callStructuredStream,
+    };
+    const run = (readingId: string, tier: ScrollTier) => runScrollTier({ userId: USER, readingId, tier, retry: false, deps });
 
-    const readingId = await freeDone(env);
+    const readingId = env.store.addReading("");
+    expect(await run(readingId, "free")).toBe("completed");
     env.store.entitle(readingId);
-    expect(await env.run(readingId, "paid")).toBe("completed");
+    expect(await run(readingId, "paid")).toBe("completed");
 
     // Pass 1(중립 초안)에는 예시와 캐릭터가 없다.
     expect(drafts.length).toBeGreaterThan(0);

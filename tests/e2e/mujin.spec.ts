@@ -395,6 +395,7 @@ test("이용권을 쓰면 같은 화면에서 유료 장이 목차 순서를 지
   // 2장의 Pass 2만 늦춘다. 뒤 장이 먼저 끝나도 목차 순서는 그대로이고, Pass 1은 Pass 2를 기다리지 않는다.
   await setControl(request, { mujinVoiceDelayMs: 10_000, mujinVoiceDelaySections: ["ch2"] });
   const before = (await gatewayStats(request)).mujin;
+  const examplesBefore = (await gatewayStats(request)).openaiExamples.length;
   await page.getByRole("button", { name: REDEEM }).click();
   await expect(mujinSection(page, "ch10").getByText("핵심 답", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(new RegExp(`/readings/${readingId}$`));
@@ -439,6 +440,31 @@ test("이용권을 쓰면 같은 화면에서 유료 장이 목차 순서를 지
   await expect(page.getByText(`"${question}"에 대한 답변이에요`)).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("strong", { hasText: "두 번째 문단" })).toBeVisible();
   await expect(page.getByText(/남은 질문 2회/)).toBeVisible();
+
+  // 가짜 OpenAI가 받은 HTTP 본문: Pass 2와 후속 답변의 지시에만 무진 문답 예시가 있고, Pass 1에는 없다. 입력에는 예시가 섞이지 않는다.
+  const sent = (await gatewayStats(request)).openaiExamples.slice(examplesBefore);
+  const voice = sent.filter((call) => call.schema === "mujin_voice");
+  expect(voice).toHaveLength(MUJIN_PAID_SECTIONS.length);
+  for (const call of voice) {
+    expect(call.ids).toHaveLength(2);
+    expect(call.ids[0]).toMatch(/^mujin-rw-/);
+    expect(call.ids.every((id) => id.startsWith("mujin-"))).toBe(true);
+  }
+  expect(sent.filter((call) => call.schema === "mujin_draft").every((call) => call.ids.length === 0)).toBe(true);
+  const followup = sent.filter((call) => call.schema === "saju_followup_v2");
+  expect(followup).toHaveLength(1);
+  expect(followup[0]!.ids.length).toBeGreaterThanOrEqual(1);
+  expect(followup[0]!.ids.every((id) => id.startsWith("mujin-"))).toBe(true);
+  expect(sent.every((call) => !call.inInput)).toBe(true);
+  // 장마다 넣은 예시 ID가 최종문 기록(meta)에 남는다.
+  const recorded = await gatewaySql<{ section_id: string; ids: string[] | null }>(
+    request,
+    "select section_id, meta->'examples'->'ids' as ids from public.reading_sections where reading_id = $1 and tier = 'paid'",
+    [readingId],
+  );
+  expect(recorded).toHaveLength(MUJIN_PAID_SECTIONS.length);
+  expect(recorded.every((row) => row.ids?.length === 2)).toBe(true);
+  expect(recorded.map((row) => row.ids!.join(",")).sort()).toEqual(voice.map((call) => call.ids.join(",")).sort());
 
   // PDF: 최종문과 실제 표로 만든 파일. 후속 질문을 넣으면 더 커진다.
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: "PDF 내려받기" }).click()]);

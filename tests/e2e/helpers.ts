@@ -41,6 +41,8 @@ export async function gatewayStats(request: APIRequestContext) {
     tossConfirms: number;
     openaiModels: string[];
     lastOpenaiBody: Record<string, unknown>;
+    /** OpenAI 요청마다 스키마 이름, 지시에 든 캐릭터 문답 예시 ID, 입력에 예시가 섞였는지 (누적). */
+    openaiExamples: { schema: string; ids: string[]; inInput: boolean }[];
     mujin: MujinGatewayStats;
   };
 }
