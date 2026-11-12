@@ -1345,7 +1345,8 @@ function readingInput2(args: ReadingPromptV2Args, withSource = false): string {
 
 /**
  * 캐릭터 블록 (묘묘 2.1.0부터). 누가 말하는지, 사용자와의 관계, 성격, 말하는 방식, 상황에 따른 반응, 놀림의 기준만 옮긴다.
- * 문장 예시, 말투 견본, 말버릇 목록과 횟수를 넣지 않는다. 설정은 personas/index.ts 한곳에 있고, 작업 지시는 [캐릭터]를 가리키기만 한다.
+ * 이 블록에는 문장 예시, 말투 견본, 말버릇 목록과 횟수를 넣지 않는다. 설정은 personas/index.ts 한곳에 있고, 작업 지시는 [캐릭터]를 가리키기만 한다.
+ * 질문–답변 예시는 이 블록이 아니라 지시 맨 끝의 [캐릭터 문답 예시] 블록(example-block.ts)으로 따로 들어간다 (reading-3.2.0 등).
  */
 export function characterBlock(persona: Persona): string {
   const list = (title: string, items: readonly string[] | undefined) => (items?.length ? [title, ...items.map((line) => `- ${line}`)] : []);

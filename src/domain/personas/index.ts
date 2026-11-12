@@ -7,6 +7,9 @@
  * (prompts.ts의 personaVersionFor → findPersona(id, version)).
  * 사람이 읽는 설정 문서: docs/personas/myomyo.md, 비교 예시와 평가 기준: docs/personas/myomyo-evaluation.md
  * 무진 도사(무진의 종합 사주): docs/personas/mujin.md, 평가 기준: docs/personas/mujin-evaluation.md
+ * 캐릭터별 질문–답변 예시(few-shot)는 설정과 따로 ./examples/에 카탈로그로 두고, 작성 용도에 맞는 것을 골라 실제 생성 지시에 넣는다
+ * (묘묘 reading-3.2.0·followup-3.2.0, 무진 묶음 mujin-1.1.0의 Pass 2·후속 답변, 설명 docs/personas/examples.md).
+ * 아래 설정의 examples 칸은 1.x 프롬프트가 쓰던 이전 형식(판단 → 말투 예시)이며 새 예시를 여기에 넣지 않는다.
  */
 
 import type { ImageAsset } from "@/domain/images";
@@ -698,7 +701,8 @@ export const MYOMYO_1_4_0: Persona = {
  * 1.x에 겹겹이 붙던 말투 견본, 판단에 묶인 예시와 시범, 말버릇 목록과 횟수, 이모티콘 개수, 상황별 완성 대사,
  * '주제마다 묘묘다운 순간 한두 번' 같은 의무를 모두 뺐다. 모델이 견본·예시 문장을 옮겨 쓰거나 성격을 말버릇으로 채웠기 때문이다
  * (docs/READING_QUALITY.md 20~22절). 대신 누가 말하는지(정체성·관계), 성격, 말하는 방식, 상황에 따른 반응, 놀림의 기준만 둔다.
- * 프롬프트에는 characterBlock(prompts.ts)으로 한 번만 옮긴다. 문장 예시는 평가 문서(docs/personas/myomyo-evaluation.md)에만 둔다.
+ * 프롬프트에는 characterBlock(prompts.ts)으로 한 번만 옮긴다. 이 설정에는 문장 예시를 두지 않는다. 질문–답변 예시는 카탈로그
+ * (./examples/myomyo.ts)에서 골라 reading-3.2.0·followup-3.2.0 지시 끝에 따로 넣는다 (2026-11-13, docs/READING_QUALITY.md 24절).
  * 2.0.0은 되돌린 작업(refactor/myomyo-persona-rebuild)에서 쓴 번호라 다시 쓰지 않는다.
  */
 export const MYOMYO: Persona = {
@@ -832,7 +836,8 @@ const MUJIN_FACE = {
 /**
  * 무진 도사 1.0.0 ('무진의 종합 사주'). 설명은 docs/personas/mujin.md, 명세는 docs/implementation/mujin/04_MUJIN_PERSONA.md.
  * 묘묘 2.1.0과 같은 구조로 누가 말하는지(정체성·관계), 성격, 말하는 방식, 상황에 따른 반응, 유머의 기준(teasing 칸)만 둔다.
- * 상황별 완성 대사, 판단·주제에 묶인 예시, 말투 견본, 말버릇 목록과 횟수, 이모티콘 개수는 두지 않는다.
+ * 설정 안에 상황별 완성 대사, 말투 견본, 말버릇 목록과 횟수, 이모티콘 개수는 두지 않는다. 사용자가 준 원문 문답 21개와
+ * Pass 2 재작성 예시는 카탈로그(./examples/mujin.ts)에 두고, 묶음 mujin-1.1.0의 Pass 2·후속 답변 지시 끝에 골라 넣는다.
  * 2차 작성(Pass 2)의 의미 보존 계약(명세 04 6절)은 캐릭터 설정이 아니라 작성 규칙에 둔다.
  * 설정을 바꿀 때는 이 설정을 고치지 않고 새 버전을 더한다. 한 번 쓴 번호는 다시 쓰지 않는다.
  */
