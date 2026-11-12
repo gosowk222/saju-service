@@ -83,7 +83,7 @@ export function examplesReport(input: {
     "| --- | --- | --- | --- | --- |",
     ...record.ids.map(describe),
     "",
-    "예시 문장은 표현 참고이며 현재 사용자의 사실·판단이 아니다. 결과에서 예시 문장·장면·날짜가 그대로 나오면 비교 기록에 적는다 (docs/personas/examples.md 5절).",
+    "예시 문장은 표현 참고이며 현재 사용자의 사실·판단이 아니다. 결과에서 예시 문장·장면·날짜가 그대로 나오면 비교 기록에 적는다 (docs/personas/examples.md 8절, llm:render의 '예시 문장 겹침' 표).",
     "",
   ].join("\n");
 }

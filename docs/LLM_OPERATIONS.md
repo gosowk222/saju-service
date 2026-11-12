@@ -26,7 +26,8 @@
 | --- | --- |
 | `question-1.3.0` | 현재 질문 정리. 1.2.0에 풀이에 대한 반응(`reaction`: 칭찬·놀림/허세 지적·의심)을 더했다. 반응만 있고 묻는 것이 없으면 캐릭터의 고정 반응 문장으로 답하고 차감하지 않는다 (호출은 질문 정리 1회뿐) |
 | `question-1.2.0` | 기록용. 궁금한 점과 후속 질문의 구조화 (분야·의도·선택지·기간·사용자 사실). 1.2.0에서 지쳤다·힘들다 같은 지금 마음 상태도 사용자 사실로 남기게 했다 (출력 형식은 1.1.0과 같다. 1.0.0·1.1.0은 기록용) |
-| `reading-3.1.0` / `narration-2.2.0` | 현재 최초 풀이 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0, 추론 medium). 지시를 역할별로 나눴다: `[캐릭터: 묘묘]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]`(`READING_GUIDE`, `docs/READING_GUIDE.md`) → 출력 조건. 계산값과 판단은 입력 재료, 말투는 캐릭터, 형식은 출력 조건과 스키마를 따른다. 말투 견본, 말버릇 목록과 횟수, '묘묘다운 순간' 의무, 상품 표현 강도 문구를 뺐다. 입력은 2.9.0과 같고 같은 행동 문장은 처음 나온 해석에만 둔다 (`materialInputV2`). 지시 약 11,000자 (2.9.0과 비슷) |
+| `reading-3.2.0` / `narration-2.2.0` | 현재 최초 풀이. reading-3.1.0과 같은 지시·입력·출력 형식(캐릭터 묘묘 2.1.0, guide-1.0.0, 추론 medium) 끝에 묘묘 문답 예시 블록(`[캐릭터 문답 예시: 묘묘]`, `src/server/llm/example-block.ts`)을 더했다. 예시는 카탈로그 `myomyo-examples-1.0.0`(27개)에서 선택 정책 `example-select-1.0.0`이 작성 재료(질문 분야·의도, 비중 큰 주제, 사용자가 쓴 말)와 풀이 ID로 3개를 고른다 (긴 예시 하나 이상). 재시도·이어 쓰기도 같은 예시다. 실제로 넣은 ID는 `generation_meta.exampleIds`. 설명 `docs/personas/examples.md` |
+| `reading-3.1.0` / `narration-2.2.0` | 3.2.0 이전에 이 버전으로 시작한 작업과 예시 미사용 비교용 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0, 추론 medium). 지시를 역할별로 나눴다: `[캐릭터: 묘묘]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]`(`READING_GUIDE`, `docs/READING_GUIDE.md`) → 출력 조건. 계산값과 판단은 입력 재료, 말투는 캐릭터, 형식은 출력 조건과 스키마를 따른다. 말투 견본, 말버릇 목록과 횟수, '묘묘다운 순간' 의무, 상품 표현 강도 문구를 뺐다. 입력은 2.9.0과 같고 같은 행동 문장은 처음 나온 해석에만 둔다 (`materialInputV2`). 지시 약 11,000자 (2.9.0과 비슷) |
 | `reading-3.0.0` | 쓰지 않음. 되돌린 작업(`refactor/myomyo-persona-rebuild`)에서 쓴 번호라 등록하지 않는다. 그 번호에 고정된 작업은 `prompt_version_unavailable`(재시도 불가)로 정리된다 |
 | `reading-2.9.0` / `narration-2.2.0` | 3.1.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.4.0, 추론 medium). 프롬프트 다이어트: 판단에 묶인 비교 예시와 재료 시범을 빼고 주제와 상관없는 말투 견본만 넣는다 (`personaBlockV5`). 2.8.0 결과에서 예시 문장이 같은 판단의 주제에 옮겨 쓰였다 (`docs/READING_QUALITY.md` 22절). 캐릭터 블록 약 5,900자 → 2,500자. 그 밖은 2.8.0과 같다 |
 | `reading-2.8.0` / `narration-2.2.0` | 2.9.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 1.3.0, 추론 medium). 2.7.0 결과가 짧아지고 으스대기·놀리기가 없어서 (`docs/READING_QUALITY.md` 21절) 중심 주제·질문 답은 깊게, 설명 말풍선은 세네 문장까지, 반응 말풍선은 목표와 따로, 주제마다 '묘묘다운 순간', 말버릇은 어울리는 자리에 자연스럽게. 입력·출력 형식은 2.7.0과 같고 규칙은 2.7.0에서 구절만 바꿔 만든다 (`revise`) |
@@ -39,8 +40,11 @@
 | `reading-2.1.0` / `narration-2.1.0` | 2.2.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만. 시작 → 궁금한 점에 대한 답(`focus`) → 주제별 설명 → 마무리. 메신저 말투, 장면을 가정형으로 녹이기('예를 들면'은 풀이 전체에서 한 번까지), 주제마다 약점 하나 이상을 흐리지 않고 말하기. 출력 형식 2.1.0은 말풍선마다 굵게 보일 구절(`highlight`)을 따로 받는다 |
 | `reading-2.0.0` / `narration-2.0.0` | 2.1.0 이전에 이미 이 버전으로 시작한 작업을 이어서 생성할 때만 |
 | `reading-1.0.0` / `narration-1.0.0` | 작성 재료 1.0.0으로 만든 이전 풀이를 이어서 생성할 때만 |
-| `followup-3.1.0` / `followup-output-2.2.0` | 현재 후속 질문 (캐릭터 묘묘 2.1.0, guide-1.0.0). reading-3.1.0과 같은 구성. 판단 규칙·입력·출력 형식은 2.9.0과 같다 |
-| `mujin-followup-1.0.0` / `followup-output-2.2.0` | 무진의 종합 사주 후속 질문 (캐릭터 무진 1.0.0, guide-1.0.0, 묶음 `mujin-1.0.0`의 `followupPrompt`). `[캐릭터: 무진 도사]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]` → 출력 조건. 묘묘 지시의 반말 전제 문구는 없다. 재료는 질문 분야와 이어지는 장(질문마다 한 장 이상, 모두 4개까지)의 작성 재료와 그 장 최종문 일부(장마다 1,200자까지), 기간 질문이면 첫 유료 생성 때 고정한 기준일의 기간 자료. 질문 정리는 묘묘와 같은 `question-1.3.0`. 횟수·범위·차감·무료 반응·되묻기 정책과 출력 형식은 묘묘와 같다 (`src/server/scroll/followup.ts`, `src/server/llm/mujin-followup-prompt.ts`) |
+| `followup-3.2.0` / `followup-output-2.2.0` | 현재 후속 질문. followup-3.1.0 지시 끝에 묘묘 문답 예시 블록을 더했다. 이번 메시지의 질문 분야·의도·반응·직전 대화 유무와 후속 질문 ID로 3개를 고른다 (칭찬·놀림·의심 예시는 그 반응이 담긴 메시지에만). 넣은 ID는 `followups.analysis.examples` |
+| `followup-3.1.0` / `followup-output-2.2.0` | 예시 미사용 비교용 (캐릭터 묘묘 2.1.0, guide-1.0.0). reading-3.1.0과 같은 구성. 판단 규칙·입력·출력 형식은 2.9.0과 같다 |
+| `mujin-voice-1.1.0` / `mujin-voice-schema-1.0.0` | 무진 Pass 2 (묶음 `mujin-1.1.0`). mujin-voice-1.0.0 지시 끝에 무진 문답 예시 블록을 더했다: 장 주제로 고른 재작성 예시 하나(원문 05·07·09·10을 참조하는 중립 초안 → 원문 답)와 원문 문답 하나. seed는 풀이 ID·장 ID라 장마다 고르게 다르고 재시도는 같다. 넣은 ID는 `reading_sections.meta.examples`. Pass 1(`mujin-draft-1.0.0`)과 질문 정리에는 예시가 없다 |
+| `mujin-followup-1.1.0` / `followup-output-2.2.0` | 현재 무진 후속 질문 (묶음 `mujin-1.1.0`). mujin-followup-1.0.0 끝에 무진 문답 예시 블록을 더했다 (질문·반응·이어진 장으로 고른 원문 문답 2~3개). 원문 01·18·21은 넣지 않는다. 넣은 ID는 `followups.analysis.examples` |
+| `mujin-followup-1.0.0` / `followup-output-2.2.0` | 무진의 종합 사주 후속 질문, 예시 없음 (캐릭터 무진 1.0.0, guide-1.0.0, 묶음 `mujin-1.0.0`의 `followupPrompt`). `[캐릭터: 무진 도사]`(`characterBlock`) → `[역할과 우선순위]` → `[명리 해석 지침]` → 출력 조건. 묘묘 지시의 반말 전제 문구는 없다. 재료는 질문 분야와 이어지는 장(질문마다 한 장 이상, 모두 4개까지)의 작성 재료와 그 장 최종문 일부(장마다 1,200자까지), 기간 질문이면 첫 유료 생성 때 고정한 기준일의 기간 자료. 질문 정리는 묘묘와 같은 `question-1.3.0`. 횟수·범위·차감·무료 반응·되묻기 정책과 출력 형식은 묘묘와 같다 (`src/server/scroll/followup.ts`, `src/server/llm/mujin-followup-prompt.ts`) |
 | `followup-2.9.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.4.0). 2.8.0과 같고 예시·시범 대신 말투 견본 |
 | `followup-2.8.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 문단 3~5개(설명 문단은 두세 문장까지) |
 | `followup-2.7.0` / `followup-output-2.2.0` | 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범, 중복을 덜어 낸 입력을 더했다. 출력 형식 2.2.0은 질문마다 refs 앞에 화면에 나가지 않는 메모 `angle`을 받는다 |
@@ -54,7 +58,7 @@
 
 굵게 보일 구절은 최초 풀이에서는 `highlight` 필드로 받아 저장 직전에 서버가 문장 안의 `**…**` 표시로 바꾸고, 후속 답변에서는 문장 안에 `**…**`로 받는다. 모델이 구절을 요약해서 적으면 같은 말풍선에서 가장 비슷한 문장을 굵게 만들고, 비슷한 문장이 없으면 표시하지 않는다. 짝이 맞지 않는 표시는 별표를 지운다. 강조 때문에 다시 생성하지 않는다(호출이 늘지 않는다). 경위는 `docs/READING_QUALITY.md` 14절. 생성 기록(`generation_meta`)에는 프롬프트·출력 형식·작성 재료 버전과 함께 실제로 쓴 캐릭터 버전(`personaVersion`)과 풀이 기록을 만들 때의 캐릭터 버전(`planPersonaVersion`)을 남긴다. 2026-11-11 이전 기록의 `personaVersion`은 작성 재료의 값이 덮어써 풀이 기록을 만들 때의 버전이다.
 
-생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 캐릭터 설정은 고정된 프롬프트 버전으로 고른다 (`personaVersionFor` → `findPersona(id, version)`). 그래서 이전 프롬프트로 시작한 작업을 새 배포 뒤에 이어 써도 그때의 캐릭터 설정을 쓴다 (reading-2.5.0 → 묘묘 1.0.0, reading-2.6.0 → 1.1.0, reading-2.7.0 → 1.2.0, reading-2.8.0 → 1.3.0, reading-2.9.0 → 1.4.0, reading-3.1.0 → 2.1.0). 추론 설정도 작업을 시작할 때 고정된다 (`claim_generation`의 `reasoning_effort`). 출력 형식도 작업에 고정된다 (2.6.0 작업은 narration-2.1.0). 프롬프트나 캐릭터 설정을 바꿀 때는 기존 항목을 고치지 않고 새 버전을 추가한다. 작업의 프롬프트 버전은 저장된 작성 재료의 버전(`PROMPTS_FOR_PLAN`)으로 고른다. 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트와 그에 맞는 캐릭터 설정을 쓰고, 버전은 `followups.prompt_version`에 남는다.
+생성을 시작할 때 모델과 프롬프트 버전을 작업에 고정하고, 재시도는 고정된 값을 쓴다. 캐릭터 설정은 고정된 프롬프트 버전으로 고른다 (`personaVersionFor` → `findPersona(id, version)`). 그래서 이전 프롬프트로 시작한 작업을 새 배포 뒤에 이어 써도 그때의 캐릭터 설정을 쓴다 (reading-2.5.0 → 묘묘 1.0.0, reading-2.6.0 → 1.1.0, reading-2.7.0 → 1.2.0, reading-2.8.0 → 1.3.0, reading-2.9.0 → 1.4.0, reading-3.1.0·3.2.0 → 2.1.0). 문답 예시도 같다: 예시를 쓰는 버전과 그 카탈로그·선택 정책은 `example-block.ts`의 `PROMPT_EXAMPLES` 한 표에만 있고, 이전 버전에 고정된 작업은 예시 없이 이어 쓴다. 예시는 고정된 작성 재료와 풀이·장·후속 질문 ID로만 고르므로 재시도와 이어 쓰기에서도 같다. 예시를 쓰는 버전에서 고른 예시가 0개면 조용히 보내지 않고 `examples_unavailable` 오류로 멈춘다 (테스트가 카탈로그·선택·조립을 확인한다). 추론 설정도 작업을 시작할 때 고정된다 (`claim_generation`의 `reasoning_effort`). 출력 형식도 작업에 고정된다 (2.6.0 작업은 narration-2.1.0). 프롬프트나 캐릭터 설정을 바꿀 때는 기존 항목을 고치지 않고 새 버전을 추가한다. 작업의 프롬프트 버전은 저장된 작성 재료의 버전(`PROMPTS_FOR_PLAN`)으로 고른다. 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트와 그에 맞는 캐릭터 설정을 쓰고, 버전은 `followups.prompt_version`에 남는다.
 
 ## 주제별로 먼저 보여 주기 (reading-2.4.0)
 
@@ -172,11 +176,26 @@ limit 20;
 -- 4) 후속 질문 토큰 (질문마다, 최초 풀이와 별도)
 select id, status, prompt_version, usage ->> 'inputTokens' as input_tokens, usage ->> 'cachedInputTokens' as cached_input_tokens,
        usage ->> 'outputTokens' as output_tokens, usage ->> 'totalTokens' as total_tokens, usage ->> 'complete' as usage_complete,
-       usage ->> 'calls' as llm_calls, created_at
+       usage ->> 'calls' as llm_calls, analysis -> 'examples' as examples, created_at
 from public.followups
 where reading_id = '<풀이 ID>'
 order by created_at;
+
+-- 5) 문답 예시 전후 비교: 프롬프트 버전별 최초 풀이 시도의 평균 토큰 (reading-3.1.0 예시 없음, reading-3.2.0 예시 있음)
+select prompt_version, count(*) as attempts, round(avg(input_tokens)) as avg_input, round(avg(cached_input_tokens)) as avg_cached,
+       round(avg(output_tokens)) as avg_output, round(avg(duration_ms)) as avg_ms
+from public.generation_attempts
+where prompt_version in ('reading-3.1.0', 'reading-3.2.0') and usage_complete
+group by prompt_version;
+
+-- 6) 풀이 하나에 실제로 넣은 문답 예시 (카탈로그·정책 버전과 ID)
+select generation_meta ->> 'promptVersion' as prompt, generation_meta ->> 'exampleCatalog' as catalog,
+       generation_meta ->> 'examplePolicy' as policy, generation_meta -> 'exampleIds' as example_ids
+from public.generation_jobs
+where reading_id = '<풀이 ID>';
 ```
+
+문답 예시를 넣으면 지시가 길어져 입력 토큰이 는다. 모델 없이 지시 글자 수만 잰 값 (2026-11-13, 평가 사례): 묘묘 최초 풀이 +1,824~2,692자 (3.1.0 지시 10,730자의 약 17~25%), 묘묘 후속 답변 +1,757~2,414자, 무진 Pass 2 장마다 +1,340~2,547자 (1.0.0 지시 약 4,200자), `docs/personas/examples.md` 4절. 토큰 수는 재지 않았다 (실제 호출 없음). 예시 블록은 지시 맨 끝이라 그 앞의 같은 지시는 입력 캐시에 그대로 걸린다. 실제 증가분은 위 5)와 무진의 `llm_call_usage`(아래)를 프롬프트 버전으로 나눠 비교한다.
 
 이 migration 전에 끝난 풀이는 시도 기록이 없어 `recorded_attempts = 0`, `usage_complete = false`로 보인다. 그 풀이는 `generation_jobs.usage`(완료한 시도 하나의 값. 예전 규칙이라 받지 못한 호출이 0으로 더해졌을 수 있다)만 있다. 없는 값을 0으로 채우거나 다시 생성하지 않는다.
 
@@ -298,6 +317,19 @@ where r.id = '<풀이 ID>';
 
 -- 5) 관리자 화면과 같은 묶음 (최근 호출 순 풀이 20개의 단계별·풀이별·전체 합계)
 select public.admin_llm_usage(20);
+
+-- 6) 문답 예시 전후 비교: Pass 2 호출의 프롬프트 버전별 평균 토큰 (mujin-voice-1.0.0 예시 없음, mujin-voice-1.1.0 예시 있음)
+select prompt_version, count(*) as calls, round(avg(input_tokens)) as avg_input, round(avg(cached_input_tokens)) as avg_cached,
+       round(avg(output_tokens)) as avg_output
+from public.llm_calls
+where step = 'pass2' and outcome = 'usage'
+group by prompt_version;
+
+-- 7) 장마다 Pass 2 지시에 넣은 문답 예시 ID
+select section_id, tier, meta -> 'examples' as examples
+from public.reading_sections
+where reading_id = '<풀이 ID>'
+order by created_at;
 ```
 
 적용: 이 migration을 앱 배포 전에 먼저 적용한다. 실제 운영 DB에 적용했는지는 이 문서의 작성 시점에 확인하지 않았다 (`NOT_RUN`). 위 SQL은 테스트용 Postgres(PGlite)에 실제 migration을 적용해 실행되는지 확인한다 (`tests/unit/mujin-admin-usage.test.ts`).
