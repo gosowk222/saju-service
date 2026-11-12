@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChartView, ReadingPreview, StoredMessage } from "@/domain/reading/types";
+import { attemptLimitFor } from "@/server/generation/bundles";
 
 /**
  * 사용자 권한(RLS)으로 읽는 조회 함수. supabase는 로그인한 사용자의 클라이언트다.
@@ -178,7 +179,8 @@ export async function loadReadingState(supabase: Db, readingId: string): Promise
     status,
     source: entitlement.source,
     errorCode: job.error_code,
-    canRetry: status === "failed" && job.attempts < USER_RETRY_LIMIT,
+    // 작업에 고정된 버전의 시작 상한 (2-pass는 반납 뒤 이어받기도 시작 수에 들어가 상한이 크다).
+    canRetry: status === "failed" && job.attempts < attemptLimitFor(job.prompt_version),
     messages: messages.map(({ seq, topicId, kind, text }) => ({ seq, topicId, kind, text })),
     followups: followups
       .filter((followup) => followup.status !== "failed")

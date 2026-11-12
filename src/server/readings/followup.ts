@@ -1,7 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicBirthInput } from "sajuengine";
-import { findPersona } from "@/domain/personas";
 import { findMessengerProduct, findScrollProduct } from "@/domain/products";
 import { focusTopicsOf } from "@/domain/reading/focus";
 import { inScopeItems, limitToTopics, seoulDate, type QuestionAnalysis } from "@/domain/reading/question";
@@ -12,7 +11,8 @@ import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { classifyQuestion } from "@/server/llm/narrate";
 import type { ExampleRecord } from "@/server/llm/example-block";
-import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, personaVersionFor, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
+import { messengerFollowupFor } from "@/server/generation/bundles";
+import { QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
 import { UsageMeter } from "@/server/llm/usage";
 import { internalReason } from "@/server/log";
 import { askScrollFollowup } from "@/server/scroll/followup";
@@ -145,10 +145,13 @@ export async function askFollowup(input: {
     ]);
     if (internals.error || reading.error || messages.error || previous.error) throw new Error("load_failed");
 
-    // 후속 답변은 요청 하나 안에서 끝나므로 현재 프롬프트에 맞는 캐릭터 설정을 쓴다 (followups.prompt_version으로 버전을 알 수 있다).
-    const persona = findPersona(reading.data.persona_id as string, personaVersionFor(CURRENT_FOLLOWUP_PROMPT));
+    // 후속 답변은 요청 하나 안에서 끝나므로 풀이 상품의 현재 생성 묶음이 정한 캐릭터 설정·지시·예시를 쓴다 (followups.prompt_version에 남는다).
+    // 풀이의 캐릭터와 묶음의 캐릭터가 다르면 다른 캐릭터로 바꾸지 않고 설정 오류로 끝낸다.
     const product = findMessengerProduct(reading.data.product_id as string);
-    if (!persona || !product) throw new Error("configuration_unavailable");
+    const voice = product ? messengerFollowupFor(product) : null;
+    if (!product || !voice || voice.persona.id !== reading.data.persona_id) throw new Error("configuration_unavailable");
+    const persona = voice.persona;
+    const followupPrompt = voice.bundle.followup;
     const plan = internals.data.plan as AnyReadingPlan;
     const last = (previous.data ?? [])[0] as { question: string; answer: string | null } | undefined;
     const lastTurn = last ? { question: last.question, answer: truncate(last.answer ?? "", 600) } : null;
@@ -188,6 +191,7 @@ export async function askFollowup(input: {
         deadlineAt,
         meter,
         exampleSeed: followupId,
+        followup: { prompt: followupPrompt.prompt, examples: followupPrompt.examples },
         // 문단이 완성될 때마다 답을 먼저 저장해 화면에 보여 준다. 횟수 차감과 완료 상태는 complete_followup에서 한 번에 바꾼다.
         publish: async (partial) => {
           const { data: updated, error: updateError } = await admin
@@ -215,8 +219,8 @@ export async function askFollowup(input: {
       p_meta: {
         modelId,
         actualModel,
-        promptVersion: CURRENT_FOLLOWUP_PROMPT,
-        schemaVersion: FOLLOWUP_SCHEMA_VERSION,
+        promptVersion: followupPrompt.prompt,
+        schemaVersion: followupPrompt.schema,
         usage,
         durationMs: Date.now() - startedAt,
         analysis: analysisRecord(analysis, llmCalls, examples),

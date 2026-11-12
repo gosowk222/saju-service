@@ -33,7 +33,7 @@ export interface LlmCallTags {
   readonly reasoningEffort: string;
   /** 생성 작업의 시도 번호 (generation_jobs.attempts, 무진 무료 단계는 reading_free_runs.attempts). 후속 질문은 null. */
   readonly attempt?: number | null;
-  /** 말한 캐릭터 ID. 캐릭터가 없는 호출(질문 정리, 중립 초안)도 풀이의 캐릭터를 남길 수 있다. 모르면 null. */
+  /** 풀이(또는 후속 질문)의 캐릭터 ID. 캐릭터가 말하지 않는 호출(질문 정리, 중립 초안)에도 풀이의 캐릭터를 남긴다. 모르면 null. */
   readonly personaId?: string | null;
   /** 생성 묶음 ID (예: myomyo-2pass-1.0.0, mujin-1.1.0). 묶음 없이 만든 호출은 null. */
   readonly policyVersion?: string | null;

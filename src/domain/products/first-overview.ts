@@ -37,6 +37,9 @@ export const FIRST_OVERVIEW: ProductDefinition = {
   archive: true,
   pdf: true,
   personaId: "myomyo",
+  // 2026-11-13부터 새 풀이는 묘묘 2-pass(중립 초안 → 묘묘 말풍선)로 만든다. 주제·판단·분량·가격·질문 수는 바꾸지 않았다.
+  // 이전에 시작한 풀이는 그때 고정한 1-pass 버전(reading-x.y.z)으로 이어 쓴다.
+  generation: { bundle: "myomyo-2pass-1.0.0" },
   featureId: "first-overview-natal",
   rulesetId: "first-overview",
   expectedBubbles: "메시지 약 55개 · 궁금한 점 중심 구성",

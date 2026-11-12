@@ -217,9 +217,11 @@ export interface TwoPassInit<D, F> {
   readonly attempt: number;
   readonly modelId: string;
   readonly startedAt: number;
-  /** 호출 기록에 함께 남기는 캐릭터 ID와 생성 묶음 ID (llm_calls.persona_id, policy_version). */
+  /** 호출 기록에 함께 남기는 풀이의 캐릭터 ID와 생성 묶음 ID (llm_calls.persona_id, policy_version). */
   readonly personaId: string | null;
   readonly policyVersion: string | null;
+  /** 생성 시도 전체의 사용량 (호출한 쪽이 질문 정리 등과 함께 집계할 때). 실행기의 호출도 함께 쌓인다. */
+  readonly meter?: UsageMeter;
 }
 
 /** Pass 1 묶음 하나 (단위 ID 순서대로 쓴다). */
@@ -261,7 +263,7 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
   protected readonly modelId: string;
   protected readonly startedAt: number;
   protected readonly deadlineAt: number;
-  protected readonly meter = new UsageMeter();
+  protected readonly meter: UsageMeter;
   protected readonly recorder: LlmCallRecorder;
   protected readonly queue: VoiceQueue;
   private readonly personaId: string | null;
@@ -296,6 +298,7 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
     this.deadlineAt = init.startedAt + init.settings.budgetMs;
     this.personaId = init.personaId;
     this.policyVersion = init.policyVersion;
+    this.meter = new UsageMeter(init.meter);
     this.recorder = createCallRecorder((row) => this.unitStore.writeCall(row));
     this.queue = new VoiceQueue(
       init.settings.voiceConcurrency,
@@ -330,12 +333,15 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
   /** reading_units.draft_meta (생성 문장 없이 버전·묶음·앞선 문제 종류만). */
   protected abstract draftMeta(batchId: string, round: number, previousIssues: readonly string[] | undefined): Record<string, unknown>;
   /** 초안을 저장한 뒤 (예: 다음 묶음에 넘길 장면 요약을 모은다). */
-  protected onDraftSaved(_unitId: string, _draft: D): void {}
+  protected onDraftSaved(unitId: string, draft: D): void {
+    void unitId;
+    void draft;
+  }
   /** Pass 2를 할 수 있는 단위인가 (계획에 있는 단위). */
   protected abstract canVoice(unitId: string): boolean;
   protected abstract buildVoiceRequest(unitId: string, draft: D, previousIssues: readonly string[] | undefined): VoiceCall<V>;
   /** Pass 2 출력에서 저장할 최종 단위를 꺼낸다. */
-  protected abstract finalOf(output: V): F;
+  protected abstract finalOf(unitId: string, output: V): F;
   protected abstract checkVoice(unitId: string, content: F, draft: D): string[];
   /** reading_sections.meta (소유자가 읽을 수 있으므로 버전·예시 ID·시간·문제 종류만). */
   protected abstract finalMeta(input: {
@@ -345,7 +351,10 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
     readonly previousIssues: readonly string[];
   }): Record<string, unknown>;
   /** 최종 단위를 저장한 뒤 (예: 메신저는 순서가 된 단위부터 말풍선으로 보낸다). 던지면 실행을 멈춘다. */
-  protected async afterFinal(_unitId: string, _content: F): Promise<void> {}
+  protected async afterFinal(unitId: string, content: F): Promise<void> {
+    void unitId;
+    void content;
+  }
 
   // ─── 공통 실행 ─────────────────────
 
@@ -377,7 +386,7 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
       step,
       unitId,
       attempt: this.attempt,
-      personaId: step === "classify" ? null : this.personaId,
+      personaId: this.personaId,
       policyVersion: this.policyVersion,
       ...versions,
     });
@@ -591,7 +600,7 @@ export abstract class TwoPassRun<D, F, V, B extends DraftBatchSpec = DraftBatchS
       // 응답을 받은 뒤에는 점유를 잃었을 때만 버린다 (늦은 응답이 새 상태를 덮지 않게). 다른 작업 오류로 멈춘 실행도
       // 검사를 통과한 결과는 저장한다. 저장 함수가 점유를 다시 확인한다.
       if (this.lost) return;
-      const content = this.finalOf(result.parsed);
+      const content = this.finalOf(id, result.parsed);
       const issues = this.checkVoice(id, content, draft);
       if (!issues.length) {
         const saved = await this.unitStore.saveFinal({

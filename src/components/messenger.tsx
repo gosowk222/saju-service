@@ -14,6 +14,8 @@ import { Notice, PersonaAvatar, TypingDots } from "@/components/ui/layout";
 
 /** 생성 중에는 주제가 완성될 때마다 저장되므로 자주 확인한다. */
 const POLL_INTERVAL_MS = 2000;
+/** 한 화면에서 반납된 생성을 이어서 요청하는 최대 횟수 (서버의 작업 시작 상한보다 크게, 무한 반복만 막는다). */
+const MAX_CONTINUATIONS = 20;
 /** 후속 답변은 문단이 짧아 더 자주 확인한다. */
 const FOLLOWUP_POLL_INTERVAL_MS = 1500;
 
@@ -129,31 +131,42 @@ export function Messenger({ readingId, personaName, personaSubject, personaFace,
   const bottomRef = useRef<HTMLDivElement>(null);
   const started = useRef(false);
   const startingRef = useRef(false);
+  /** 서버가 시간 예산을 다 써서 작업을 반납(queued)한 뒤 이 화면이 이어서 보낸 생성 요청 수. 끝없이 반복하지 않게 센다. */
+  const continuations = useRef(0);
 
   const animating = animateReveal && !skipReveal && revealed < state.messages.length;
 
   const startGeneration = useCallback(
-    async (retry: boolean) => {
-      setStarting(true);
-      startingRef.current = true;
-      setNotice(null);
-      // 다시 시도할 때도 쓰는 중으로 보여 주고, 완성된 주제를 주기 확인으로 받는다.
-      if (retry) setState((current) => ({ ...current, status: "running", canRetry: false }));
-      try {
-        // 생성이 끝날 때까지 응답이 오지 않는다. 그동안 완성된 주제는 아래 주기 확인으로 받는다.
-        const next = await apiFetch<ReadingStateView>(`/api/readings/${readingId}/generate`, { method: "POST", json: { retry } });
-        setConnectionLost(false);
-        setState(next);
-      } catch (failure) {
-        if (failure instanceof ClientApiError && (failure.status === 0 || failure.status >= 502)) {
-          // 응답만 못 받았을 뿐 서버는 계속 만든다. 아래 주기 확인이 이어서 보여 주므로 실패 알림을 띄우지 않는다.
-          if (failure.status === 0) setConnectionLost(true);
-        } else {
-          setNotice(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");
+    async (retry: boolean): Promise<void> => {
+      // 2-pass 생성은 요청 하나의 시간 예산이 끝나면 남은 단위를 반납(queued)한다. 그러면 이미 보낸 말풍선은 그대로 두고 곧바로 이어서 요청한다.
+      // 차감은 없다 (구매 권한은 한 번만 쓰인다). 서버의 작업 시작 상한이 끝을 정하고, 화면도 횟수를 센다.
+      for (let request = 0; ; request += 1) {
+        const asRetry = retry && request === 0;
+        setStarting(true);
+        startingRef.current = true;
+        setNotice(null);
+        let continueAfter = false;
+        // 다시 시도할 때도 쓰는 중으로 보여 주고, 완성된 주제를 주기 확인으로 받는다.
+        if (asRetry) setState((current) => ({ ...current, status: "running", canRetry: false }));
+        try {
+          // 생성이 끝날 때까지 응답이 오지 않는다. 그동안 완성된 주제는 아래 주기 확인으로 받는다.
+          const next = await apiFetch<ReadingStateView>(`/api/readings/${readingId}/generate`, { method: "POST", json: { retry: asRetry } });
+          setConnectionLost(false);
+          setState(next);
+          continueAfter = next.status === "queued" && continuations.current < MAX_CONTINUATIONS;
+          if (continueAfter) continuations.current += 1;
+        } catch (failure) {
+          if (failure instanceof ClientApiError && (failure.status === 0 || failure.status >= 502)) {
+            // 응답만 못 받았을 뿐 서버는 계속 만든다. 아래 주기 확인이 이어서 보여 주므로 실패 알림을 띄우지 않는다.
+            if (failure.status === 0) setConnectionLost(true);
+          } else {
+            setNotice(failure instanceof ClientApiError ? failure.message : "잠시 후 다시 시도해 주세요.");
+          }
+        } finally {
+          setStarting(false);
+          startingRef.current = false;
         }
-      } finally {
-        setStarting(false);
-        startingRef.current = false;
+        if (!continueAfter) return;
       }
     },
     [readingId],

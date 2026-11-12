@@ -273,6 +273,8 @@ export const MUJIN_OVERVIEW: ScrollProductDefinition = {
   archive: true,
   pdf: true,
   personaId: "mujin",
+  // 족자 2-pass 묶음 (src/server/llm/mujin-prompts.ts). 무료·유료 단계는 시작할 때 이 묶음을 고정한다.
+  generation: { bundle: "mujin-1.1.0" },
   featureId: "mujin-overview-natal",
   rulesetId: "mujin-overview",
   contentsLabel: "무료: 원국표·기초 분석·1장 · 유료: 2~10장과 궁금한 점 정리",

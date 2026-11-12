@@ -7,6 +7,7 @@ import { assembleFocus, focusTopicsOf } from "@/domain/reading/focus";
 import { excludedItems, excludedLabel, inScopeFacts, inScopeItems, itemDomain, reactionOf, type QuestionAnalysis } from "@/domain/reading/question";
 import { isPlanV2, type AnyReadingPlan, type ChartView, type StoredMessage, type TimingAnalysis, type UserContextStatement } from "@/domain/reading/types";
 import { LLM_SETTINGS } from "@/server/llm/config";
+import type { ExampleBinding } from "@/server/llm/example-block";
 import { answerFollowup, answerFollowupProgressive, type GenerationMeta } from "@/server/llm/narrate";
 import type { UsageMeter } from "@/server/llm/usage";
 
@@ -75,6 +76,8 @@ export async function answerAnalyzedFollowup(input: {
   readonly meter?: UsageMeter;
   /** 문답 예시를 고르는 순서 값 (후속 질문 ID). 같은 질문의 재작성에서 같은 예시를 받는다. */
   readonly exampleSeed?: string;
+  /** 후속 답변 지시 버전과 예시 연결 (풀이 상품의 생성 묶음이 정한다). 없으면 CURRENT_FOLLOWUP_PROMPT와 그 버전의 예시 표. */
+  readonly followup?: { readonly prompt: string; readonly examples: ExampleBinding | null };
 }): Promise<{ readonly status: FollowupStatus; readonly answer: string; readonly refs: readonly string[]; readonly meta: GenerationMeta }> {
   const { plan, product, analysis } = input;
   const items = inScopeItems(analysis);
@@ -119,6 +122,8 @@ export async function answerAnalyzedFollowup(input: {
     lastTurn: input.lastTurn,
     reaction: reactionOf(analysis),
     exampleSeed: input.exampleSeed,
+    promptVersion: input.followup?.prompt,
+    examples: input.followup?.examples ?? null,
     chart: input.chart,
     modelId: input.modelId,
     deadlineAt: input.deadlineAt,

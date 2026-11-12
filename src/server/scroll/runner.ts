@@ -23,8 +23,6 @@ import { LlmError, callStructured, callStructuredStream } from "@/server/llm/cli
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { promptExampleConfig, type ExampleRecord } from "@/server/llm/example-block";
 import {
-  MUJIN_BUNDLES,
-  MUJIN_BUNDLE_VERSION,
   MujinDraftSectionParser,
   buildDraftRequest,
   buildVoiceRequest,
@@ -40,7 +38,6 @@ import {
   needsDraft as needsDraftWith,
   needsVoice as needsVoiceWith,
   unitOutcome,
-  type DraftBatchSpec,
   type ParsedDraft,
   type RequestFields,
   type StepVersions,
@@ -294,7 +291,7 @@ class TierRun extends TwoPassRun<ScrollDraftContent, ScrollSectionContent, Mujin
     return { request: requestFields(built), examples: built.examples };
   }
 
-  protected finalOf(output: MujinVoiceOutput): ScrollSectionContent {
+  protected finalOf(_id: string, output: MujinVoiceOutput): ScrollSectionContent {
     return output.section;
   }
 
@@ -586,8 +583,17 @@ class TierRun extends TwoPassRun<ScrollDraftContent, ScrollSectionContent, Mujin
   }
 }
 
-async function claimTier(store: ScrollStore, input: { readonly userId: string; readonly readingId: string; readonly tier: ScrollTier; readonly retry: boolean }): Promise<ClaimOutcome> {
-  const current = MUJIN_BUNDLES[MUJIN_BUNDLE_VERSION]!;
+async function claimTier(
+  store: ScrollStore,
+  product: ScrollProductDefinition,
+  input: { readonly userId: string; readonly readingId: string; readonly tier: ScrollTier; readonly retry: boolean },
+): Promise<ClaimOutcome> {
+  // 새 단계가 고정할 묶음은 상품 설정이 가리킨다. 모르는 묶음이면 시작하지 않는다 (다른 묶음으로 바꾸지 않는다).
+  const current = findMujinBundle(product.generation.bundle);
+  if (!current) {
+    console.error("[scroll] claim failed", { readingId: input.readingId, tier: input.tier, reason: "bundle_unavailable" });
+    throw new ApiError(500, "claim_failed", "풀이를 시작하지 못했어요.");
+  }
   let model: string;
   try {
     model = resolveModelId();
@@ -600,7 +606,7 @@ async function claimTier(store: ScrollStore, input: { readonly userId: string; r
     retry: input.retry,
     model,
     // 묶음 ID 하나로 Pass 1·Pass 2·질문 정리 버전을 함께 고정한다.
-    promptVersion: MUJIN_BUNDLE_VERSION,
+    promptVersion: current.id,
     reasoningEffort: LLM_SETTINGS.tasks.draft.reasoningEffort,
     leaseSeconds: SCROLL_SETTINGS.leaseSeconds,
   };
@@ -648,7 +654,7 @@ export async function runScrollTier(input: {
     if (free?.status !== "completed" && !free?.finalFailure) return "not_ready";
   }
 
-  const claim = await claimTier(deps.store, { userId, readingId, tier, retry: input.retry });
+  const claim = await claimTier(deps.store, product, { userId, readingId, tier, retry: input.retry });
   if (!claim.claimed) return claim.reason === "not_entitled" ? "locked" : claim.reason;
 
   return new TierRun({ deps, tier, userId, reading: loaded.reading, plan: loaded.plan, product, claimed: claim.run, startedAt }).execute();

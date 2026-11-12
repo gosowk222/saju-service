@@ -17,7 +17,7 @@ import type {
   TimingPlanV2,
   UserContextStatement,
 } from "@/domain/reading/types";
-import { buildExampleBlock, usesExamples, type ExampleRecord } from "./example-block";
+import { buildExampleBlock, buildExampleBlockFor, usesExamples, type ExampleBinding, type ExampleRecord, type ExampleSources } from "./example-block";
 
 /**
  * 프롬프트와 출력 형식은 버전별로 보관한다. 작업을 시작할 때 고정한 버전으로 재시도하므로,
@@ -131,7 +131,7 @@ const NarrationV2Parser: z.ZodType<NarrationOutputV2> = z.object({
  * narration-2.1.0: 말풍선마다 굵게 보일 구절을 따로 받는다. 문장 안에 별표를 넣게 하면 모델이 자주 빠뜨려서
  * 필드로 받고, 저장할 때 서버가 표시를 붙인다 (applyHighlight).
  */
-const bubbleSchemaV21 = {
+export const bubbleSchemaV21 = {
   ...bubbleSchema,
   required: ["kind", "refs", "text", "highlight"],
   properties: { ...bubbleSchema.properties, highlight: { type: "string" } },
@@ -182,7 +182,7 @@ const NARRATION_V22_JSON_SCHEMA = {
   },
 } as const;
 
-const BubbleV21Parser = BubbleParser.extend({ highlight: z.string().default("") });
+export const BubbleV21Parser = BubbleParser.extend({ highlight: z.string().default("") });
 
 const NarrationV21Parser: z.ZodType<NarrationOutputV2> = z.object({
   opening: z.string(),
@@ -969,7 +969,7 @@ const CONTEXT_FROM: Readonly<Record<UserContextStatement["source"], "situation" 
   fact: "concern",
   message: "message",
 };
-const contextInputWithSource = (items: readonly UserContextStatement[]) => items.map(({ ref, text, source }) => ({ ref, text, from: CONTEXT_FROM[source] }));
+export const contextInputWithSource = (items: readonly UserContextStatement[]) => items.map(({ ref, text, source }) => ({ ref, text, from: CONTEXT_FROM[source] }));
 
 // ─── reading-2.7.0 / followup-2.7.0 (캐릭터 묘묘 1.2.0) ─────────────────────
 
@@ -1382,7 +1382,7 @@ function priorityBlock(task: "reading" | "followup"): string {
 }
 
 /** 채택 해석(statements)의 칸 설명. 최초 풀이와 후속 답변이 같은 재료를 쓴다. */
-function statementsGuide(field: string): string {
+export function statementsGuide(field: string): string {
   return [
     `- ${field}: 서비스가 채택한 해석. 칸마다 역할이 다르다.`,
     "  · text: 채택한 판단. status가 deferred면 단정하지 말고 조건을 붙인다.",
@@ -1395,7 +1395,7 @@ function statementsGuide(field: string): string {
   ].join("\n");
 }
 
-const FORBIDDEN_3_1_0 = `
+export const FORBIDDEN_3_1_0 = `
 [하면 안 되는 것]
 - 재료에 없는 해석, 날짜, 금액, 확률이나 적중률, 다른 사람의 정보와 속마음, 확정된 미래, 알려 주지 않은 과거 사건을 만들지 않는다. 자신만만하게 으스댈 때도 맞힐 확률, 적중률, 퍼센트를 말하지 않는다.
 - 날짜는 timing에 있는 label('2027년 3월', '2027년')만 쓴다. 일(日) 단위 날짜나 'N년 후' 같은 기간 숫자를 만들지 않는다. timing이 없으면 날짜를 쓰지 않는다.
@@ -1512,6 +1512,43 @@ function readingInput4(args: ReadingPromptV2Args): string {
     commonCaveats: material.commonCaveats,
     topics: base.topics.map((topic, index) => ({ ...topic, statements: material.groups[index] })),
   });
+}
+
+/**
+ * 2-pass Pass 1(캐릭터 없는 중립 초안, messenger-draft)의 작성 재료. reading-3.1.0 입력(readingInput4)과 같은 칸과 같은 정리 방식
+ * (materialInputV2: 같은 행동 문장은 처음 나온 해석에만)이고, 캐릭터에 묶인 칸(address)과 말풍선 칸(bubbleChars, alreadySent)은 뺐다.
+ * topicIds에 있는 주제만 statements를 넣는다 (묶음 하나가 쓰는 주제). 행동 문장의 첫 등장은 계획 전체 순서로 정한다.
+ */
+export function neutralMaterialInput(plan: NarrationPlanV2, topicIds: ReadonlySet<string>) {
+  const material = materialInputV2(plan.topics.map((topic) => topic.statements));
+  return {
+    hourKnown: plan.base.hourKnown,
+    coverageNotes: plan.base.coverageNotes,
+    situation: plan.base.situation ? { label: plan.base.situation.label, context: plan.base.situation.context } : null,
+    userContext: contextInputWithSource(plan.userContext),
+    facts: plan.base.facts.map(({ ref, text }) => ({ ref, text })),
+    questions: plan.questions.map((question) => questionInput(question, plan.length.focusBubblesPerQuestion)),
+    timing: plan.timing.map(timingInput),
+    commonCaveats: material.commonCaveats,
+    topics: plan.topics.flatMap((topic, index) =>
+      topicIds.has(topic.topicId)
+        ? [
+            {
+              topicId: topic.topicId,
+              title: topic.title,
+              weight: topic.weight,
+              target: topic.target,
+              outline: topic.outline,
+              situationAngle: topic.situationAngle,
+              creativeSceneAllowed: topic.creativeSceneAllowed,
+              status: topic.status,
+              limitNote: topic.limitNote,
+              statements: material.groups[index],
+            },
+          ]
+        : [],
+    ),
+  };
 }
 
 /** 지시 전체: [캐릭터] → [역할과 우선순위] → [명리 해석 지침] → 출력 조건. 재시도와 이어 쓰기도 같은 함수로 만든다. */
@@ -2406,10 +2443,15 @@ const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-3.1.0": FOLLOWUP_RULES_3_1_0,
   // 3.1.0과 같은 규칙. 지시 끝에 문답 예시 블록을 더한다 (buildFollowupPrompt).
   "followup-3.2.0": FOLLOWUP_RULES_3_1_0,
+  // 3.3.0: 3.2.0과 같은 지시·입력·출력 형식. 예시는 프롬프트 표(PROMPT_EXAMPLES)가 아니라 생성 묶음의 예시 연결로 고른다
+  // (묘묘 myomyo-2pass-1.0.0의 followup: 카탈로그 myomyo-examples-2.0.0, 안내 1.1.0). 묶음이 정하므로 다른 캐릭터도 같은 버전을 쓸 수 있다.
+  "followup-3.3.0": FOLLOWUP_RULES_3_1_0,
 };
 
 /** buildFollowupPrompt로 만들 수 있는 버전. 3.1.0은 예시 없는 비교용으로 남긴다 (llm:export). 그 이전 규칙은 기록용이다. */
-const BUILDABLE_FOLLOWUP_PROMPTS: ReadonlySet<string> = new Set(["followup-3.1.0", "followup-3.2.0"]);
+const BUILDABLE_FOLLOWUP_PROMPTS: ReadonlySet<string> = new Set(["followup-3.1.0", "followup-3.2.0", "followup-3.3.0"]);
+/** 생성 묶음의 예시 연결(args.examples)이 있어야 만드는 버전. 연결 없이 부르면 오류다 (예시 없이 조용히 보내지 않는다). */
+const BINDING_FOLLOWUP_PROMPTS: ReadonlySet<string> = new Set(["followup-3.3.0"]);
 
 const FOLLOWUP_V2_JSON_SCHEMA = {
   type: "object",
@@ -2477,8 +2519,12 @@ export interface FollowupPromptArgs {
   readonly alreadySent?: readonly { readonly questionRef: string; readonly paragraphs: readonly string[] }[] | null;
   /** 문답 예시를 고를 때 순서를 정하는 값 (followup-3.2.0부터). 생성 경로는 후속 질문 ID를 넣는다. 없으면 질문으로 만든다. */
   readonly exampleSeed?: string;
-  /** 만들 버전. 없으면 현재 버전 (CURRENT_FOLLOWUP_PROMPT). 비교용 내보내기만 followup-3.1.0을 준다. */
+  /** 만들 버전. 없으면 CURRENT_FOLLOWUP_PROMPT. 서비스의 후속 답변은 풀이 상품의 생성 묶음이 정한 버전(followup-3.3.0)을 준다. */
   readonly promptVersion?: string;
+  /** 생성 묶음의 예시 연결 (followup-3.3.0부터). 캐릭터·카탈로그·선택 정책·안내 버전을 묶음이 정한다. */
+  readonly examples?: ExampleBinding | null;
+  /** 예시 카탈로그·정책을 찾는 곳 (테스트용). 없으면 등록된 카탈로그. */
+  readonly exampleSources?: ExampleSources;
 }
 
 /**
@@ -2509,7 +2555,12 @@ export function buildFollowupPrompt(args: FollowupPromptArgs) {
   const version = args.promptVersion ?? CURRENT_FOLLOWUP_PROMPT;
   if (!BUILDABLE_FOLLOWUP_PROMPTS.has(version)) throw new Error(`prompt_version_unavailable: ${version}`);
   const material = materialInputV2([args.statements]);
-  const examples = usesExamples(version) ? buildExampleBlock(version, args.persona, followupExampleRequest(args)) : null;
+  if (BINDING_FOLLOWUP_PROMPTS.has(version) && !args.examples) throw new Error(`examples_unavailable: ${version}에는 생성 묶음의 예시 연결이 필요합니다.`);
+  const examples = args.examples
+    ? buildExampleBlockFor(args.examples, args.persona, followupExampleRequest(args), version, args.exampleSources)
+    : usesExamples(version)
+      ? buildExampleBlock(version, args.persona, followupExampleRequest(args))
+      : null;
   return {
     instructions: [instructions3_1_0(args.persona, "followup", FOLLOWUP_RULES[version]!), ...(examples ? [examples.text] : [])].join("\n\n"),
     examples: examples?.record ?? null,

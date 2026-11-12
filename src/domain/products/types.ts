@@ -140,7 +140,15 @@ export interface ProductBase {
   readonly freeReactions: number;
   readonly archive: boolean;
   readonly pdf: boolean;
+  /** 말하는 캐릭터 (src/domain/personas의 레지스트리 ID). 상품 ID와 다른 개념이다. */
   readonly personaId: string;
+  /**
+   * 생성 정책. 서버의 생성 묶음 ID를 가리킨다 (메신저: src/server/generation/bundles.ts, 족자: src/server/llm/mujin-prompts.ts의 MUJIN_BUNDLES).
+   * 묶음이 실행 방식(1-pass·2-pass), 단계별 지시·출력 형식, 캐릭터 설정 버전, 예시 카탈로그·선택 정책을 함께 고정한다.
+   * 새 생성 작업은 처음 시작할 때 이 묶음을 고정하고, 이미 시작한 작업은 그때 고정한 버전으로만 이어 쓴다.
+   * 묶음의 캐릭터와 personaId가 같아야 한다 (tests/unit/persona-registry.test.ts).
+   */
+  readonly generation: { readonly bundle: string };
   readonly featureId: string;
   readonly rulesetId: string;
   readonly scope: ProductScope;
