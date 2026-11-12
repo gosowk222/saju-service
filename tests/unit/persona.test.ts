@@ -44,8 +44,10 @@ describe("캐릭터 등록", () => {
     // reading-2.9.0으로 시작한 작업은 1.4.0을 그대로 쓴다.
     expect(findPersona("myomyo", personaVersionFor("reading-2.9.0"))).toBe(MYOMYO_1_4_0);
     expect(findPersona("myomyo", "1.4.0")).toBe(MYOMYO_1_4_0);
-    // 되돌린 작업에서 쓴 2.0.0은 남겨 둔 설정이 없다. 풀이 기록에 그 번호가 있어도 화면은 현재 설정으로 보인다.
-    expect(findPersona("myomyo", "2.0.0")).toBe(MYOMYO);
+    // 되돌린 작업에서 쓴 2.0.0은 남겨 둔 설정이 없다. 모르는 버전을 현재 설정으로 조용히 바꾸지 않는다 (2026-11-13).
+    // 화면 표시는 버전 없이 findPersona(id)로 현재 설정을 쓴다.
+    expect(findPersona("myomyo", "2.0.0")).toBeUndefined();
+    expect(findPersona("myomyo")).toBe(MYOMYO);
     expect(findPersona("myomyo", personaVersionFor("reading-2.8.0"))).toBe(MYOMYO_1_3_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.7.0"))).toBe(MYOMYO_1_2_0);
     expect(findPersona("myomyo", personaVersionFor("reading-2.6.0"))).toBe(MYOMYO_1_1_0);
@@ -82,8 +84,8 @@ describe("캐릭터 등록", () => {
     // 설정 어디에도 완성 대사나 말버릇 견본(따옴표로 묶은 대사)이 없다.
     const settings = [MYOMYO.role, MYOMYO.relationship, ...MYOMYO.tone, ...MYOMYO.speaking!, ...MYOMYO.moments, ...MYOMYO.teasing!, ...MYOMYO.sceneStyle].join("\n");
     expect(settings).not.toMatch(/'[^']{4,}'|"[^"]{4,}"|흐응|어라~|으이구|큰소리치더니|그럴 줄 알았지/);
-    // 따로 남긴 설정이 없는 버전이면 현재 설정을 준다.
-    expect(findPersona("myomyo", "9.9.9")).toBe(MYOMYO);
+    // 따로 남긴 설정이 없는 버전은 현재 설정으로 바꾸지 않는다 (2026-11-13). 생성 경로는 이 값을 보고 재시도할 수 없는 실패로 정리한다.
+    expect(findPersona("myomyo", "9.9.9")).toBeUndefined();
     // 이전 설정은 그대로다 (설명에서 장난을 줄이라던 문구도 그 버전에는 남아 있다).
     expect(MYOMYO_1_0_0.tone.join()).toContain("설명하는 부분은 장난을 줄이고");
     expect(MYOMYO_1_0_0.catchphrases.find((phrase) => phrase.pattern === "허접")?.maxPerReading).toBe(1);

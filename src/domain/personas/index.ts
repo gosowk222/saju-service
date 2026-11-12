@@ -889,18 +889,61 @@ export const MUJIN: Persona = {
   lines: MUJIN_LINES,
 };
 
-/** 등록된 캐릭터의 현재 설정. */
-const PERSONAS: readonly Persona[] = [MYOMYO, MUJIN];
-/** 이전 설정. 그 설정과 함께 쓰던 프롬프트로 시작한 생성 작업을 이어 쓸 때만 쓴다. */
-const EARLIER_PERSONAS: readonly Persona[] = [MYOMYO_1_0_0, MYOMYO_1_1_0, MYOMYO_1_2_0, MYOMYO_1_3_0, MYOMYO_1_4_0];
+/** 캐릭터 하나의 등록 정보: 현재 설정과, 그 캐릭터의 이전 설정 (이전 설정에 고정된 생성 작업을 이어 쓸 때만 쓴다). */
+export interface PersonaEntry {
+  readonly current: Persona;
+  readonly earlier: readonly Persona[];
+}
+
+/** 캐릭터 ID와 버전으로 설정을 찾는다. 모르는 ID나 버전이면 undefined다 (다른 캐릭터나 현재 설정으로 바꾸지 않는다). */
+export type PersonaLookup = (personaId: string, version?: string) => Persona | undefined;
+
+export interface PersonaRegistry {
+  readonly find: PersonaLookup;
+  /** 등록된 캐릭터 ID (등록 순서). */
+  readonly ids: () => readonly string[];
+}
 
 /**
- * 캐릭터를 찾는다. version이 없으면 현재 설정을 준다. version을 주면 그 버전의 설정을 주고,
- * 그 캐릭터가 그 버전 이후로 바뀐 적이 없어 따로 남긴 설정이 없으면 현재 설정을 준다.
- * 생성 경로는 작업에 고정된 프롬프트 버전으로 version을 정한다 (prompts.ts의 personaVersionFor).
+ * 캐릭터 레지스트리를 만든다. 같은 ID가 두 번 있거나, 한 캐릭터 안에 같은 버전이 두 번 있거나, 이전 설정의 ID가 다르면 예외를 던진다.
+ * 서비스는 아래 PERSONA_REGISTRY 하나를 쓰고, 테스트는 임시 캐릭터를 더한 레지스트리를 만들어 생성기에 넘긴다.
  */
-export function findPersona(personaId: string, version?: string): Persona | undefined {
-  const current = PERSONAS.find((persona) => persona.id === personaId);
-  if (!current || !version || current.version === version) return current;
-  return EARLIER_PERSONAS.find((persona) => persona.id === personaId && persona.version === version) ?? current;
+export function createPersonaRegistry(entries: readonly PersonaEntry[]): PersonaRegistry {
+  const byId = new Map<string, PersonaEntry>();
+  for (const entry of entries) {
+    const id = entry.current.id;
+    if (byId.has(id)) throw new Error(`캐릭터 ID가 겹칩니다: ${id}`);
+    const versions = [entry.current, ...entry.earlier].map((persona) => {
+      if (persona.id !== id) throw new Error(`${id}의 이전 설정에 다른 캐릭터(${persona.id})가 있습니다.`);
+      return persona.version;
+    });
+    if (new Set(versions).size !== versions.length) throw new Error(`${id}의 설정 버전이 겹칩니다.`);
+    byId.set(id, entry);
+  }
+  return {
+    find: (personaId, version) => {
+      const entry = byId.get(personaId);
+      if (!entry) return undefined;
+      if (!version) return entry.current;
+      return [entry.current, ...entry.earlier].find((persona) => persona.version === version);
+    },
+    ids: () => [...byId.keys()],
+  };
 }
+
+/**
+ * 등록된 캐릭터. 새 캐릭터는 설정을 만들어 여기에 더한다 (docs/personas/adding-a-character.md).
+ * 이전 설정은 그 설정과 함께 쓰던 프롬프트로 시작한 생성 작업을 이어 쓸 때만 쓴다.
+ */
+export const PERSONA_REGISTRY: PersonaRegistry = createPersonaRegistry([
+  { current: MYOMYO, earlier: [MYOMYO_1_0_0, MYOMYO_1_1_0, MYOMYO_1_2_0, MYOMYO_1_3_0, MYOMYO_1_4_0] },
+  { current: MUJIN, earlier: [] },
+]);
+
+/**
+ * 캐릭터를 찾는다. version이 없으면 현재 설정을 준다 (화면 표시용). version을 주면 그 버전의 설정만 준다.
+ * 그 버전이 없으면 undefined다. 모르는 캐릭터·버전을 현재 설정이나 다른 캐릭터로 조용히 바꾸지 않는다
+ * (2026-11-13 이전에는 버전 기록이 없으면 현재 설정을 줬다). 생성 경로는 작업에 고정된 버전으로 version을 정한다
+ * (묘묘 1-pass는 prompts.ts의 personaVersionFor, 2-pass와 후속 질문은 생성 묶음의 personaVersion, 무진은 묶음의 personaVersion).
+ */
+export const findPersona: PersonaLookup = (personaId, version) => PERSONA_REGISTRY.find(personaId, version);
