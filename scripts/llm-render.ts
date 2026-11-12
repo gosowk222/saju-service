@@ -15,6 +15,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { findPersona } from "@/domain/personas";
+import { echoLines, exampleEchoes, findExampleCatalog, MYOMYO_EXAMPLE_CATALOG_VERSION } from "@/domain/personas/examples";
 import { topicTitlesOf } from "@/domain/products";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { MUJIN_OVERVIEW } from "@/domain/products/mujin-overview";
@@ -73,6 +74,9 @@ function renderMyomyo() {
     }
     lines.push(`- (${message.kind}, ${message.text.length}자) ${message.text}`);
   }
+  // 예시 사용·미사용 버전을 같은 기준으로 비교하도록, 프롬프트 버전과 관계없이 현재 묘묘 카탈로그 전체와 견준다.
+  const catalog = findExampleCatalog(MYOMYO_EXAMPLE_CATALOG_VERSION)!;
+  lines.push("", "## 예시 문장 겹침 (참고)", "", ...echoLines(exampleEchoes(messages.map((message) => message.text), catalog.examples), catalog.version));
   const report = `${lines.join("\n")}\n`;
   const target = `${file.replace(/\.json$/i, "")}.md`;
   writeFileSync(target, report);

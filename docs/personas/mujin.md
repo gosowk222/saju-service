@@ -8,8 +8,9 @@
 
 ## 원칙
 
-- 설정에는 누가 말하는지(정체성·사용자와의 관계), 성격, 말하는 방식, 상황에 따른 반응, 유머의 기준만 둔다 (AGENTS.md '상품과 문장'). 상황별 완성 대사, 판단·주제에 묶인 예시 문장, 말투 견본, 말버릇 목록과 횟수, 이모티콘 개수는 생성 지시에 넣지 않는다. 그래서 `examples`·`catchphrases`는 비어 있고 `emojiLimit`·`delivery`·`demonstrations`·`voiceSamples`는 없다. 묘묘 1.x에서 예시 문장을 같은 판단의 주제에 옮겨 쓰거나 성격을 말버릇으로 채운 일을 되풀이하지 않기 위해서다 (`docs/READING_QUALITY.md` 22·23절).
-- 평가용 짧은 예시 문장은 [`mujin-evaluation.md`](mujin-evaluation.md)에만 둔다. 생성 지시에 넣지 않는다.
+- 설정에는 누가 말하는지(정체성·사용자와의 관계), 성격, 말하는 방식, 상황에 따른 반응, 유머의 기준만 둔다 (AGENTS.md '상품과 문장'). 설정 안에 상황별 완성 대사, 말투 견본, 말버릇 목록과 횟수, 이모티콘 개수를 두지 않는다. 그래서 설정의 `examples`·`catchphrases`는 비어 있고 `emojiLimit`·`delivery`·`demonstrations`·`voiceSamples`는 없다 (묘묘 1.x에서 성격을 말버릇으로 채운 일을 되풀이하지 않기 위해서다, `docs/READING_QUALITY.md` 22·23절).
+- **문답 예시 (2026-11-13 정책)**: 사용자가 준 원문 문답 21개와 Pass 2 재작성 예시 4개를 카탈로그(`src/domain/personas/examples/mujin.ts`, 원문은 `mujin-originals.ts`에 받은 그대로)로 관리하고, 묶음 `mujin-1.1.0`부터 Pass 2(장마다 재작성 예시 하나와 문답 하나)와 후속 답변(질문·반응에 맞는 문답 두세 개)의 지시 끝에 골라 넣는다. Pass 1에는 넣지 않는다. 01(첫 상담)·18(자기 사연)·21(일상)은 지금 서비스에 모델이 답하는 경로가 없어 넣지 않는다. 칭찬·도발·의심 예시는 그 반응이 담긴 후속 질문에만 넣고, 이 때문에 후속 질문 범위나 차감 정책을 넓히지 않는다. 설명은 [`examples.md`](examples.md).
+- 평가용 짧은 방향 문장은 [`mujin-evaluation.md`](mujin-evaluation.md)에만 둔다. 그 문장은 생성 지시에 넣지 않는다.
 - 생성 지시에는 `characterBlock`(`src/server/llm/prompts.ts`)으로 한 번만 옮긴다. 무진 작성 지시(00_START_HERE.md 1절의 `src/server/llm/mujin-prompts.ts`)도 이 설정을 옮겨 쓰고, 작업 지시에서 성격을 다시 적지 않는다.
 - 무당은 캐릭터의 세계관이다. 풀이의 근거는 엔진 계산값, 서비스가 채택한 판단, 사용자가 알려 준 사실이다. 그래서 정체성(`role`)에 "신령이나 영적인 힘으로 알아냈다고 말하지 않는다"를 둔다.
 - 2차 작성(Pass 2)의 의미 보존 계약(명세 04 6절: 결론·근거·조건과 예외·반대 근거·날짜와 기간·수치·사용자 사실·선택된 행동 제안과 그 범위·확신 수준을 지키고, 가능성을 확정으로 바꾸는 등의 변형을 막는 것)은 캐릭터 설정이 아니다. 무진 작성 지시의 Pass 2 규칙에 둔다. 캐릭터는 말하는 방식만 바꾸고 판단 재료는 그대로다.
@@ -71,7 +72,7 @@
 | 7절 단일 원천 등록 | `PERSONAS = [MYOMYO, MUJIN]` | `findPersona("mujin")` |
 | 7절 모델 없는 입력 안내 문장은 lines 등 기존 구조 | `lines.intake` | 아래 '모델 없이 보내는 문장' |
 | 7절 고정 안내 문장을 본문 생성의 예문으로 쓰지 않음 | `characterBlock` | `intro`·`signatureLine`·`lines`를 옮기지 않는다 |
-| 7절 21개 문답은 참고·평가 자료, 런타임 지시에 넣지 않음 | 없음 | 작업 환경에 원문이 없어 평가 문서에 자리만 둔다 |
+| 7절 21개 문답 (2026-11-13 정책 변경: 선택해 실제 생성에 쓴다) | 설정 밖 카탈로그 `mujin-examples-1.0.0` | 원문 21개는 받은 그대로 보존하고, 경로·주제·목적 메타데이터를 따로 붙인다. Pass 2·후속 답변에만 고른다 ([`examples.md`](examples.md)) |
 | 7절 단어·어미·농담 개수로 검사하지 않음 | `catchphrases: []`, `emojiLimit` 없음 | 말투 검사기를 두지 않는다 |
 
 ## 모델 없이 보내는 문장 (`lines`)
@@ -133,11 +134,11 @@
 
 | 버전 | 함께 쓰는 지시 | 바뀐 점 |
 | --- | --- | --- |
-| 1.0.0 (현재) | 무진 작성 지시 (Pass 1 초안, Pass 2 무진 문장, 후속 질문). 지시 버전 이름은 `mujin-prompts.ts` 작업이 정한다 | 첫 설정 |
+| 1.0.0 (현재) | 묶음 `mujin-1.1.0` (Pass 1 `mujin-draft-1.0.0`, Pass 2 `mujin-voice-1.1.0`, 후속 `mujin-followup-1.1.0`, 문답 예시 카탈로그 `mujin-examples-1.0.0`) · 묶음 `mujin-1.0.0` (예시 없음, 1.1.0 이전에 시작한 단계와 비교용) | 첫 설정. 1.1.0 묶음은 설정을 바꾸지 않고 문답 예시만 더했다 |
 
 - 설정을 바꿀 때는 이 설정을 고치지 않고 새 버전을 더한다. 지금의 `MUJIN`을 `MUJIN_1_0_0` 같은 이름으로 남겨 `EARLIER_PERSONAS`에 넣고 새 `MUJIN`을 만든다. 생성 작업은 시작할 때 고정한 지시 버전에 맞는 설정을 쓴다 (`findPersona(id, version)`). 그래서 이어 쓰는 작업에 새 설정이 섞이지 않는다.
 - 한 번 쓴 번호는 되돌린 작업의 것이라도 다시 쓰지 않는다 (묘묘 2.0.0과 같은 원칙).
-- 지금 `personaVersionFor`(`prompts.ts`)는 묘묘 기준 표이고, 표에 없는 지시 버전에는 "1.0.0"을 돌려준다. 무진 1.0.0과 우연히 같을 뿐이다. 무진 지시 버전은 표(또는 캐릭터별 표)에 명시해 등록해야 한다. 등록하지 않은 채 무진 1.1.0을 더하면 새 지시로 시작한 작업도 1.0.0 설정을 쓰게 된다.
+- 무진의 설정 버전은 묶음(`MujinBundle.personaVersion`)이 정한다. 묘묘 기준 표인 `personaVersionFor`(`prompts.ts`)를 쓰지 않는다. 설정을 바꾸면 새 묶음에 새 설정 버전을 적는다.
 - 그림·이름 같은 화면 값(`MUJIN_FACE`)은 생성 지시에 들어가지 않으므로, 아바타 그림만 바꿀 때는 설정 버전을 올리지 않는다 (묘묘의 `MYOMYO_FACE`와 같다).
 - 풀이 기록: `readings.persona_id`·`persona_version`, 무진 작성 계획의 `MujinPlan.personaId`·`personaVersion`.
 
@@ -164,5 +165,6 @@ B05 요청 규격(00_START_HERE.md 9절: 얼굴 정면, 정사각 512px 이상, 
 | 설정 원본 | `src/domain/personas/index.ts` (`MUJIN`, `MUJIN_FACE`, `MUJIN_LINES`, `MUJIN_INTAKE`, `PersonaIntakeLines`, `findPersona`, `addressFor`) |
 | 상품 연결 | `src/domain/products/mujin-overview.ts`의 `personaId: "mujin"` |
 | 생성 지시로 옮기기 | `characterBlock` (`src/server/llm/prompts.ts`). 무진 작성 지시가 쓴다 |
+| 문답 예시 | 카탈로그 `src/domain/personas/examples/mujin.ts`(원문 21개 + 재작성 4개), 선택 `select.ts`, 조립 `src/server/llm/example-block.ts`. 장마다 넣은 ID는 `reading_sections.meta.examples`, 후속은 `followups.analysis.examples` |
 | 검사 | `src/domain/reading/check.ts`의 `STRONG_PROFANITY` (모든 캐릭터), `catchphraseCounter` (무진은 세는 것이 없다) |
 | 테스트 | `tests/unit/mujin-persona.test.ts` (등록·버전·호칭, 고정 문장, 입력 안내 칸, 캐릭터 블록의 말씨와 원국 글자 없음, 묘묘 그대로) |

@@ -3,10 +3,12 @@ import { z } from "zod";
 import { luckYears } from "@/domain/mujin/check";
 import type { MonthDomain, MujinLuck, MujinLuckPeriod, MujinMaterial, MujinMonths, MujinQuestionPlan, ScrollBlockType, UserFactKind } from "@/domain/mujin/types";
 import { addressFor, type Persona } from "@/domain/personas";
+import { seriousSignal, topicOfDomain, topicsOfSection, uniqueTopics, type ExampleRequest } from "@/domain/personas/examples";
 import { READING_GUIDE } from "@/domain/reading/guide";
 import type { Reaction } from "@/domain/reading/question";
 import type { FollowupOutputV2 } from "@/domain/reading/types";
 import { FAMILY_LABEL } from "@/domain/rules/materials";
+import { buildExampleBlock, type ExampleRecord } from "./example-block";
 import type { BuiltRequest, MujinBundle } from "./mujin-prompts";
 import { FOLLOWUP_SCHEMA_VERSION, characterBlock } from "./prompts";
 
@@ -23,9 +25,14 @@ import { FOLLOWUP_SCHEMA_VERSION, characterBlock } from "./prompts";
  *
  * 지시를 바꿀 때는 이 버전을 고치지 않고 새 버전을 더한다 (mujin-prompts.ts의 묶음 followupPrompt와 이름을 맞춘다).
  * 한 번 쓴 번호는 되돌린 작업의 것이라도 다시 쓰지 않는다.
+ *
+ * - mujin-followup-1.1.0 (묶음 mujin-1.1.0): 1.0.0과 같은 지시·입력·출력 형식 끝에 무진 문답 예시 블록(example-block.ts)을 더했다.
+ *   예시는 이번 메시지의 질문 분야·의도·반응과 이어진 장으로 고르고, 칭찬·도발·의심 예시는 그 반응이 담긴 메시지에만 쓴다.
+ *   후속 질문 범위와 차감 정책은 바꾸지 않는다 (질문 없이 반응만 보낸 메시지와 범위 밖 질문은 지금처럼 모델 없이 고정 문장으로 답한다).
  */
 
 export const MUJIN_FOLLOWUP_PROMPT_1_0_0 = "mujin-followup-1.0.0";
+export const MUJIN_FOLLOWUP_PROMPT_1_1_0 = "mujin-followup-1.1.0";
 
 /** 출력 형식 버전. 묘묘 후속 답변과 같은 값이다 (followups.schema_version에 남는다). */
 export const MUJIN_FOLLOWUP_SCHEMA_VERSION = FOLLOWUP_SCHEMA_VERSION;
@@ -98,6 +105,8 @@ export interface MujinFollowupPromptInput {
   readonly alreadySent?: readonly { readonly questionRef: string; readonly paragraphs: readonly string[] }[] | null;
   /** 앞선 시도에서 검사에 걸린 문제. 다시 쓸 때만 준다. */
   readonly previousIssues?: readonly string[];
+  /** 문답 예시를 고르는 순서 값 (후속 질문 ID). 같은 질문의 재작성에서 같은 예시를 받는다. 1.1.0부터 쓴다. */
+  readonly exampleSeed?: string;
 }
 
 // ─── 출력 형식 (followup-output-2.2.0, prompts.ts의 후속 답변 형식과 같다) ─────────────────────
@@ -355,11 +364,46 @@ function input1_0_0(input: MujinFollowupPromptInput): string {
   });
 }
 
-const FOLLOWUP_PROMPTS: Readonly<Record<string, (input: MujinFollowupPromptInput) => { readonly instructions: string; readonly input: string }>> = {
+/**
+ * 무진 후속 답변(1.1.0)의 예시 선택 조건. 이번 메시지의 질문 분야·의도·반응, 이어진 장의 주제, 기간 자료만 쓴다.
+ * 진지함은 이번 메시지에서 사용자가 쓴 말(질문 요약, from이 message인 사실)로만 본다.
+ */
+export function mujinFollowupExampleRequest(input: MujinFollowupPromptInput): Omit<ExampleRequest, "route"> {
+  const current = [...input.questions.map((question) => question.summary), ...input.userContext.filter((item) => item.from === "message").map((item) => item.text)];
+  return {
+    topics: uniqueTopics([
+      ...input.questions.map((question) => topicOfDomain(question.domain)),
+      ...input.questions.flatMap((question) => question.sectionIds.flatMap(topicsOfSection)),
+      ...(input.timing ? (["timing"] as const) : []),
+    ]),
+    long: false,
+    serious: seriousSignal(current),
+    reaction: input.reaction,
+    intents: [...new Set(input.questions.map((question) => question.intent))],
+    limited: input.questions.some((question) => question.answerability === "limited"),
+    hourUnknown: !input.hourKnown,
+    hasLastTurn: input.lastTurn !== null,
+    seed: input.exampleSeed ?? `mujin-followup:${input.reaction}:${input.questions.map((question) => `${question.domain}/${question.intent}/${question.summary}`).join("|")}`,
+  };
+}
+
+const FOLLOWUP_PROMPTS: Readonly<
+  Record<string, (input: MujinFollowupPromptInput) => { readonly instructions: string; readonly input: string; readonly examples: ExampleRecord | null }>
+> = {
   [MUJIN_FOLLOWUP_PROMPT_1_0_0]: (input) => ({
     instructions: [characterBlock(input.persona), ROLE_1_0_0, READING_GUIDE, RULES_1_0_0].join("\n\n"),
     input: input1_0_0(input),
+    examples: null,
   }),
+  // 1.0.0과 같은 지시·입력 끝에 무진 문답 예시 블록을 더한다. 재시도·이어 쓰기도 같은 조건으로 같은 예시를 고른다.
+  [MUJIN_FOLLOWUP_PROMPT_1_1_0]: (input) => {
+    const examples = buildExampleBlock(MUJIN_FOLLOWUP_PROMPT_1_1_0, input.persona, mujinFollowupExampleRequest(input));
+    return {
+      instructions: [characterBlock(input.persona), ROLE_1_0_0, READING_GUIDE, RULES_1_0_0, examples.text].join("\n\n"),
+      input: input1_0_0(input),
+      examples: examples.record,
+    };
+  },
 };
 
 /** 이 코드가 아는 무진 후속 질문 지시인지. */
@@ -381,5 +425,6 @@ export function buildMujinFollowupRequest(input: MujinFollowupPromptInput): Buil
     schemaName: SCHEMA_NAME,
     jsonSchema: FOLLOWUP_JSON_SCHEMA_2_2_0 as unknown as Record<string, unknown>,
     parser: FollowupParser,
+    examples: prompt.examples,
   };
 }

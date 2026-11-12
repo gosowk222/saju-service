@@ -22,6 +22,7 @@ import { computeMujinTiming } from "@/server/engine/mujin";
 import { createCallRecorder, type LlmCallRecorder, type LlmCallStep } from "@/server/llm/call-log";
 import { LlmError, callStructured, callStructuredStream, type StructuredResult } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
+import { promptExampleConfig, type ExampleRecord } from "@/server/llm/example-block";
 import {
   MUJIN_BUNDLES,
   MUJIN_BUNDLE_VERSION,
@@ -29,6 +30,7 @@ import {
   buildDraftRequest,
   buildVoiceRequest,
   findMujinBundle,
+  requestFields,
   type MujinBundle,
   type MujinVoiceOutput,
 } from "@/server/llm/mujin-prompts";
@@ -559,16 +561,19 @@ class TierRun {
       problems.clear();
       lastError = null;
       const state: DraftRound = { batchId: batch.id, round, pending, handled: new Set(), problems, previousIssues };
-      const request = buildDraftRequest({
-        bundle: this.bundle,
-        plan: this.plan,
-        sections: requested.map((id) => this.sections.get(id)!),
-        questions: this.questionMaterials,
-        usedScenes: [...this.usedScenes],
-        toc: this.toc,
-        timing,
-        previousIssues,
-      });
+      // Pass 1은 캐릭터 없는 중립 초안이라 문답 예시가 없다 (buildDraftRequest의 examples는 늘 null).
+      const request = requestFields(
+        buildDraftRequest({
+          bundle: this.bundle,
+          plan: this.plan,
+          sections: requested.map((id) => this.sections.get(id)!),
+          questions: this.questionMaterials,
+          usedScenes: [...this.usedScenes],
+          toc: this.toc,
+          timing,
+          previousIssues,
+        }),
+      );
 
       let consumed = 0;
       const consume = async (text: string) => {
@@ -703,6 +708,8 @@ class TierRun {
     let code = "validation_failed";
     /** 실제로 보낸 Pass 2가 있었는가 (보내지 못한 호출은 세지 않는다). */
     let attempted = false;
+    /** 이 장의 지시에 넣은 문답 예시 (최종문 기록에 남긴다). */
+    let examples: ExampleRecord | null = null;
 
     for (let round = 0; round <= SCROLL_SETTINGS.retriesPerRun; round += 1) {
       // 새 호출을 시작하기 전에는 멈춤(점유 잃음·다른 작업 오류)을 본다. 앞 시도가 있었으면 그 실패는 아래에서 기록한다.
@@ -712,7 +719,7 @@ class TierRun {
         this.outOfTime = true;
         break;
       }
-      const request = buildVoiceRequest({
+      const built = buildVoiceRequest({
         bundle: this.bundle,
         persona: this.persona,
         nickname: this.plan.nickname,
@@ -725,7 +732,12 @@ class TierRun {
         draft,
         userFacts,
         previousIssues,
+        // 문답 예시(mujin-voice-1.1.0부터)는 풀이 ID·장 ID와 저장된 계획으로 고른다. 같은 장의 재시도는 같은 예시를 받는다.
+        hourKnown: this.plan.hourKnown,
+        exampleSeed: this.readingId,
       });
+      examples = built.examples;
+      const request = requestFields(built);
       let result: StructuredResult<MujinVoiceOutput>;
       try {
         result = await this.deps.callStructured({
@@ -779,6 +791,8 @@ class TierRun {
             actualModel: result.meta.actualModel,
             durationMs: result.meta.durationMs,
             issues: previousIssues ?? [],
+            // 지시에 넣은 문답 예시의 카탈로그·정책 버전과 ID (1.0.0 묶음은 null). 예시 문장은 넣지 않는다.
+            examples,
           },
         });
         if (!saved) {
@@ -860,6 +874,9 @@ class TierRun {
         draftSchema: this.bundle.draftSchema,
         voicePrompt: this.bundle.voicePrompt,
         voiceSchema: this.bundle.voiceSchema,
+        // Pass 2 지시에 넣는 문답 예시의 카탈로그·정책 버전 (장마다 고른 ID는 reading_sections.meta.examples에 있다). 1.0.0 묶음은 null.
+        exampleCatalog: promptExampleConfig(this.bundle.voicePrompt)?.catalogVersion ?? null,
+        examplePolicy: promptExampleConfig(this.bundle.voicePrompt)?.policyVersion ?? null,
         questionPrompt: this.bundle.questionPrompt,
         questionSchema: this.bundle.questionSchema,
         questionAnalysis: SCROLL_QUESTION_VERSION,

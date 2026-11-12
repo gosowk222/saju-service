@@ -269,9 +269,10 @@ function expectStrict(schema: JsonSchema, path = "$"): void {
 }
 
 describe("묶음과 버전", () => {
-  it("mujin-1.0.0 묶음이 Pass 1·Pass 2·질문 정리·후속 질문 버전과 무진 설정·해석 지침 버전을 함께 고정한다", () => {
-    expect(MUJIN_BUNDLE_VERSION).toBe("mujin-1.0.0");
-    expect(bundle).toEqual({
+  it("묶음이 Pass 1·Pass 2·질문 정리·후속 질문 버전과 무진 설정·해석 지침 버전을 함께 고정한다. 현재 mujin-1.1.0은 Pass 2·후속만 예시 버전으로 바꿨고 1.0.0은 그대로 남는다", () => {
+    expect(MUJIN_BUNDLE_VERSION).toBe("mujin-1.1.0");
+    const v100 = MUJIN_BUNDLES["mujin-1.0.0"]!;
+    expect(v100).toEqual({
       id: "mujin-1.0.0",
       draftPrompt: "mujin-draft-1.0.0",
       draftSchema: "mujin-draft-schema-1.0.0",
@@ -283,10 +284,13 @@ describe("묶음과 버전", () => {
       personaVersion: "1.0.0",
       guideVersion: "guide-1.0.0",
     });
+    // Pass 1·질문 정리·형식·무진 설정·해석 지침은 같고, 무진 문답 예시를 쓰는 Pass 2와 후속 지시만 새 버전이다.
+    expect(bundle).toEqual({ ...v100, id: "mujin-1.1.0", voicePrompt: "mujin-voice-1.1.0", followupPrompt: "mujin-followup-1.1.0" });
     // 해석 지침이 바뀌면 이 묶음의 Pass 1 지시도 바뀐다. 그때는 지침 이전 버전을 남기고 새 묶음을 더해야 한다.
     expect(READING_GUIDE_VERSION).toBe(bundle.guideVersion);
     expect(bundle.personaVersion).toBe(MUJIN.version);
-    expect(findMujinBundle("mujin-1.0.0")).toBe(bundle);
+    expect(findMujinBundle("mujin-1.0.0")).toBe(v100);
+    expect(findMujinBundle("mujin-1.1.0")).toBe(bundle);
     expect(findMujinBundle("mujin-0.9.0")).toBeUndefined();
     expect(findMujinBundle("toString")).toBeUndefined();
   });
@@ -729,7 +733,9 @@ describe("묘묘 프롬프트는 바뀌지 않는다", () => {
   it("질문 정리(question-1.3.0), 최초 풀이(reading-3.1.0), 후속 답변(followup-3.1.0), 출력 형식, 묘묘 캐릭터 블록이 그대로다", () => {
     const question = buildQuestionPrompt({ product: FIRST_OVERVIEW, referenceDate: "2026-11-12", mode: "initial", text: "언제 이직하면 좋을까요?", lastTurn: null });
     const reading = getReadingPrompt("reading-3.1.0")({ plan: narrationPlan, persona: MYOMYO, previousIssues: [] });
+    // 현재 후속 버전(3.2.0)은 이 지시 끝에 예시를 더한 새 버전이다. 3.1.0 문자열은 그대로여야 한다.
     const followup = buildFollowupPrompt({
+      promptVersion: "followup-3.1.0",
       persona: MYOMYO,
       nickname: "하나",
       hourKnown: true,

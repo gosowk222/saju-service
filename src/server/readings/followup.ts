@@ -11,6 +11,7 @@ import { ApiError } from "@/server/api";
 import { LlmError } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
 import { classifyQuestion } from "@/server/llm/narrate";
+import type { ExampleRecord } from "@/server/llm/example-block";
 import { CURRENT_FOLLOWUP_PROMPT, FOLLOWUP_SCHEMA_VERSION, personaVersionFor, QUESTION_PROMPT_VERSION } from "@/server/llm/prompts";
 import { UsageMeter } from "@/server/llm/usage";
 import { internalReason } from "@/server/log";
@@ -40,8 +41,11 @@ class FollowupHandedOver extends Error {}
 
 const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
-/** 분석 결과 중 남겨 둘 최소 기록. 질문 원문은 followups.question에 따로 있다. */
-function analysisRecord(analysis: QuestionAnalysis, llmCalls: number) {
+/**
+ * 분석 결과 중 남겨 둘 최소 기록. 질문 원문은 followups.question에 따로 있다.
+ * examples는 답변 지시에 넣은 문답 예시의 카탈로그·정책 버전과 ID다 (모델 없이 답한 경우는 null). 예시 문장은 넣지 않는다.
+ */
+function analysisRecord(analysis: QuestionAnalysis, llmCalls: number, examples: ExampleRecord | null) {
   return {
     version: analysis.version,
     promptVersion: QUESTION_PROMPT_VERSION,
@@ -50,6 +54,7 @@ function analysisRecord(analysis: QuestionAnalysis, llmCalls: number) {
     needsClarification: analysis.needsClarification,
     reaction: analysis.reaction ?? "none",
     llmCalls,
+    examples,
   };
 }
 
@@ -155,6 +160,8 @@ export async function askFollowup(input: {
     let actualModel = classified.meta.actualModel;
 
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
+    /** 답변 지시에 넣은 문답 예시. 모델 없이 고정 문장으로 답하면 null이다. */
+    let examples: ExampleRecord | null = null;
     const items = inScopeItems(analysis);
     if (!items.length) {
       // 반응만 보낸 메시지는 이 풀이에서 앞서 몇 번 보냈는지 센다 (무료 횟수를 넘으면 차감).
@@ -180,6 +187,7 @@ export async function askFollowup(input: {
         modelId,
         deadlineAt,
         meter,
+        exampleSeed: followupId,
         // 문단이 완성될 때마다 답을 먼저 저장해 화면에 보여 준다. 횟수 차감과 완료 상태는 complete_followup에서 한 번에 바꾼다.
         publish: async (partial) => {
           const { data: updated, error: updateError } = await admin
@@ -192,6 +200,7 @@ export async function askFollowup(input: {
         },
       });
       actualModel = answered.meta.actualModel;
+      examples = answered.meta.examples ?? null;
       result = answered;
     }
 
@@ -210,7 +219,7 @@ export async function askFollowup(input: {
         schemaVersion: FOLLOWUP_SCHEMA_VERSION,
         usage,
         durationMs: Date.now() - startedAt,
-        analysis: analysisRecord(analysis, llmCalls),
+        analysis: analysisRecord(analysis, llmCalls, examples),
       },
     });
     console.info("[followup] done", {

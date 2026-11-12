@@ -84,6 +84,7 @@ npm run test:e2e:clean  # .env 없이 임시 복사본에서 브라우저 테스
 | `npm run places:import` | GeoNames 자료를 내려받아 지역 목록을 다시 만듭니다 |
 | `npm run llm:check -- gpt-6-luna` | 현재 키로 해당 모델을 쓸 수 있는지 확인합니다 |
 | `npm run llm:compare` | 가상 사례로 두 모델을 비교합니다. 실제 호출은 개발 서버 안에서만 허용되어 지금은 `LIVE_NOT_RUN`으로 끝납니다 (`docs/LLM_OPERATIONS.md`) |
+| `npm run llm:export` | 모델 호출 없이 가상 사례의 생성 요청 파일을 만듭니다. `--prompt=reading-3.1.0`(묘묘)이나 `--bundle=mujin-1.0.0`(무진)을 주면 문답 예시 없는 비교용 요청이 됩니다 (`docs/personas/examples.md` 8절) |
 
 ## 문서
 
@@ -94,6 +95,7 @@ npm run test:e2e:clean  # .env 없이 임시 복사본에서 브라우저 테스
 | [docs/FREE_TRIAL.md](docs/FREE_TRIAL.md) | 무료 이용권 정책, 실패와 반환, 결제 모드 전환, QA·출시 체크리스트 |
 | [docs/ADMIN.md](docs/ADMIN.md) | 회원 역할(user/admin), 관리자 화면, 풀이 상품 이용 범위, 관리자 이용권 지급 |
 | [docs/LLM_OPERATIONS.md](docs/LLM_OPERATIONS.md) | 모델 설정, 오류 처리, gpt-6-luna 전환 |
+| [docs/personas/examples.md](docs/personas/examples.md) | 캐릭터별 질문–답변 예시(few-shot) 카탈로그, 선택 정책, 생성 요청에 넣는 방식, 예시 사용·미사용 비교 |
 | [docs/GEONAMES_DATA.md](docs/GEONAMES_DATA.md) | 출생지역 자료의 출처와 기준 |
 | [docs/rules/first-overview.md](docs/rules/first-overview.md) | 첫 상품의 해석 규칙 |
 | [docs/DESIGN_NOTES.md](docs/DESIGN_NOTES.md) | 디자인 시스템 적용 메모 |

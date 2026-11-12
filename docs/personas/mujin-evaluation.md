@@ -110,7 +110,8 @@ npm run llm:export '--' --product=mujin-overview --case=prepare-first      # 요
 npm run llm:render '--' --product=mujin-overview --case=prepare-first      # 저장한 결과로 비교 문서 만들기
 ```
 
-- 옵션: `--reference=YYYY-MM-DD`(9·10장 기간 재료와 질문 정리의 기준일, 기본 2026-11-12. 실행하는 날과 관계없이 같은 계획이 나온다), `--dir=<폴더>`(사례 폴더를 다른 곳에 둘 때, 두 명령에 같은 값), `--draft=<파일이나 폴더>`(Pass 1 결과를 다른 곳에서 읽을 때, 쉼표로 여러 개), `--voice=<파일이나 폴더>`(llm:render에서 Pass 2 결과를 다른 곳에서 읽을 때), `--out=<파일.md>`(llm:render의 비교 문서 위치).
+- 옵션: `--reference=YYYY-MM-DD`(9·10장 기간 재료와 질문 정리의 기준일, 기본 2026-11-12. 실행하는 날과 관계없이 같은 계획이 나온다), `--bundle=<묶음>`(기본 현재 `mujin-1.1.0`. 예시 없는 비교용은 `mujin-1.0.0`, 기본 폴더 이름 끝에 `_mujin-1.0.0`이 붙는다), `--dir=<폴더>`(사례 폴더를 다른 곳에 둘 때, 두 명령에 같은 값), `--draft=<파일이나 폴더>`(Pass 1 결과를 다른 곳에서 읽을 때, 쉼표로 여러 개), `--voice=<파일이나 폴더>`(llm:render에서 Pass 2 결과를 다른 곳에서 읽을 때), `--out=<파일.md>`(llm:render의 비교 문서 위치).
+- 문답 예시: `mujin-1.1.0`의 Pass 2 지시(`p2-<장>.instructions.txt`) 맨 끝에 `[캐릭터 문답 예시: 무진 도사]` 블록이 있다 (재작성 예시 하나와 원문 문답 하나). 장마다 넣은 예시 ID는 `00-guide.md`의 'Pass 2 문답 예시' 표에 있다. Pass 1 지시에는 없다. 예시를 고르는 순서 값은 `llm-export:<사례>`라 같은 사례는 늘 같은 예시를 받는다 (운영은 풀이 ID로 고른다).
 - 파일 위치: `docs/model-comparison/prompts/mujin/<기준일>_<사례>/` (git에 올리지 않음). 폴더의 `00-guide.md`가 사례 요약, 고정 질문 정리 값, 버전, 진행 상황 표(지금 실행할 요청), 초안 검사 결과를 보여 준다.
 - 요청 파일: Pass 1은 묶음마다 `p1-<묶음>.instructions.txt`(지시), `.input.json`(입력, 운영이 보내는 문자열 그대로), `.schema.json`(출력 형식), `.request.json`(Responses API 본문, model 칸만 바꾼다). 묶음은 `free-basics`(기초 분석 4개), `free-ch1`, `paid-work`(2·3장), `paid-money-love`(4·5장), `paid-people-life`(6~8장), `paid-flow`(9·10장), `paid-closing`(마지막 정리)이다. Pass 2는 장마다 `p2-<장>.*`. 궁금한 점이 있는 사례는 참고용 질문 정리 요청 `p0-question.*`도 생긴다 (다음 단계 입력에는 쓰지 않는다).
 - 결과 파일: 플레이그라운드 결과(모델이 낸 JSON, 응답 전체여도 된다)를 같은 폴더에 `p1-<묶음>.output.json`, `p2-<장>.output.json` 이름으로 저장한다. 이 이름이어야 두 명령이 읽는다.
@@ -123,6 +124,17 @@ npm run llm:render '--' --product=mujin-overview --case=prepare-first      # 저
 4. `llm:export`를 다시 실행하면 저장한 초안으로 장별 Pass 2 요청(`p2-<장>.*`)이 생긴다. 2~10장 초안이 모두 있으면 마지막 정리의 Pass 1 요청도 생긴다. Pass 2와 마지막 정리를 실행해 결과를 저장한다 (마지막 정리는 Pass 1 → `llm:export` → Pass 2).
 5. `llm:render`를 실행하면 사례 폴더에 `comparison.md`가 생긴다. 장마다 초안과 최종문을 나란히 놓은 표, 운영 검사(`checkDraftSection`, `checkVoiceSection`)의 문제 목록, 장별 글자 수와 편집 목표가 있다. 검사 통과는 형식·근거·숫자 확인일 뿐 문체 품질 판정이 아니고, 글자 수는 실패 기준이 아니다.
 6. 1절 항목 1~9(명세 07 4절)로 판정하고 위의 보존 항목을 장마다 확인해 아래 양식에 적는다. `comparison.md` 끝에 같은 평가 표가 있다.
+
+**예시 사용·미사용 비교 (Pass 2만 다르다)**: Pass 1은 두 묶음이 글자까지 같으므로 한 번만 실행하고, 같은 초안으로 Pass 2를 두 번 만든다.
+
+```powershell
+npm run llm:export '--' --product=mujin-overview --case=side-job-money                                   # 예시 사용 (mujin-1.1.0), Pass 1 실행·저장
+npm run llm:export '--' --product=mujin-overview --case=side-job-money --bundle=mujin-1.0.0 --draft=docs/model-comparison/prompts/mujin/2026-11-12_side-job-money   # 예시 미사용, 같은 초안으로 Pass 2 요청
+npm run llm:render '--' --product=mujin-overview --case=side-job-money                                   # 각각 comparison.md (아래도 같은 --bundle·--draft)
+npm run llm:render '--' --product=mujin-overview --case=side-job-money --bundle=mujin-1.0.0 --draft=docs/model-comparison/prompts/mujin/2026-11-12_side-job-money
+```
+
+두 `comparison.md`를 장마다 나란히 읽고 1절 항목에 더해 다음을 본다: 무진의 성격이 단순 존댓말 이상으로 드러나는지, 긴 중간 장에서도 유지되는지, 예시 문장·차 이야기·생활 장면이 반복되는지(보고서 끝 '예시 문장 겹침' 표), 설명이 짧아지지 않았는지(글자 수), 예시의 사실·날짜(예: 2027년 3월, 퇴사, 거절)가 들어오지 않았는지, 조건·반대 근거·행동 제안이 초안과 같은지(보존 항목과 검사). 서로 다른 사례(`prepare-first`와 `act-first`)에서 같은 답이 반복되는지도 본다. 특정 어미·농담 개수로 판정하지 않는다.
 
 운영과 다른 점 (결과를 읽을 때 감안한다):
 
@@ -164,18 +176,14 @@ where reading_id = '<풀이 ID>' and cache_key = 'mujin-question:initial';
 | 1 |  |  |  |
 | … |  |  |  |
 
-## 4. 이전에 제공된 21개 문답 (자리만 둔다)
+## 4. 원문 문답 21개 (2026-11-13 받음, 실제 생성에 골라 쓴다)
 
-명세 04 7절의 '이전에 제공된 21개 문답'은 이 작업 환경에 없어 자리만 둔다. 원문을 받으면 아래 원칙대로 이 절에 옮긴다.
+사용자가 준 원문 21개는 `src/domain/personas/examples/mujin-originals.ts`에 받은 그대로 있다 (이 문서에 다시 옮기지 않는다. 원문 지문은 `tests/unit/persona-examples.test.ts`가 확인한다). 2026-11-13 정책 변경으로 '참고·평가 자료일 뿐 런타임 지시에 넣지 않는다'던 원칙을 바꿨다: 카탈로그 `mujin-examples-1.0.0`에서 작성 용도에 맞는 것을 골라 Pass 2(묶음 `mujin-1.1.0`)와 후속 답변 지시 끝에 넣는다. 경로·주제·목적과 선택 규칙은 [`examples.md`](examples.md).
 
-- 참고·평가 자료다. 기본 런타임 지시(Pass 1, Pass 2, 후속 질문)에 넣지 않는다.
-- 예시의 사용자 상황, 날짜, 과거 대화를 현재 사용자의 정보로 옮기지 않는다.
-- 문장을 따라 하게 하는 기준이 아니다. 1절 항목으로 실제 결과를 읽을 때 같은 결의 반응인지 비교하는 데만 쓴다.
-- 원문이 없어도 명세 04의 성격 설명으로 구현과 평가를 진행할 수 있다 (명세 04 7절).
-
-| # | 상황 | 사용자의 말 | 무진의 답 (원문) | 볼 점 |
-| --- | --- | --- | --- | --- |
-| 1~21 | (원문 없음) |  |  |  |
+- 예시의 사용자 상황, 날짜, 과거 대화를 현재 사용자의 정보로 옮기지 않는다 (지시의 경계 안내가 말하고, 결과 읽기의 겹침 표로 확인한다).
+- 01(첫 상담)·18(자기 사연)·21(일상)은 지금 서비스에 그런 말에 모델이 답하는 경로가 없어 생성 지시에 넣지 않는다.
+- 원문 05·07·09·10은 Pass 2 재작성 예시(`mujin-rw-…`, 중립 초안 → 원문 답)의 원문이다. 원문은 고치지 않는다.
+- 평가할 때 결과에 원문 답이 거의 그대로 나오면 적는다 (예시를 따라 쓴 것이다). 같은 결의 반응인지 비교하는 데 쓰되 문장을 따라 하는지가 기준은 아니다.
 
 ## 5. 평가용 짧은 예시 (이 문서에만 둔다)
 

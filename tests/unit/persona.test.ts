@@ -279,9 +279,10 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(input).toBe(before.input);
   });
 
-  it("최초 풀이(reading-3.1.0): [캐릭터] → [역할과 우선순위] → [명리 해석 지침] → 출력 조건 순서로, 캐릭터 설정을 한 번만 넣는다", () => {
-    expect(CURRENT_READING_PROMPT).toBe("reading-3.1.0");
-    const { instructions } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] });
+  it("최초 풀이(reading-3.1.0, 3.2.0 이전에 시작한 작업): [캐릭터] → [역할과 우선순위] → [명리 해석 지침] → 출력 조건 순서로, 캐릭터 설정을 한 번만 넣는다", () => {
+    // 현재 버전(3.2.0)은 이 지시 끝에 문답 예시 블록만 더한다 (tests/unit/persona-examples.test.ts).
+    expect(CURRENT_READING_PROMPT).toBe("reading-3.2.0");
+    const { instructions } = getReadingPrompt("reading-3.1.0")({ plan, persona: MYOMYO, previousIssues: [] });
     expect(instructions.startsWith(characterBlock(MYOMYO))).toBe(true);
     const order = ["[캐릭터: 묘묘]", "[역할과 우선순위]", "[명리 해석 지침]", "[재료]", "[하면 안 되는 것]", "[답할 내용]", "[캐릭터로 말하기]", "[말풍선과 리듬]", "[장면]", "[강조]", "[말풍선 형식]", "[이어서 쓰기와 다시 쓰기]"];
     // 제목은 한 줄을 차지한다 (본문에서 제목을 가리키는 말과 구분).
@@ -350,7 +351,7 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(instructions).not.toContain("이번 상품의 표현 강도");
   });
 
-  it("최초 풀이(reading-3.1.0) 입력: 2.9.0과 같은 칸이고, 같은 행동 문장은 처음 나온 해석에만 둔다", () => {
+  it("최초 풀이(reading-3.1.0·3.2.0) 입력: 2.9.0과 같은 칸이고, 같은 행동 문장은 처음 나온 해석에만 둔다", () => {
     const current = JSON.parse(getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona: MYOMYO, previousIssues: [] }).input);
     const before = JSON.parse(getReadingPrompt("reading-2.9.0")({ plan, persona: MYOMYO_1_4_0, previousIssues: [] }).input);
     expect(Object.keys(current)).toEqual(Object.keys(before));
@@ -414,8 +415,8 @@ describe("프롬프트에 캐릭터 설정을 한 번에 넣는다", () => {
     expect(JSON.parse(input)).toHaveProperty("commonCaveats");
   });
 
-  it("후속 답변(followup-3.1.0): 최초 풀이와 같은 캐릭터 블록·우선순위·해석 지침, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기", () => {
-    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.1.0");
+  it("후속 답변(followup-3.2.0, 3.1.0 지시에 문답 예시를 더함): 최초 풀이와 같은 캐릭터 블록·우선순위·해석 지침, 먼저 반응하기, 지금의 마음은 이번 메시지로 판단하기", () => {
+    expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.2.0");
     const prompt = buildFollowupPrompt({
       persona: MYOMYO,
       nickname: "하나",

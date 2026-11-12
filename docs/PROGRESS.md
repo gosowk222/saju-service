@@ -1,5 +1,30 @@
 # 진행 상황
 
+## 캐릭터 질문–답변 예시를 실제 생성에 연결 (feat/persona-qa-examples, 2026-11-13)
+
+`feat/mujin-scroll-reading`(`af2f702`) 위에서 분기했다. 설명은 `docs/personas/examples.md`, 경위는 `docs/READING_QUALITY.md` 24절, 운영·토큰은 `docs/LLM_OPERATIONS.md`.
+
+| 항목 | 결정 |
+| --- | --- |
+| 정책 | "예시 문답은 생성 입력에서 빼고 평가 자료로만 둔다"를 "캐릭터별 질문–답변 예시 중 작성 용도에 맞는 것을 골라 실제 생성에 쓴다"로 바꿨다. 그 밖의 규칙(실제 호출 제한, 환경 파일, 근거 보존, 개인정보)은 그대로 |
+| 카탈로그 | 묘묘 `myomyo-examples-1.0.0` 27개 (A 참고 문답 8 그대로, B 생활 장면으로 길게 9, C 되받아치기 10, 장문 7). 무진 `mujin-examples-1.0.0` 원문 21개(받은 그대로) + Pass 2 재작성 예시 4개(원문 05·07·09·10 참조) |
+| 선택 | `example-select-1.0.0`. 묘묘 최초 풀이 3개(긴 예시 하나 이상), 후속 3개, 무진 Pass 2 재작성 1 + 문답 1, 무진 후속 3개. 무작위 없이 풀이·장·후속 질문 ID로 골라 재시도에도 같다 |
+| 조립 | `src/server/llm/example-block.ts` 한 곳. 이전 버전 지시 끝에 `[캐릭터 문답 예시]` 블록만 더하고 입력·출력 형식은 같다. 경계 안내는 블록에 한 번 |
+| 버전 | 묘묘 reading-3.2.0·followup-3.2.0, 무진 묶음 mujin-1.1.0(mujin-voice-1.1.0, mujin-followup-1.1.0). 이전 버전에 고정된 작업은 예시 없이 이어 쓴다. 캐릭터 설정(묘묘 2.1.0, 무진 1.0.0), 모델, 추론 설정은 바꾸지 않았다 |
+| 넣지 않는 곳 | 무진 Pass 1, 질문 정리, 사주 계산, 정적 안내 문구. 무진 원문 01·18·21은 모델이 답하는 경로가 없어 넣지 않는다. 후속 질문 범위·차감은 그대로 |
+| 기록 | `generation_jobs.generation_meta.exampleIds`, `reading_sections.meta.examples`, `followups.analysis.examples` (버전과 ID만). 토큰은 기존 기록을 프롬프트 버전으로 나눠 비교 |
+| 비교 도구 | `llm:export --prompt=reading-3.1.0` / `--task=followup --prompt=followup-3.1.0` / `--product=mujin-overview --bundle=mujin-1.0.0`이 예시 없는 요청. 예시 보고서와 `llm:render`의 예시 문장 겹침 표. 조립 샘플 `docs/model-comparison/few-shot-sample/` |
+| DB | 바꾸지 않았다 (새 migration 없음). 기존 JSON 칸에 기록 |
+
+| 검사 | 결과 |
+| --- | --- |
+| typecheck, lint | 통과 (오류 0) |
+| 단위 테스트 (`npx vitest run`) | 45개 파일 909개 통과 (카탈로그·선택·조립·모델 클라이언트 요청 인자·실행기·문서 SQL 포함) |
+| 브라우저 테스트 (`test:e2e:clean`, 가짜 게이트웨이의 HTTP 본문 확인 포함) | 78개 통과 (새로 더한 묘묘 예시 확인 1개 포함, 무진 유료 시나리오에 예시 확인 추가). 첫 실행에서 이전 버전 번호를 고정해 둔 확인 2개가 실패해 고친 뒤 다시 돌렸다 |
+| 실제 모델 | LIVE_NOT_RUN (예시 효과, 토큰 증가분, 예시 문장 유입 여부 미확인) |
+
+남은 일: 사용자의 두 버전 비교 실행(`docs/personas/examples.md` 8절), 결과에 따라 카탈로그·정책 버전 조정.
+
 ## 무진 도사와 '무진의 종합 사주' (feat/mujin-scroll-reading, 2026-11-12)
 
 develop `4e52ead`에서 분기했다. 시작 문서와 결정·미확정 사항은 `docs/implementation/mujin/00_START_HERE.md`, 명세는 같은 폴더 01~07, 규칙은 `docs/rules/mujin-overview.md`, 캐릭터는 `docs/personas/mujin.md`, 평가와 실제 모델 확인 순서는 `docs/personas/mujin-evaluation.md`.

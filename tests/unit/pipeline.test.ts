@@ -234,9 +234,11 @@ describe("생성 경로 선택", () => {
     expect(isPlanV2Prompt("reading-9.9.9")).toBe(false);
   });
 
-  it("새 작업은 현재 프롬프트(reading-3.1.0)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
+  it("새 작업은 현재 프롬프트(reading-3.2.0, 문답 예시 포함)와 출력 형식(narration-2.2.0), 최초 풀이 추론 설정 medium으로 고정되고, 주제별로 먼저 보여 주는 스트리밍 생성을 탄다", () => {
     expect(PROMPTS_FOR_PLAN["2.0.0"]).toEqual({ prompt: CURRENT_READING_PROMPT, schema: NARRATION_SCHEMA_VERSION });
-    expect(CURRENT_READING_PROMPT).toBe("reading-3.1.0");
+    expect(CURRENT_READING_PROMPT).toBe("reading-3.2.0");
+    // 3.2.0 이전에 3.1.0으로 시작한 작업은 예시 없는 3.1.0으로 이어 쓴다.
+    expect(isProgressivePrompt("reading-3.1.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.9.0")).toBe(true);
     expect(isProgressivePrompt("reading-2.8.0")).toBe(true);
     expect(NARRATION_SCHEMA_VERSION).toBe("narration-2.2.0");
