@@ -9,8 +9,10 @@ export async function setControl(request: APIRequestContext, data: Record<string
 
 /** 가짜 서버가 센 무진 호출 (tests/support/fake-gateway.ts의 stats.mujin). 누적값이라 이전 값과의 차이로 본다. */
 export interface MujinGatewayStats {
-  /** 스키마별 호출 수 (question = 질문 정리, pass1 = 평문 초안 묶음, pass2 = 무진 문장). */
+  /** 스키마별 호출 수 (question = 질문 정리, pass1 = 평문 초안 묶음, pass2 = 무진 문장). 실패 주입으로 오류를 돌려준 호출도 센다. */
   calls: { question: number; pass1: number; pass2: number };
+  /** 실패 주입(mujinQuestionFail)으로 서버 오류를 돌려준 질문 정리 호출 수. */
+  failed: { question: number };
   /** 장별 요청 수. Pass 1은 묶음 호출 안의 장을 하나씩 센다. */
   sections: { pass1: Record<string, number>; pass2: Record<string, number> };
   last: {
@@ -217,7 +219,10 @@ export const MUJIN_PAID_SECTIONS = ["ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "c
 export const MUJIN_TOC = ["chart", ...MUJIN_FREE_SECTIONS, ...MUJIN_PAID_SECTIONS];
 
 /** 가짜 서버의 무진 조절 값 기본값. 무진 테스트는 시작과 끝에 이 값으로 되돌린다 (다른 테스트 파일은 이 키를 모른다). */
-export const MUJIN_CONTROL_RESET = { mujinFail: null, mujinVoiceDelayMs: 0, mujinVoiceDelaySections: null };
+export const MUJIN_CONTROL_RESET = { mujinFail: null, mujinQuestionFail: null, mujinVoiceDelayMs: 0, mujinVoiceDelaySections: null };
+
+/** 무진 상담 장면 첫 인사의 일부 (캐릭터 설정 lines.intake.greet). 상품 상세와 입력 첫 단계에서 보인다. */
+export const MUJIN_GREET = /이 신당을 지키는 무진입니다/;
 
 /** 족자의 칸 하나 (data-section-id). */
 export function mujinSection(page: Page, sectionId: string) {
@@ -331,9 +336,14 @@ export async function createMujinReadingApi(
   return ((await response.json()) as { readingId: string }).readingId;
 }
 
-/** 상담 장면 (족자 화면 맨 위). 실제 저장 상태로 정한 상태 표시(계산 중·작성 중·완료)가 있다. */
+/** 상담 장면 (족자 화면 맨 위, 무진 상품 상세의 배너 아래). 족자 화면에서는 실제 저장 상태로 정한 상태 표시(계산 중·작성 중·완료)가 있다. */
 export function mujinScene(page: Page) {
   return page.getByRole("region", { name: "상담 장면" });
+}
+
+/** 족자 위의 단계 단위 실패 안내 (오류 칸 없이 단계만 실패했을 때 실패 이유와 다시 시도 버튼). */
+export function mujinPhaseAlert(page: Page, tier: "free" | "paid") {
+  return page.locator(`[data-phase-alert="${tier}"]`);
 }
 
 /**

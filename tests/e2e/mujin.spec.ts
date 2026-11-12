@@ -4,6 +4,7 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 import {
   MUJIN_CONTROL_RESET,
   MUJIN_FREE_SECTIONS,
+  MUJIN_GREET,
   MUJIN_PAID_SECTIONS,
   MUJIN_TOC,
   callsSince,
@@ -14,6 +15,7 @@ import {
   gatewaySql,
   gatewayStats,
   login,
+  mujinPhaseAlert,
   mujinScene,
   mujinSection,
   mujinSectionOrder,
@@ -127,7 +129,7 @@ async function expectScrollLayout(page: Page, label: string) {
   await expectNoHorizontalScroll(page, `${label} 이동 뒤`);
 }
 
-test("상품 목록·상세: 무진 포스터와 배너는 그림 그대로 보이고, 그림 위에 화면 글자를 겹치지 않으며 읽기용 제목이 있다", async ({ page }) => {
+test("상품 목록·상세: 무진 포스터와 배너는 그림 그대로 보이고, 그림 위에 화면 글자를 겹치지 않으며 읽기용 제목이 있고, 배너 아래부터 상담 장면이 나온다", async ({ page }) => {
   for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/products");
@@ -160,14 +162,26 @@ test("상품 목록·상세: 무진 포스터와 배너는 그림 그대로 보�
     await expectInsideApp(page, hero, `배너 ${width}px`);
     await expectNoHorizontalScroll(page, `상세 ${width}px`);
 
+    // 상품 상세 첫 화면부터 상담 장면이 나온다 (명세 03 1절). 배너 바로 아래에 무진의 첫 인사가 있고, 배너 그림 위에 겹치지 않는다.
+    const scene = mujinScene(page);
+    await expect(scene).toBeVisible();
+    await expect(scene.getByText(MUJIN_GREET)).toBeVisible();
+    expect(await scene.getByText(/\{name\}/).count(), `이름 자리 ${width}px`).toBe(0);
+    const heroBox = (await hero.boundingBox())!;
+    const sceneBox = (await scene.boundingBox())!;
+    expect(sceneBox.y, `상담 장면 위치 ${width}px`).toBeGreaterThanOrEqual(heroBox.y + heroBox.height - 0.5);
+    await expectInsideApp(page, scene, `상담 장면 ${width}px`);
+
     await expect(page.getByRole("heading", { name: "무료로 바로 보는 부분" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "이어서 받는 부분" })).toBeVisible();
     await expect(page.getByText("990원 (출시 전 임시 가격)")).toBeVisible();
     await expect(page.getByText(/결제 없이 무료 이용권 1장으로 받을 수 있어요/)).toBeVisible();
-    await expect(page.getByRole("link", { name: "내 사주 입력하기" })).toHaveAttribute("href", "/readings/new?product=mujin-overview");
+    // 하단 버튼은 무진과의 대화형 입력을 시작한다 (입력 화면 주소는 그대로).
+    await expect(page.getByRole("link", { name: "무진과 상담 시작하기" })).toHaveAttribute("href", "/readings/new?product=mujin-overview");
+    await expect(page.getByRole("link", { name: "내 사주 입력하기" })).toHaveCount(0);
   }
 
-  // 묘묘 상세는 그대로: 16:10 배너 위에 제목과 부설명이 보인다 (자세한 배치는 visual.spec.ts가 본다).
+  // 묘묘 상세는 그대로: 16:10 배너 위에 제목과 부설명이 보이고, 상담 장면 없이 '내 사주 입력하기'로 시작한다 (자세한 배치는 visual.spec.ts가 본다).
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/products/first-overview");
   const myomyoTitle = page.getByRole("heading", { level: 1, name: "묘묘의 사주 참견" });
@@ -176,6 +190,19 @@ test("상품 목록·상세: 무진 포스터와 배너는 그림 그대로 보�
   await expect(myomyoHero.getByText("칭찬만 들을 줄 알았어? 성향부터 행운까지, 다 짚어줄게.")).toBeVisible();
   const ratio = await myomyoHero.evaluate((element) => element.getBoundingClientRect().width / element.getBoundingClientRect().height);
   expect(Math.abs(ratio - 1.6)).toBeLessThan(0.02);
+  await expect(mujinScene(page)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "내 사주 입력하기" })).toHaveAttribute("href", "/readings/new?product=first-overview");
+  await expect(page.getByRole("link", { name: "무진과 상담 시작하기" })).toHaveCount(0);
+});
+
+test("무진 상품 상세의 '무진과 상담 시작하기'는 로그인하지 않았으면 로그인을 거쳐 같은 첫 인사의 대화형 입력으로 이어진다", async ({ page, request }) => {
+  await page.goto("/products/mujin-overview");
+  await page.getByRole("link", { name: "무진과 상담 시작하기" }).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Freadings%2Fnew%3Fproduct%3Dmujin-overview$/);
+  await login(page, request, { next: "/readings/new?product=mujin-overview" });
+  await expect(page).toHaveURL(/\/readings\/new\?product=mujin-overview$/);
+  await expect(page.getByRole("heading", { level: 1, name: "별명", exact: true })).toBeVisible();
+  await expect(mujinScene(page).getByText(MUJIN_GREET)).toBeVisible();
 });
 
 test("대화형 입력은 한 단계씩 진행하고, 제출하면 무료 부분(원국표·기초 분석·1장)만 쓰며 유료 장은 잠근다", async ({ page, request }) => {
@@ -462,7 +489,7 @@ test("이용권을 쓰면 같은 화면에서 유료 장이 목차 순서를 지
   await expectScrollLayout(page, "데스크톱 1280px");
 });
 
-test("유료 장 하나가 실패하면 그 장만 오류와 다시 시도를 보여 주고, 다시 시도하면 그 장(과 마지막 정리)만 쓴다", async ({ page, request }) => {
+test("유료 장 하나가 실패하면 그 장과 아직 쓰지 못한 마지막 정리만 오류와 다시 시도를 보여 주고, 다시 시도하면 그 장(과 마지막 정리)만 쓴다", async ({ page, request }) => {
   test.setTimeout(180_000);
   const userId = await login(page, request);
   const readingId = await createMujinReadingApi(page, { nickname: "다시" });
@@ -477,11 +504,17 @@ test("유료 장 하나가 실패하면 그 장만 오류와 다시 시도를 �
   await expect(ch3.getByText("오류", { exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(ch3.getByRole("button", { name: "다시 시도하기" })).toBeVisible();
   await expect(ch3.getByText(/다시 시도하면 마치지 못한 장만 다시 쓰고/)).toBeVisible();
-  // 다른 장은 완성되어 보인다. 마지막 정리는 3장 초안이 없어 아직 쓰지 않는다. 후속 질문과 PDF는 아직 열지 않는다.
+  // 다른 장은 완성되어 보인다. 마지막 정리는 3장 초안이 없어 쓰지 못했고, 유료 단계가 실패로 멈췄으므로 끝나지 않은 칸으로서
+  // 오류와 다시 시도를 보여 준다 (단계가 실패하면 끝나지 않은 칸은 모두 오류). 후속 질문과 PDF는 아직 열지 않는다.
   for (const id of PAID_CHAPTERS.filter((id) => id !== "ch3")) await expect(mujinSection(page, id).getByText("핵심 답", { exact: true }), id).toBeVisible();
-  await expect(mujinSection(page, "closing").getByText("대기", { exact: true })).toBeVisible();
+  const closing = mujinSection(page, "closing");
+  await expect(closing.getByText("오류", { exact: true })).toBeVisible();
+  await expect(closing.getByRole("button", { name: "다시 시도하기" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "무진 도사에게 더 묻기" })).toHaveCount(0);
   await expect(mujinScene(page).getByText("다시 시도 필요", { exact: true })).toBeVisible();
+  // 족자 위에는 멈췄다는 안내만 두고, 다시 시도 버튼은 오류 칸에 있다 (단계 단위 안내 상자는 오류 칸이 없을 때만).
+  await expect(page.getByText(/이어지는 장을 쓰다가 멈췄어요/)).toBeVisible();
+  await expect(mujinPhaseAlert(page, "paid")).toHaveCount(0);
   const failed = (await gatewayStats(request)).mujin;
   expect(only(callsSince(failed.sections.pass1, before.sections.pass1), MUJIN_PAID_SECTIONS)).toEqual({ ...each(PAID_CHAPTERS, 1), ch3: 2 });
   expect(only(callsSince(failed.sections.pass2, before.sections.pass2), MUJIN_PAID_SECTIONS)).toEqual(each(PAID_CHAPTERS.filter((id) => id !== "ch3"), 1));
@@ -527,6 +560,92 @@ test("무료 1장의 Pass 2가 실패하면 그 장만 오류로 두고, 다시 
   const after = (await gatewayStats(request)).mujin;
   expect(only(callsSince(after.sections.pass1, failed.sections.pass1), MUJIN_FREE_SECTIONS)).toEqual({});
   expect(only(callsSince(after.sections.pass2, failed.sections.pass2), MUJIN_FREE_SECTIONS)).toEqual({ ch1: 1 });
+});
+
+test("질문 정리가 실패해 무료 단계 전체가 멈추면 무료 칸이 모두 오류와 다시 시도로 보이고, 다시 시도하면 무료 부분이 완성된다", async ({ page, request }) => {
+  test.setTimeout(150_000);
+  await login(page, request);
+  const readingId = await createMujinReadingApi(page, { nickname: "질문실패", concern: CONCERN });
+  // 질문 정리를 서버 오류(500)로 돌려준다. 앱은 전송 오류를 정해진 횟수만큼 다시 보내므로, 다시 시도를 누르기 전까지는 계속 실패하게 넉넉히 두고
+  // 누르기 전에 끈다 (앱의 전송 재시도 횟수에 이 테스트가 묶이지 않게).
+  await setControl(request, { mujinQuestionFail: { times: 20 } });
+  const before = (await gatewayStats(request)).mujin;
+  await page.goto(`/readings/${readingId}`);
+
+  // 장별 실패 기록 없이 단계만 실패했어도, 끝나지 않은 무료 칸이 모두 오류와 다시 시도를 보여 준다 (화면이 멈추지 않는다).
+  for (const id of MUJIN_FREE_SECTIONS) {
+    const section = mujinSection(page, id);
+    await expect(section.getByText("오류", { exact: true }), id).toBeVisible({ timeout: 60_000 });
+    await expect(section.getByRole("button", { name: "다시 시도하기" }), id).toBeVisible();
+    await expect(section.getByText(/다시 시도하면 마치지 못한 장만 다시 쓰고/), id).toBeVisible();
+  }
+  await expect(page.getByText(/무료 부분을 쓰다가 멈췄어요/)).toBeVisible();
+  await expect(mujinPhaseAlert(page, "free")).toHaveCount(0);
+  await expect(mujinScene(page).getByText("다시 시도 필요", { exact: true })).toBeVisible();
+  const [run] = await gatewaySql<{ status: string; error_retryable: boolean | null }>(request, "select status, error_retryable from public.reading_free_runs where reading_id = $1", [
+    readingId,
+  ]);
+  expect(run).toEqual({ status: "failed", error_retryable: true });
+  const [{ units }] = await gatewaySql<{ units: number }>(request, "select count(*)::int as units from public.reading_units where reading_id = $1", [readingId]);
+  expect(units).toBe(0);
+  const failed = (await gatewayStats(request)).mujin;
+  expect(failed.failed.question - before.failed.question).toBeGreaterThan(0);
+  expect(failed.calls.pass1 - before.calls.pass1).toBe(0);
+
+  // 다시 시도: 이번에는 질문 정리가 정상으로 답한다. 같은 무료 단계를 이어서 마친다.
+  await setControl(request, { mujinQuestionFail: null });
+  await mujinSection(page, "basics-structure").getByRole("button", { name: "다시 시도하기" }).click();
+  await waitForMujinFree(page);
+  await expect(page.getByText(/무료 부분을 쓰다가 멈췄어요/)).toHaveCount(0);
+  await expect(page.getByRole("article").getByText("오류", { exact: true })).toHaveCount(0);
+  const after = (await gatewayStats(request)).mujin;
+  expect(after.calls.question - failed.calls.question).toBe(1);
+  expect(after.failed.question).toBe(failed.failed.question);
+  expect(Object.keys(callsSince(after.sections.pass1, failed.sections.pass1)).sort()).toEqual([...MUJIN_FREE_SECTIONS].sort());
+  const [done] = await gatewaySql<{ status: string; attempts: number }>(request, "select status, attempts from public.reading_free_runs where reading_id = $1", [readingId]);
+  expect(done).toEqual({ status: "completed", attempts: 2 });
+});
+
+test("묘묘 생성 API로 무진 풀이를 부르면 409로 거부하고 무진 작업은 그대로이며, 화면에서는 끝까지 쓴다", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const userId = await login(page, request);
+  const readingId = await createMujinReadingApi(page, { nickname: "교차호출" });
+  // 화면을 열지 않고 이용권을 쓴다. 유료 작업(generation_jobs)은 대기(queued)이고 프롬프트 버전이 아직 고정되지 않았다.
+  expect((await redeemApi(page, readingId)).body.outcome).toBe("redeemed");
+  const jobOf = async () =>
+    (
+      await gatewaySql<{ status: string; attempts: number; prompt_version: string | null; error_code: string | null; error_retryable: boolean | null }>(
+        request,
+        "select status, attempts, prompt_version, error_code, error_retryable from public.generation_jobs where reading_id = $1",
+        [readingId],
+      )
+    )[0];
+  const job = await jobOf();
+  expect(job).toMatchObject({ status: "queued", attempts: 0, prompt_version: null });
+
+  // 홈의 이용권 카드: 무진 풀이는 화면을 닫아도 계속 만든다고 하지 않고, 풀이 화면을 다시 열면 이어서 쓴다고 안내한다.
+  await page.goto("/home");
+  await expect(page.getByText("무료 이용권으로 풀이를 만들고 있어요")).toBeVisible();
+  await expect(page.getByText("풀이 화면을 다시 열면 이어서 써요.")).toBeVisible();
+  await expect(page.getByText(/화면을 닫아도 이어서 만들어요/)).toHaveCount(0);
+
+  const openaiCalls = (await gatewayStats(request)).openaiCalls;
+  for (const retry of [false, true]) {
+    const response = await page.request.post(`/api/readings/${readingId}/generate`, { data: { retry } });
+    expect(response.status(), `retry ${retry}`).toBe(409);
+    expect(((await response.json()) as { error: { code: string } }).error.code, `retry ${retry}`).toBe("unsupported_product");
+  }
+  // 작업의 상태·시도 수·프롬프트 버전이 바뀌지 않았고, 묘묘 사용량 표(generation_attempts)에 기록도 없으며, 모델을 부르지 않았다.
+  expect(await jobOf()).toEqual(job);
+  const [{ attempts }] = await gatewaySql<{ attempts: number }>(request, "select count(*)::int as attempts from public.generation_attempts where reading_id = $1", [readingId]);
+  expect(attempts).toBe(0);
+  expect((await gatewayStats(request)).openaiCalls).toBe(openaiCalls);
+
+  // 무진 화면에서는 무료 부분부터 유료 장까지 그대로 쓴다 (거부된 호출이 작업을 망가뜨리지 않았다).
+  await page.goto(`/readings/${readingId}`);
+  await waitForMujinComplete(page);
+  expect(await jobOf()).toMatchObject({ status: "completed", prompt_version: "mujin-1.0.0" });
+  expect(await freeTickets(request, userId)).toMatchObject([{ status: "completed", reading_id: readingId }]);
 });
 
 test("태어난 시간을 모르면 9장은 대운을 계산하지 않았다고 쓰고, 임의 구간 없이 완성된다", async ({ page, request }) => {
@@ -624,7 +743,7 @@ test("관리자만 이용으로 닫으면 일반 회원은 무진 입력·생성
   await waitForMujinFree(page);
 });
 
-test("생성 중에 화면을 닫아도 서버가 이어서 쓰고, 다시 열면 저장된 장을 보여 주며 같은 장을 다시 만들지 않는다", async ({ page, request }) => {
+test("생성 중에 화면을 닫아도 진행 중이던 요청은 끝까지 쓰고, 다시 열면 저장된 장을 보여 주며 같은 장을 다시 만들지 않는다", async ({ page, request }) => {
   test.setTimeout(120_000);
   await login(page, request);
   const readingId = await createMujinReadingApi(page, { nickname: "닫았다열기" });

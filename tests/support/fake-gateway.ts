@@ -37,6 +37,12 @@ const control = {
    * 무진 브라우저 테스트가 beforeEach·afterEach에서 null로 되돌린다 (다른 테스트 파일은 이 키를 모른다).
    */
   mujinFail: null as MujinFailure | null,
+  /**
+   * 무진 질문 정리(mujin_question_analysis) 실패 주입. times번 서버 오류(500)로 답한 뒤 스스로 꺼진다.
+   * 앱은 전송 오류를 정해진 횟수만큼 다시 보내고, 그래도 실패하면 장별 실패 기록 없이 무료 단계만 실패로 남긴다 (단계 단위 실패).
+   * 무진 브라우저 테스트가 beforeEach·afterEach에서 null로 되돌린다 (다른 테스트 파일은 이 키를 모른다).
+   */
+  mujinQuestionFail: null as { times: number } | null,
   /** 무진 Pass 2(무진 문장) 응답을 늦추는 시간. Pass 2가 Pass 1 수신을 막지 않는지, 뒤 장이 먼저 끝나도 목차 순서가 유지되는지 볼 때 쓴다. */
   mujinVoiceDelayMs: 0,
   /** mujinVoiceDelayMs를 적용할 장. null이면 모든 장을 늦춘다. */
@@ -54,12 +60,14 @@ const stats = {
   openaiModels: [] as string[],
   /**
    * 무진 호출 수와 마지막 입력 요약 (누적값이다. 테스트는 이전 값과의 차이로 본다).
-   * calls: 스키마별 호출 수 (question = mujin_question_analysis, pass1 = mujin_draft, pass2 = mujin_voice).
+   * calls: 스키마별 호출 수 (question = mujin_question_analysis, pass1 = mujin_draft, pass2 = mujin_voice). 실패 주입으로 오류를 돌려준 호출도 센다.
+   * failed: 실패 주입으로 오류를 돌려준 호출 수 (question = 질문 정리 서버 오류).
    * sections: 장별 요청 수. Pass 1은 장 묶음 호출 안의 장을 하나씩 센다.
    * last: 마지막 입력의 구조 요약 (장 ID, 질문 ref, 표·기간 자료 유무 등). 생성 문장은 담지 않는다.
    */
   mujin: {
     calls: { question: 0, pass1: 0, pass2: 0 },
+    failed: { question: 0 },
     sections: { pass1: {} as Record<string, number>, pass2: {} as Record<string, number> },
     last: {
       question: null as MujinQuestionSummary | null,
@@ -397,6 +405,15 @@ function handleMujin(schema: string, input: Record<string, unknown>, body: { mod
   const reply = (text: string) => (body.stream ? void sendStream(res, text, body.model) : send(res, 200, openaiResponse(text, body.model)));
   if (schema === "mujin_question_analysis") {
     stats.mujin.calls.question += 1;
+    const fail = control.mujinQuestionFail;
+    if (fail && fail.times > 0) {
+      // OpenAI 서버 오류처럼 답한다 (앱은 server_error로 분류해 전송 재시도를 하고, 다 실패하면 무료 단계를 다시 시도할 수 있는 실패로 둔다).
+      fail.times -= 1;
+      if (fail.times <= 0) control.mujinQuestionFail = null;
+      stats.mujin.failed.question += 1;
+      send(res, 500, { error: { message: "fake question analysis failure", type: "server_error" } });
+      return true;
+    }
     reply(JSON.stringify(fixtureMujinQuestion(input as { text: string })));
     return true;
   }
