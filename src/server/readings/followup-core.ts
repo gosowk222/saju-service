@@ -1,6 +1,6 @@
 import "server-only";
 import type { Persona } from "@/domain/personas";
-import type { ProductDefinition } from "@/domain/products/types";
+import type { ProductBase, ProductDefinition } from "@/domain/products/types";
 import { statementTexts } from "@/domain/reading/check";
 import { tidyEmphasis } from "@/domain/reading/emphasis";
 import { assembleFocus, focusTopicsOf } from "@/domain/reading/focus";
@@ -27,9 +27,10 @@ export function isReactionOnly(analysis: { readonly reaction?: string; readonly 
  * 질문이 범위 안 질문을 하나도 갖지 않을 때의 처리. 모델 없이 보내는 문장이라 풀이를 맡은 캐릭터의 고정 문장(persona.lines)을 쓴다.
  * 범위 밖 안내와 되묻기는 차감하지 않는다. 반응만 보낸 메시지는 상품의 무료 횟수(earlierReactions가 그보다 적을 때)까지만
  * 차감하지 않고, 넘으면 같은 반응 문장으로 답하되 질문 1회로 센다 (answered).
+ * 상품에서는 무료 반응 횟수와 범위 안내 주제만 읽는다. 족자 상품(무진)의 후속 질문도 같은 함수를 쓴다.
  */
 export function routeWithoutItems(
-  product: ProductDefinition,
+  product: Pick<ProductBase, "freeReactions" | "scope">,
   persona: Persona,
   analysis: QuestionAnalysis,
   question = "",
