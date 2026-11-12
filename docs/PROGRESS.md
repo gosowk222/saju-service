@@ -15,6 +15,14 @@
 | 비교 자료 | `llm:export --task=two-pass` / `llm:render --task=two-pass` (같은 초안의 예시 사용·미사용 Pass 2, 모델 호출 없음) |
 | 바꾸지 않음 | 상품 주제·판단·분량·가격·질문 수·차감·권한, 엔진, 모델·추론 설정(이름만 `mujinDraft`→`draft`, `mujinVoice`→`voice`), 저장된 결과, 환경 변수 |
 
+| 검사 | 결과 |
+| --- | --- |
+| typecheck, lint | 통과 (오류 0) |
+| 단위 테스트 (`npx vitest run`) | 49개 파일 941개 통과 (+ 문서 SQL 실행 1개 추가 뒤 사용량 파일 10개 통과). 묘묘 2-pass 실행기, 세 번째 캐릭터, 새 카탈로그, SDK 요청 본문, PGlite 사용량 SQL 포함 |
+| 브라우저 테스트 (`test:e2e:clean`) | 80개 중 79개 통과, 1개(결제 후 재시도)가 새 풀이의 고정 버전을 `reading-3.2.0`으로 기대해 실패 → 기대값을 `myomyo-2pass-1.0.0`으로 고치고 호출 기록 확인을 더한 뒤 그 파일(17개) 다시 통과 |
+| 실제 모델 | LIVE_NOT_RUN (문체, 예시 효과, 첫 말풍선·전체 시간, 실제 토큰 미확인) |
+| 프로덕션 DB | migration `20261114120000` 미적용 (사용자가 적용) |
+
 ## 캐릭터 질문–답변 예시를 실제 생성에 연결 (feat/persona-qa-examples, 2026-11-13)
 
 `feat/mujin-scroll-reading`(`af2f702`) 위에서 분기했다. 설명은 `docs/personas/examples.md`, 경위는 `docs/READING_QUALITY.md` 24절, 운영·토큰은 `docs/LLM_OPERATIONS.md`.
