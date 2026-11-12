@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { InquiryDomain, ProductDefinition, QuestionDomain, QuestionIntent } from "../products/types";
+import type { InquiryDomain, ProductBase, ProductDefinition, QuestionDomain, QuestionIntent } from "../products/types";
 
 /**
  * 사용자가 적은 궁금한 점과 후속 질문을 상품 범위에 맞게 정리한다.
@@ -172,7 +172,7 @@ export function monthLabel(month: string): string {
 }
 
 /** 기본 분석 기간: 기준일이 속한 달부터 상품 설정의 개월 수. */
-export function defaultPeriod(product: ProductDefinition, referenceDate: string): QuestionPeriod {
+export function defaultPeriod(product: Pick<ProductBase, "timing">, referenceDate: string): QuestionPeriod {
   const start = referenceDate.slice(0, 7);
   return { kind: "default", startMonth: start, endMonth: addMonths(start, product.timing.defaultMonths - 1) };
 }
@@ -183,7 +183,7 @@ export function defaultPeriod(product: ProductDefinition, referenceDate: string)
  * 길이는 상품의 최대 개월 수로 자른다.
  */
 export function resolvePeriod(
-  product: ProductDefinition,
+  product: Pick<ProductBase, "timing">,
   referenceDate: string,
   raw: { readonly kind: string; readonly start: string; readonly end: string },
 ): QuestionPeriod {
@@ -201,13 +201,16 @@ const clean = (value: string, max: number) => value.replace(/[\u0000-\u001f<>]/g
 const isDomain = (value: string): value is QuestionDomain => (QUESTION_DOMAINS as readonly string[]).includes(value);
 const isIntent = (value: string): value is QuestionIntent => (QUESTION_INTENTS as readonly string[]).includes(value);
 
-export function inScope(product: ProductDefinition, domain: QuestionDomain): boolean {
+export function inScope(product: Pick<ProductBase, "scope">, domain: QuestionDomain): boolean {
   return domain === "general" || (product.scope.domains as readonly string[]).includes(domain);
 }
 
-/** 분류기 출력을 검증하고 상품 범위를 적용한다. 모르는 값은 버리거나 안전한 값으로 바꾼다. */
+/**
+ * 분류기 출력을 검증하고 상품 범위를 적용한다. 모르는 값은 버리거나 안전한 값으로 바꾼다.
+ * 상품에서는 답변 범위(scope)와 시기 질문의 기간 설정(timing)만 읽는다 (메신저·족자 상품 모두 같은 값을 가진다).
+ */
 export function buildQuestionAnalysis(
-  product: ProductDefinition,
+  product: Pick<ProductBase, "scope" | "timing">,
   referenceDate: string,
   raw: Omit<ClassifierOutput, "reaction"> & { readonly reaction?: Reaction },
 ): QuestionAnalysis {
@@ -279,7 +282,7 @@ export function excludedLabel(items: readonly QuestionItem[]): string {
 const isInquiryDomain = (domain: string): domain is InquiryDomain => (Object.keys(DOMAIN_LABEL) as string[]).includes(domain);
 
 /** 질문 분야를 답할 상품 주제의 분야로 바꾼다. 상품이 정한 연결(예: 건강→기본 성향)을 먼저 본다. */
-export function routeDomain(product: ProductDefinition, domain: QuestionDomain): InquiryDomain | null {
+export function routeDomain(product: Pick<ProductBase, "scope">, domain: QuestionDomain): InquiryDomain | null {
   const routed = product.scope.routes?.[domain];
   if (routed) return routed;
   return isInquiryDomain(domain) ? domain : null;
