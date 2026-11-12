@@ -11,8 +11,13 @@ import type { FreeTicketView, TicketUse } from "@/server/tickets/free-ticket";
  * 풀이 상품 이용이 막힌 회원(allowed = false)에게는 시작 버튼 대신 안내를 보여 준다.
  */
 export function FreeTicketCard({ ticket, allowed = true }: { ticket: FreeTicketView; allowed?: boolean }) {
-  const product = findProduct(FREE_TRIAL.productIds[0]!);
-  const productName = product?.name ?? "사주 풀이";
+  // 이용권으로 받을 수 있는 상품 (상품 설정에 있는 것만). 하나면 그 상품 화면으로, 여럿이면 탐색 화면에서 고른다.
+  const products = FREE_TRIAL.productIds.flatMap((id) => {
+    const product = findProduct(id);
+    return product ? [product] : [];
+  });
+  const startHref = products.length === 1 ? `/products/${products[0]!.id}` : "/products";
+  const productNames = products.map((product) => product.name).join(", ");
 
   if (ticket.state === "none") {
     if (ticket.reason !== "error") return null;
@@ -28,9 +33,11 @@ export function FreeTicketCard({ ticket, allowed = true }: { ticket: FreeTicketV
   const content = {
     available: {
       badge: <Badge tone="success">무료 이용권 {ticket.available}장</Badge>,
-      title: `${productName}을 무료로 받아 보세요`,
-      description: "결제 없이 이용권 1장으로 메신저 풀이, 후속 질문, 보관함, PDF까지 받아요.",
-      action: { href: product ? `/products/${product.id}` : "/products", label: "무료 이용권으로 시작하기" },
+      title: "무료 이용권으로 풀이를 받아 보세요",
+      description: productNames
+        ? `결제 없이 이용권 1장으로 풀이 하나를 받고 후속 질문, 보관함, PDF까지 이용해요. 받을 수 있는 풀이: ${productNames}.`
+        : "결제 없이 이용권 1장으로 풀이 하나를 받고 후속 질문, 보관함, PDF까지 이용해요.",
+      action: { href: startHref, label: "무료 이용권으로 시작하기" },
     },
     generating: {
       badge: <Badge tone="progress">풀이 작성 중</Badge>,
