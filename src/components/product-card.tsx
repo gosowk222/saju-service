@@ -30,9 +30,11 @@ const FIRST_SCREEN_POSTERS = 4;
  * 3:4 포스터. 그림 아래쪽 여백에 부설명과 제목을 올린다. 얼굴이 있는 위쪽은 글자로 가리지 않는다.
  * 그림이 오기 전에는 같은 비율의 밤 인디고 면(포스터 스켈레톤)이 자리를 잡고, 글자는 그 위에 먼저 보인다.
  * order는 목록에서의 순서다. 첫 화면에 보이는 포스터는 바로 불러오고, 첫 번째는 가장 먼저 받는다.
+ * 그림 안에 상품 이름과 문구가 이미 있는 상품(art.textInImage)은 그림 위에 글자와 스크림을 겹치지 않고,
+ * 화면 읽기용 제목만 둔다. 그림 속 문구는 그림 설명(alt)이 읽어 준다.
  */
 export function ProductPoster({ product, order = 0 }: { product: AnyProductDefinition; order?: number }) {
-  const { poster } = product.art;
+  const { poster, textInImage } = product.art;
   const firstScreen = order < FIRST_SCREEN_POSTERS;
   return (
     <div className="relative aspect-3/4 overflow-hidden rounded-md bg-primary-900">
@@ -45,11 +47,40 @@ export function ProductPoster({ product, order = 0 }: { product: AnyProductDefin
         fetchPriority={order === 0 ? "high" : undefined}
         className="object-cover object-top"
       />
-      <div className="absolute inset-0 bg-scrim" />
-      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-4">
-        <Tagline text={product.tagline} className="type-caption text-on-image-muted" />
-        <h2 className="type-poster text-balance break-keep text-white">{product.name}</h2>
-      </div>
+      {textInImage ? (
+        <h2 className="sr-only">{product.name}</h2>
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-scrim" />
+          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-4">
+            <Tagline text={product.tagline} className="type-caption text-on-image-muted" />
+            <h2 className="type-poster text-balance break-keep text-white">{product.name}</h2>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 상품 상세의 배너. 그림 안에 상품 이름과 문구가 있는 상품(art.textInImage)은 그 글자가 잘리지 않도록
+ * 원본 비율(width·height) 그대로 화면 폭에 맞춰 보여 주고, 그림 위에 글자·스크림을 겹치지 않는다.
+ * 화면 읽기용 제목(h1)은 따로 두고, 그림 속 문구는 그림 설명(alt)이 읽어 준다.
+ */
+function TextInImageHero({ product }: { product: AnyProductDefinition }) {
+  const { banner } = product.art;
+  return (
+    <div className="w-full bg-primary-900">
+      <h1 className="sr-only">{product.name}</h1>
+      <Image
+        src={banner.src}
+        alt={banner.alt}
+        width={banner.width}
+        height={banner.height}
+        preload
+        sizes="(min-width: 600px) 600px, 100vw"
+        className="block h-auto w-full"
+      />
     </div>
   );
 }
@@ -61,6 +92,7 @@ export function ProductPoster({ product, order = 0 }: { product: AnyProductDefin
  */
 export function ProductHero({ product }: { product: AnyProductDefinition }) {
   const { banner } = product.art;
+  if (product.art.textInImage) return <TextInImageHero product={product} />;
   return (
     <div className="relative aspect-16/10 w-full overflow-hidden bg-primary-900">
       <Image src={banner.src} alt={banner.alt} fill preload sizes="(min-width: 600px) 600px, 100vw" className="object-cover object-right" />
@@ -73,9 +105,12 @@ export function ProductHero({ product }: { product: AnyProductDefinition }) {
   );
 }
 
-/** 보관함 같은 목록의 작은 정사각 썸네일. 포스터에서 얼굴 부분(square)만 보여 준다. 옆에 상품 이름이 있다. */
+/**
+ * 보관함 같은 목록의 작은 정사각 썸네일. 포스터에서 얼굴 부분(square)만 보여 준다. 옆에 상품 이름이 있어 장식용이다.
+ * 그림 속 문구를 읽어 주는 포스터 설명(alt)은 잘린 썸네일과 맞지 않으므로 비운다 (묘묘 포스터는 원래 비어 있다).
+ */
 export function ProductThumb({ product }: { product: AnyProductDefinition }) {
-  return <SquareArt image={product.art.poster} displayPx={56} className="h-tile w-tile rounded-md bg-primary-900" />;
+  return <SquareArt image={{ ...product.art.poster, alt: "" }} displayPx={56} className="h-tile w-tile rounded-md bg-primary-900" />;
 }
 
 export function ProductCard({ product, order = 0 }: { product: AnyProductDefinition; order?: number }) {

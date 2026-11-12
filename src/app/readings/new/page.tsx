@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { BirthWizard } from "@/components/birth-wizard";
+import { MujinIntake } from "@/components/mujin/intake";
 import { LinkButton } from "@/components/ui/button";
 import { LoadingScreen, Notice, PageHeader } from "@/components/ui/layout";
 import { DraftSchema, emptyDraft, type Draft } from "@/domain/birth/input";
+import { faceOf, findPersona } from "@/domain/personas";
 import { DEFAULT_PRODUCT_ID, findProduct, isMessengerProduct } from "@/domain/products";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReadingAccess, READINGS_CLOSED_MESSAGE } from "@/server/access";
@@ -52,19 +54,28 @@ async function NewReading({ searchParams }: { searchParams: Promise<Record<strin
       </>
     );
   }
-  // 족자 상품(무진)의 대화형 입력은 아래 메신저 입력 마법사와 다른 화면이다.
+  const supabase = await createSupabaseServerClient();
+
+  // 족자 상품(무진)은 상담 장면 아래에서 한 단계씩 받는 대화형 입력을 쓴다. 메신저 입력 마법사와 다른 화면이다.
   if (!isMessengerProduct(product)) {
+    const persona = findPersona(product.personaId);
+    const intake = persona?.lines.intake;
+    if (!persona || !intake) notFound();
+    // 무진 입력은 저장된 풀이를 고쳐 쓰는 기능(?edit=)을 두지 않는다. 같은 상품의 작성 중 초안만 이어서 쓴다.
+    let scrollDraft: Draft = emptyDraft(product.id);
+    const { data } = await supabase.from("reading_drafts").select("payload").eq("product_id", product.id).maybeSingle();
+    if (data) {
+      const parsed = DraftSchema.safeParse(data.payload);
+      if (parsed.success) scrollDraft = parsed.data;
+    }
     return (
       <>
         <PageHeader title={product.name} backHref={`/products/${product.id}`} />
-        <main className="flex flex-1 flex-col gap-5 px-5 py-6">
-          <Notice tone="info">입력 화면을 준비하고 있어요.</Notice>
-        </main>
+        {/* 화면을 오가도 이전 상태가 남지 않도록 서버에서 받을 때마다 새로 시작한다. */}
+        <MujinIntake key={crypto.randomUUID()} initialDraft={scrollDraft} product={product} lines={intake} face={faceOf(persona)} personaName={persona.name} />
       </>
     );
   }
-
-  const supabase = await createSupabaseServerClient();
 
   let draft: Draft = emptyDraft(product.id);
   const editing = editId ? await getReading(supabase, editId) : null;
