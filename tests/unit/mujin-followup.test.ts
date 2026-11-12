@@ -5,10 +5,13 @@ import type { MujinPlan, ScrollSectionContent } from "@/domain/mujin/types";
 import { MUJIN, MYOMYO } from "@/domain/personas";
 import { FIRST_OVERVIEW } from "@/domain/products/first-overview";
 import { MUJIN_OVERVIEW } from "@/domain/products/mujin-overview";
-import { emptyAnalysis, type ClassifierOutput } from "@/domain/reading/question";
+import { addMonths, emptyAnalysis, type ClassifierOutput, type QuestionItem } from "@/domain/reading/question";
+import type { TimingAnalysis } from "@/domain/reading/types";
 import { ApiError } from "@/server/api";
 import { toPublicBirthInput, type AnalyzeInput } from "@/server/engine/analyze";
 import { analyzeMujinBirth, computeMujinTiming } from "@/server/engine/mujin";
+import { MUJIN_FEATURE_IDS } from "@/server/engine/features";
+import { analyzeTiming, type TimingRequest } from "@/server/engine/timing";
 import { createCallRecorder, type LlmCallRow } from "@/server/llm/call-log";
 import type { callStructured, callStructuredStream, LlmCallLog, StructuredRequest } from "@/server/llm/client";
 import { buildMujinFollowupRequest, hasMujinFollowupPrompt, MUJIN_FOLLOWUP_PROMPT_1_0_0, type MujinFollowupPromptInput } from "@/server/llm/mujin-followup-prompt";
@@ -21,6 +24,7 @@ import {
   askScrollFollowup,
   deliveredOf,
   DELIVERED_MAX_CHARS,
+  extraTimingRequests,
   followupCheckContext,
   followupMaterial,
   mujinFollowupChecker,
@@ -29,6 +33,8 @@ import {
   type ScrollFollowupDeps,
   type ScrollFollowupStore,
 } from "@/server/scroll/followup";
+import { scrollExtraTimingKey, type AnalysisStore } from "@/server/scroll/store";
+import { MUJIN_TIMING_FEATURES, prepareScrollExtraTimingWith } from "@/server/scroll/timing";
 
 /**
  * 무진의 종합 사주 후속 질문. 모델·DB 없이 가짜 호출과 가짜 저장소로 확인한다 (실제 OpenAI 호출 없음).
@@ -235,12 +241,39 @@ const classified = (overrides: Partial<ClassifierOutput> = {}): ClassifierOutput
   ...overrides,
 });
 
-async function ask(question: string, output: ClassifierOutput, options: { readonly context?: ScrollFollowupContext | null; readonly earlierReactions?: number; readonly answer?: (input: AnswerInput) => unknown } = {}) {
+/** reading_analyses 대신 쓰는 메모리 저장소 (save_reading_analysis처럼 같은 키는 처음 저장한 값을 돌려준다). */
+function memoryAnalyses() {
+  const saved = new Map<string, unknown>();
+  const store: AnalysisStore = {
+    loadAnalysis: async <T,>(readingId: string, cacheKey: string) => (saved.get(`${readingId}/${cacheKey}`) as T | undefined) ?? null,
+    saveAnalysis: async <T,>(readingId: string, cacheKey: string, _kind: "question" | "timing", _version: string, payload: T) => {
+      const key = `${readingId}/${cacheKey}`;
+      if (!saved.has(key)) saved.set(key, structuredClone(payload));
+      return { saved: true, payload: saved.get(key) as T };
+    },
+  };
+  return { store, saved };
+}
+
+async function ask(
+  question: string,
+  output: ClassifierOutput,
+  options: {
+    readonly context?: ScrollFollowupContext | null;
+    readonly earlierReactions?: number;
+    readonly answer?: (input: AnswerInput) => unknown;
+    readonly prepareExtraTiming?: ScrollFollowupDeps["prepareExtraTiming"];
+  } = {},
+) {
   const { store, record } = fakeStore(options.context === undefined ? CONTEXT : options.context, options);
   const classify = fakeClassifier(output);
   const streamed = fakeStream(options.answer);
   const rows: LlmCallRow[] = [];
   const prepareTiming = vi.fn<ScrollFollowupDeps["prepareTiming"]>(async () => timing);
+  const analyses = memoryAnalyses();
+  const prepareExtraTiming = vi.fn<ScrollFollowupDeps["prepareExtraTiming"]>(
+    options.prepareExtraTiming ?? ((input) => prepareScrollExtraTimingWith({ ...input, store: analyses.store })),
+  );
   const response = await askScrollFollowup(
     { userId: USER_ID, readingId: READING_ID, clientRequestId: randomUUID(), question },
     {
@@ -252,12 +285,13 @@ async function ask(question: string, output: ClassifierOutput, options: { readon
       callStructured: classify.call,
       callStructuredStream: streamed.stream,
       prepareTiming,
+      prepareExtraTiming,
       modelId: () => "gpt-test",
       now: () => 1_000_000,
       today: () => TODAY,
     },
   );
-  return { response, record, classify, streamed, rows, prepareTiming };
+  return { response, record, classify, streamed, rows, prepareTiming, prepareExtraTiming };
 }
 
 const promptInput = (overrides: Partial<MujinFollowupPromptInput> = {}): MujinFollowupPromptInput => ({
@@ -425,6 +459,68 @@ describe("무진 후속 질문 재료", () => {
     for (const entry of material.questions) expect(entry.sectionIds.some((id) => material.sectionIds.includes(id))).toBe(true);
   });
 
+  it("고정된 12개월 밖을 물은 기간만 분야마다 따로 계산할 기간으로 고른다 (겹치는 달, 기본 기간, 기간 규칙이 없는 분야, 상품 기간 상한 초과는 고르지 않는다)", () => {
+    const window = { startMonth: "2026-11", endMonth: "2027-10" };
+    const timingItem = (id: string, domain: QuestionItem["domain"], startMonth: string, endMonth: string, extra: Partial<QuestionItem> = {}): QuestionItem => ({
+      id,
+      summary: "시기 질문",
+      domain,
+      intent: "timing",
+      options: [],
+      period: { kind: "explicit", startMonth, endMonth },
+      missingInfo: [],
+      scope: "in",
+      answerability: "full",
+      timingSupported: true,
+      topicDomain: domain as QuestionItem["topicDomain"],
+      ...extra,
+    });
+    const requests = (...items: QuestionItem[]): TimingRequest[] => extraTimingRequests({ items, window, product: MUJIN_OVERVIEW });
+    const explicit = (domain: string, startMonth: string, endMonth: string) => ({ domain, period: { kind: "explicit", startMonth, endMonth } });
+
+    expect(requests(timingItem("q1", "career", "2028-07", "2028-12"))).toEqual([explicit("career", "2028-07", "2028-12")]);
+    // 12개월과 겹치면 밖의 달만, 앞뒤로 모두 밖이면 두 구간으로 나눈다.
+    expect(requests(timingItem("q1", "wealth", "2027-06", "2027-12"))).toEqual([explicit("wealth", "2027-11", "2027-12")]);
+    expect(requests(timingItem("q1", "romance", "2026-05", "2027-12"))).toEqual([explicit("romance", "2026-05", "2026-10"), explicit("romance", "2027-11", "2027-12")]);
+    // 12개월 안이면 고르지 않는다 (이미 있는 재료를 쓴다).
+    expect(requests(timingItem("q1", "career", "2027-01", "2027-06"))).toEqual([]);
+    // 기간을 말하지 않은 시기 질문(기본 기간)은 고정된 12개월로 답한다.
+    expect(requests(timingItem("q1", "career", "2027-02", "2028-01", { period: { kind: "default", startMonth: "2027-02", endMonth: "2028-01" } }))).toEqual([]);
+    // 기간 판단 규칙이 없는 분야나 시기 질문이 아니면 고르지 않는다.
+    expect(requests(timingItem("q1", "family", "2028-07", "2028-12", { timingSupported: false }))).toEqual([]);
+    expect(requests(timingItem("q1", "career", "2028-07", "2028-12", { intent: "explain", timingSupported: false }))).toEqual([]);
+    // 상품 기간 상한(maxMonths)보다 긴 기간은 고르지 않는다.
+    expect(requests(timingItem("q1", "career", "2028-01", addMonths("2028-01", MUJIN_OVERVIEW.timing.maxMonths)))).toEqual([]);
+    // 같은 분야·기간은 한 번만, 투자 시기는 재물 월운으로 본다.
+    expect(
+      requests(
+        timingItem("q1", "career", "2028-07", "2028-12"),
+        timingItem("q2", "career", "2028-07", "2028-12"),
+        timingItem("q3", "investment", "2028-07", "2028-12", { topicDomain: "wealth" }),
+      ),
+    ).toEqual([explicit("career", "2028-07", "2028-12"), explicit("wealth", "2028-07", "2028-12")]);
+  });
+
+  it("따로 계산하는 기간은 9·10장 기간 재료와 같은 무진 기능을 쓴다 (12개월 안의 같은 달은 같은 판단이 나온다)", async () => {
+    expect(MUJIN_TIMING_FEATURES).toEqual({ yearMonths: MUJIN_FEATURE_IDS.yearMonths, decade: MUJIN_FEATURE_IDS.luck });
+    const { store } = memoryAnalyses();
+    const start = timing.months.window.startMonth;
+    const end = addMonths(start, 2);
+    const [inside] = await prepareScrollExtraTimingWith({
+      store,
+      readingId: READING_ID,
+      birth,
+      referenceDate: REFERENCE_DATE,
+      requests: [{ domain: "career", period: { kind: "explicit", startMonth: start, endMonth: end } }],
+    });
+    const fixed = timing.analyses.find((analysis) => analysis.domain === "career")!;
+    const pick = (statements: readonly TimingAnalysis["months"][number][]) =>
+      statements.map(({ periodId, label, verdict, statement, markers }) => ({ periodId, label, verdict, statement, markers }));
+    const months = (statement: TimingAnalysis["months"][number]) => (statement.startsOn ?? "").slice(0, 7);
+    expect(inside!.months.length).toBeGreaterThan(0);
+    expect(pick(inside!.months)).toEqual(pick(fixed.months.filter((statement) => months(statement) >= start && months(statement) <= end)));
+  });
+
   it("검사는 기간 자료의 달과 재료의 ref만 허용하고, 없는 날짜·ref·비율은 잡는다", () => {
     const material = followupMaterial({
       plan,
@@ -526,6 +622,77 @@ describe("무진 후속 질문 처리 (askScrollFollowup)", () => {
     // 호출 기록의 합은 followups.usage의 합계와 같다. 캐시 입력은 입력에 포함된 값이라 다시 더하지 않는다.
     expect(rows.reduce((sum, row) => sum + Number(row.inputTokens), 0)).toBe(2000);
     expect(JSON.stringify(rows)).not.toContain("이직");
+  });
+
+  it("고정된 12개월 밖의 기간을 물으면 그 기간만 고정 기준일·무진 기능으로 계산해 저장하고 지시 입력(기간 자료·10장 재료)에 넣으며, 두 번째 질문은 저장된 것을 다시 쓴다", async () => {
+    const analyses = memoryAnalyses();
+    const compute = vi.fn(analyzeTiming);
+    const prepareExtraTiming: ScrollFollowupDeps["prepareExtraTiming"] = (input) => prepareScrollExtraTimingWith({ ...input, store: analyses.store, compute });
+    const asked = classified({ items: [item({ summary: "그해 하반기에 이직하면 어떤지", period: { kind: "explicit", start: "2028-07", end: "2028-12" } })] });
+    // 따로 살펴본 달을 답에 써도 검사(분석하지 않은 기간)에 걸리지 않는다.
+    const answer = (input: AnswerInput) => {
+      const base = defaultAnswer(input);
+      const month = input.timing?.months.months.find((entry) => entry.label.startsWith("2028년"))?.label;
+      return { ...base, sections: base.sections.map((section) => ({ ...section, text: `${section.text}\n\n[테스트 응답] ${month ?? "그 기간"}에는 이렇게 살펴봐요.` })) };
+    };
+
+    const first = await ask("그해 하반기에 이직하면 어때요?", asked, { prepareExtraTiming, answer });
+    // 질문한 날(TODAY)이 아니라 고정 기준일로, 9·10장 기간 재료와 같은 무진 기능으로 그 기간만 계산했다.
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(compute.mock.calls[0]![0]).toMatchObject({
+      referenceDate: REFERENCE_DATE,
+      requests: [{ domain: "career", period: { kind: "explicit", startMonth: "2028-07", endMonth: "2028-12" } }],
+      features: { yearMonths: MUJIN_FEATURE_IDS.yearMonths, decade: MUJIN_FEATURE_IDS.luck },
+    });
+    const key = scrollExtraTimingKey("career", "2028-07", "2028-12", REFERENCE_DATE);
+    expect(key).toBe("mujin-timing-extra:career:2028-07..2028-12@2026-11-12");
+    expect(key.length).toBeLessThanOrEqual(120);
+    expect([...analyses.saved.keys()]).toEqual([`${READING_ID}/${key}`]);
+    const extra = analyses.saved.get(`${READING_ID}/${key}`) as TimingAnalysis;
+    expect(extra).toMatchObject({ domain: "career", referenceDate: REFERENCE_DATE, window: { kind: "explicit", startMonth: "2028-07", endMonth: "2028-12" } });
+    expect(extra.months.length).toBeGreaterThan(0);
+
+    const input = JSON.parse(first.streamed.requests[0]!.input) as {
+      timing: { months: { window: string; months: { label: string; tones: Record<string, string> }[] } } | null;
+      chapters: { sectionId: string; materials: { ref: string; kind: string; text: string }[] }[];
+    };
+    // 기간 자료: 살펴본 기간에 질문한 기간이 들어가고, 계산한 달이 고정된 12개월 뒤에 더해진다 (다른 분야는 자료 없음).
+    expect(input.timing!.months.window).toContain(timing.months.window.label);
+    expect(input.timing!.months.window).toContain("2028년 7월부터 2028년 12월까지");
+    const labels = input.timing!.months.months.map((month) => month.label);
+    expect(labels.slice(0, 12)).toEqual(timing.months.months.map((month) => month.label));
+    expect(labels.slice(12)).toEqual(extra.months.map((statement) => statement.label));
+    for (const month of input.timing!.months.months.slice(12)) expect(month.tones).toMatchObject({ 재물: "no-data", 연애: "no-data", 인간관계: "no-data" });
+    // 10장 재료: 따로 살펴본 기간 안내와 표지가 있는 달마다의 기간 판단.
+    const ch10 = input.chapters.find((chapter) => chapter.sectionId === "ch10")!;
+    const texts = ch10.materials.map((material) => material.text);
+    expect(texts.some((text) => text.startsWith("질문하신 기간 2028년 7월부터 2028년 12월까지"))).toBe(true);
+    for (const statement of extra.months) {
+      expect(ch10.materials.some((material) => material.kind === "period" && material.text.startsWith(statement.label) && material.text.includes(statement.statement))).toBe(true);
+      // 규칙·결론 ID는 지시 입력에 넣지 않는다.
+      expect(first.streamed.requests[0]!.input).not.toContain(statement.conclusionId);
+    }
+    expect(new Set(ch10.materials.map((material) => material.ref)).size).toBe(ch10.materials.length);
+    // 검사를 통과해(다시 쓰지 않음) 한 번 차감하고, 따로 살펴본 기간을 관리 기록에 남긴다 (질문 문장 없음).
+    expect(first.streamed.requests).toHaveLength(1);
+    expect(first.response).toMatchObject({ status: "answered", questionsUsed: 1 });
+    expect(first.response.answer).toContain(extra.months[0]!.label);
+    expect(first.record.completed[0]!.meta).toMatchObject({ analysis: { extraPeriods: ["career:2028-07..2028-12"], timingReferenceDate: REFERENCE_DATE } });
+
+    // 두 번째 질문: 저장된 기간 분석을 다시 쓴다 (계산 없음).
+    const second = await ask("그해 하반기 이직을 다시 물어볼게요", asked, { prepareExtraTiming, answer });
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(second.prepareExtraTiming).toHaveBeenCalledTimes(1);
+    expect(second.streamed.requests[0]!.input).toContain("2028년 7월부터 2028년 12월까지");
+    expect(second.response.status).toBe("answered");
+  });
+
+  it("말한 기간이 고정된 12개월 안이거나 기간을 말하지 않았으면 따로 계산하지 않는다", async () => {
+    const inside = await ask("내년 봄 이직은요?", classified({ items: [item({ period: { kind: "explicit", start: "2027-03", end: "2027-05" } })] }));
+    expect(inside.prepareExtraTiming).not.toHaveBeenCalled();
+    expect(inside.streamed.requests[0]!.input).not.toContain("질문하신 기간");
+    const unspecified = await ask("언제 이직하면 좋을까요?", classified());
+    expect(unspecified.prepareExtraTiming).not.toHaveBeenCalled();
   });
 
   it("범위 밖 질문은 모델 답변 없이 무진의 고정 문장으로 답하고 차감하지 않는다", async () => {

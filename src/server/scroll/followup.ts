@@ -2,12 +2,15 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicBirthInput } from "sajuengine";
 import { datesIn, materialTexts, TIMING_SECTION_IDS, timingDatesOf } from "@/domain/mujin/check";
-import { chaptersForQuestion } from "@/domain/mujin/personalize";
+import { chaptersForQuestion, MONTH_DOMAIN_LABEL, MONTH_DOMAINS, monthDomainOfQuestion, uniqueList } from "@/domain/mujin/personalize";
 import { buildTimingSections } from "@/domain/mujin/timing-plan";
 import {
   MUJIN_PLAN_VERSION,
+  type MonthDomain,
   type MujinLuck,
   type MujinLuckPeriod,
+  type MujinMaterial,
+  type MujinMonth,
   type MujinMonths,
   type MujinPlan,
   type MujinSectionPlan,
@@ -30,20 +33,26 @@ import {
 import { tidyEmphasis } from "@/domain/reading/emphasis";
 import { allowedChartTerms } from "@/domain/reading/lore";
 import {
+  addMonths,
   buildQuestionAnalysis,
   excludedItems,
   excludedLabel,
   inScopeFacts,
   inScopeItems,
   itemDomain,
+  monthLabel,
+  monthsBetween,
   reactionOf,
   seoulDate,
   type QuestionAnalysis,
   type QuestionItem,
 } from "@/domain/reading/question";
-import type { ChartView, FollowupOutputV2 } from "@/domain/reading/types";
+import type { ChartView, FollowupOutputV2, TimingAnalysis } from "@/domain/reading/types";
+import { TIMING_CAVEAT } from "@/domain/rules/timing";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
+import { monthTone } from "@/server/engine/mujin";
+import type { TimingRequest } from "@/server/engine/timing";
 import { createCallRecorder, supabaseCallWriter, type LlmCallRecorder, type LlmCallStep } from "@/server/llm/call-log";
 import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmCallLog, type StreamedResult } from "@/server/llm/client";
 import { LLM_SETTINGS, resolveModelId } from "@/server/llm/config";
@@ -66,7 +75,7 @@ import { isReactionOnly, routeWithoutItems, type FollowupStatus } from "@/server
 import { ScrollStepError } from "./config";
 import { SCROLL_QUESTION_VERSION, toScrollQuestions, type ScrollQuestionAnalysis } from "./questions";
 import { createScrollStore, getReferenceDate, loadFinalSections, loadScrollReading, SCROLL_QUESTION_KEY } from "./store";
-import { prepareScrollTiming } from "./timing";
+import { prepareScrollExtraTiming, prepareScrollTiming } from "./timing";
 
 /**
  * 족자 상품(무진의 종합 사주)의 후속 질문. 묘묘(메신저)와 같은 정책을 쓰고 재료와 지시만 다르다.
@@ -80,7 +89,9 @@ import { prepareScrollTiming } from "./timing";
  *     계획·가정을 현재 사실로 쓰지 않게 지시가 막는다.
  *   · 재료: 질문 분야와 이어지는 장(chaptersForQuestion)의 작성 재료와 그 장의 최종문 일부(상한까지), 원국 계산 사실, 지금의 나,
  *     처음 궁금한 점에서 정리한 사실. 기간 질문이면 첫 유료 생성 때 고정한 기준일(generation_jobs.reference_date)의 기간 재료를 쓴다.
- *     질문한 날짜로 기간을 새로 계산하지 않는다 (명세 06 6절).
+ *     질문한 날짜로 기준일을 바꾸지 않는다 (명세 06 6절). 사용자가 말한 기간이 고정된 12개월 밖이면, 묘묘처럼 그 기간만 같은 기준일과
+ *     무진 기능으로 계산해 reading_analyses에 저장하고 다시 쓴다 (prepareScrollExtraTiming). 계산한 달은 기간 자료(timing.months)와
+ *     10장 재료에 더해, 지시의 '살펴본 기간'에 들어가게 한다 (지시 mujin-followup-1.0.0의 문장은 바꾸지 않는다).
  *   · 지시: mujin-followup-1.0.0 (characterBlock(무진)으로 시작, 묘묘 전용 반말 문구 없음). 후속 답변은 요청 하나 안에서 끝나므로
  *     묘묘처럼 지금 묶음(MUJIN_BUNDLE_VERSION)의 후속 지시와 그 묶음의 무진 설정을 쓴다. 버전은 followups.prompt_version과 analysis에 남는다.
  *   · 사용량: 호출마다 llm_calls에 step classify·followup, followupId, tier paid로도 남긴다. 기록 실패는 답변에 영향을 주지 않는다.
@@ -161,6 +172,16 @@ export interface ScrollFollowupDeps {
     readonly referenceDate: string;
     readonly gender: "male" | "female";
   }) => Promise<MujinTimingBundle>;
+  /**
+   * 고정된 12개월 밖을 물은 기간의 기간 분석 (질문 분야만, 고정 기준일, 무진 기능). 저장된 것이 있으면 다시 계산하지 않는다
+   * (prepareScrollExtraTiming). requests 순서대로 돌려준다.
+   */
+  readonly prepareExtraTiming: (input: {
+    readonly readingId: string;
+    readonly birth: PublicBirthInput;
+    readonly referenceDate: string;
+    readonly requests: readonly TimingRequest[];
+  }) => Promise<readonly TimingAnalysis[]>;
   readonly modelId: () => string;
   readonly now: () => number;
   /** 오늘 날짜 (Asia/Seoul). 질문 속 기간('내년 3월')을 읽는 기준이다. 기간 재료의 기준일은 바꾸지 않는다. */
@@ -255,12 +276,221 @@ function pickChapters(questions: readonly MujinFollowupQuestion[], order: readon
   return order.filter((id) => picked.has(id));
 }
 
+// ─── 고정된 12개월 밖의 기간 ─────────────────────────────────────────────
+
+const earlierMonth = (a: string, b: string) => (a < b ? a : b);
+const laterMonth = (a: string, b: string) => (a > b ? a : b);
+
+/**
+ * 고정된 12개월 밖을 물은 기간 질문에서 따로 계산할 분야와 기간을 고른다 (순수 함수).
+ * 묘묘의 기간 질문 처리(timingFor)와 같은 조건이다: 기간 판단 규칙이 있는 분야의 시기 질문(timingSupported)이고, 사용자가 기간을
+ * 말했으며(explicit), 그 길이가 상품 timing.maxMonths 안이다. 분야는 10장 월운 분야로 읽는다(투자는 재물, 친구는 인간관계).
+ * 12개월과 겹치는 달은 이미 있는 재료를 쓰고, 밖의 달(앞·뒤 구간)만 고른다. 같은 분야·기간은 한 번만 고른다.
+ * 기간을 말하지 않은 시기 질문(default)은 지금처럼 고정된 12개월로 답한다.
+ */
+export function extraTimingRequests(input: {
+  readonly items: readonly QuestionItem[];
+  /** 고정된 12개월 (MujinMonths.window, 절기 기준 월 이름). */
+  readonly window: { readonly startMonth: string; readonly endMonth: string };
+  readonly product: Pick<ScrollProductDefinition, "timing">;
+}): TimingRequest[] {
+  const { startMonth: windowStart, endMonth: windowEnd } = input.window;
+  const requests = new Map<string, TimingRequest>();
+  for (const item of input.items) {
+    const period = item.period;
+    const domain = monthDomainOfQuestion({ domain: item.domain, topicDomain: itemDomain(item) });
+    if (!item.timingSupported || period?.kind !== "explicit" || !domain) continue;
+    if (!(input.product.timing.domains as readonly string[]).includes(domain)) continue;
+    if (monthsBetween(period.startMonth, period.endMonth) > input.product.timing.maxMonths) continue;
+    const segments: { readonly startMonth: string; readonly endMonth: string }[] = [];
+    if (period.startMonth < windowStart) segments.push({ startMonth: period.startMonth, endMonth: earlierMonth(period.endMonth, addMonths(windowStart, -1)) });
+    if (period.endMonth > windowEnd) segments.push({ startMonth: laterMonth(period.startMonth, addMonths(windowEnd, 1)), endMonth: period.endMonth });
+    for (const segment of segments) {
+      const key = `${domain}:${segment.startMonth}..${segment.endMonth}`;
+      if (!requests.has(key)) requests.set(key, { domain, period: { kind: "explicit", ...segment } });
+    }
+  }
+  return [...requests.values()];
+}
+
+/** 따로 살펴본 기간 재료의 작성 조건. 10장 재료(domain/mujin/timing-plan.ts)와 같은 기준이다. */
+const EXTRA_CAVEAT = {
+  month: "절기 기준 월이라 달력의 1일과 경계가 다르다.",
+  scope: "질문하신 분야만 따로 살펴본 기간이다. 같은 달의 다른 분야는 살펴보지 않았다.",
+  quiet: "표지가 없는 달은 이 분야를 밀어 주거나 막는 뚜렷한 표지가 없다는 뜻이며 좋다·나쁘다는 판정이 아니다.",
+  mixed: "같은 달에 긍정과 주의 표지가 함께 있으면 둘을 함께 말한다.",
+  careful: "주의 표지는 조건을 더 점검할 달이라는 뜻이며 실패·사고·손실이 생기는 날이라는 뜻이 아니다.",
+  activity: "지원 자료 정비를 합격일로, 관계 활동을 만남 확정일로 바꾸지 않는다.",
+} as const;
+
+type ExtraStatement = TimingAnalysis["months"][number];
+
+const VERDICT_TEXT: Readonly<Record<ExtraStatement["verdict"], string>> = {
+  notable: "긍정 표지가 있는 달",
+  mixed: "긍정·주의 표지가 함께 있는 달",
+  careful: "주의 표지가 있는 달",
+  quiet: "중립 표지만 있는 달",
+};
+
+/** 기간 규칙(rules/timing.ts)의 결론 상태와 같은 대응. 저장된 기간 분석에는 상태 대신 verdict가 남는다. */
+const STATUS_OF_VERDICT: Readonly<Record<ExtraStatement["verdict"], NonNullable<MujinMaterial["status"]>>> = {
+  notable: "candidate",
+  mixed: "deferred",
+  careful: "observation",
+  quiet: "observation",
+};
+
+const MARKER_TONE_TEXT: Readonly<Record<string, string>> = { positive: "긍정", caution: "주의", neutral: "중립" };
+
+/** YYYY-MM-DD 두 개 → "(7월 7일~8월 6일)". 10장 재료와 같은 표기다. */
+function rangeTextOf(startsOn: string | null, endsOn: string | null): string {
+  const day = (date: string | null) => {
+    const match = date ? /^\d{4}-(\d{2})-(\d{2})$/.exec(date) : null;
+    return match ? `${Number(match[1])}월 ${Number(match[2])}일` : null;
+  };
+  const start = day(startsOn);
+  const end = day(endsOn);
+  return start && end ? `(${start}~${end})` : "";
+}
+
+const domainLabelOf = (domain: string) => MONTH_DOMAIN_LABEL[domain as MonthDomain] ?? domain;
+
+/** "2028년 7월부터 2028년 12월까지" (절기 기준 월 이름). */
+const spanLabel = (analysis: TimingAnalysis) => `${monthLabel(analysis.window.startMonth)}부터 ${monthLabel(analysis.window.endMonth)}까지`;
+
+/**
+ * 따로 계산한 기간 분석을 10장 재료로 옮긴다 (계산하지 않는다). 분석마다 기간 안내(engine-fact) 하나와, 표지가 있는 달마다
+ * 그 달·분야의 직접 근거로 내린 기간 판단(period) 하나를 만든다. 결론의 규칙·근거 ID는 서버 기록으로만 남고 지시 입력에는 들어가지 않는다.
+ */
+function extraTimingMaterials(input: {
+  readonly extra: readonly TimingAnalysis[];
+  readonly startRef: number;
+  readonly fixedLabel: string;
+  readonly referenceDate: string;
+}): MujinMaterial[] {
+  let next = input.startRef;
+  const take = () => `m${next++}`;
+  const materials: MujinMaterial[] = [];
+  for (const analysis of input.extra) {
+    const label = domainLabelOf(analysis.domain);
+    // 기간 분석은 계산을 마친 결과에만 TIMING_CAVEAT를 붙인다. 계산하지 못한 기간을 '표지 없음'으로 말하지 않게 나눈다.
+    const computed = analysis.limitations.includes(TIMING_CAVEAT);
+    const empty = !computed ? " 이 기간의 이 분야는 계산하지 못했다." : analysis.months.length ? "" : " 이 기간에는 이 분야와 바로 이어지는 표지를 찾지 못했다.";
+    materials.push({
+      ref: take(),
+      kind: "engine-fact",
+      questionIds: [],
+      scope: "period",
+      text:
+        `질문하신 기간 ${spanLabel(analysis)}(절기 기준 월)의 ${label} 분야를 보고서와 같은 기준일(${input.referenceDate})과 같은 기간 판단 규칙으로 따로 살펴봤다. ` +
+        `보고서 10장의 12개월(${input.fixedLabel}) 밖의 기간이다.${empty}`,
+      caveats: uniqueList([EXTRA_CAVEAT.month, EXTRA_CAVEAT.scope, ...(computed ? [EXTRA_CAVEAT.quiet] : []), ...analysis.limitations]),
+    });
+    for (const statement of analysis.months) {
+      const notable = analysis.notable.includes(statement.periodId);
+      const careful = analysis.careful.includes(statement.periodId);
+      const contextual = uniqueList(statement.contextualEvidenceIds);
+      const supporting = uniqueList(statement.supportingEvidenceIds).filter((id) => !contextual.includes(id));
+      const counter = uniqueList(statement.counterEvidenceIds).filter((id) => !contextual.includes(id) && !supporting.includes(id));
+      materials.push({
+        ref: take(),
+        kind: "period",
+        questionIds: [],
+        scope: "period",
+        text: `${statement.label}${rangeTextOf(statement.startsOn, statement.endsOn)}: ${label} ${VERDICT_TEXT[statement.verdict]}${notable ? "(주목 구간)" : careful ? "(주의 구간)" : ""} — ${statement.statement}`,
+        aspect: notable ? "주목 구간" : careful ? "주의 구간" : "월별 판단",
+        periodId: statement.periodId,
+        status: STATUS_OF_VERDICT[statement.verdict],
+        ruleId: statement.ruleId,
+        ruleVersion: statement.ruleVersion,
+        conclusionId: statement.conclusionId,
+        evidence: { supporting, counter, contextual },
+        basis: statement.markers.map((marker) => `${label} ${MARKER_TONE_TEXT[marker.tone] ?? "중립"} 표지: ${marker.text}`),
+        action: uniqueList(statement.markers.map((marker) => marker.activity)).join("; "),
+        caveats: uniqueList([
+          TIMING_CAVEAT,
+          EXTRA_CAVEAT.month,
+          EXTRA_CAVEAT.activity,
+          ...(statement.verdict === "mixed" ? [EXTRA_CAVEAT.mixed] : []),
+          ...(statement.verdict === "careful" || careful ? [EXTRA_CAVEAT.careful] : []),
+          // 12운성 재료는 작성 재료에 넣지 않으므로 그 사용을 알리는 한계 문장은 옮기지 않는다 (10장 재료와 같다).
+          ...statement.caveats.filter((caveat) => !caveat.startsWith("12운성")),
+        ]),
+      });
+    }
+  }
+  return materials;
+}
+
+/**
+ * 기간 자료(timing.months)에 따로 살펴본 달을 더한다. 지시가 말하는 '살펴본 기간'에 질문한 기간이 들어가게 해,
+ * 계산한 기간을 '보지 않았다'고 답하지 않게 한다. 달 이름·시작·끝 날짜와 표지 구성은 계산 결과 그대로다.
+ * 따로 살펴본 달에서 계산하지 않은 분야는 '자료 없음'이고, 계산했지만 표지가 없는 분야는 '중립'이다. 달은 시작일 순서로 둔다.
+ */
+function withExtraMonths(months: MujinMonths, extra: readonly TimingAnalysis[]): MujinMonths {
+  if (!extra.length) return months;
+  const known = new Set(months.months.map((month) => month.periodId));
+  // 기간 분석은 계산을 마친 결과에만 TIMING_CAVEAT를 붙인다 (computeMujinTiming과 같은 판단).
+  const computed = extra.filter((analysis) => analysis.limitations.includes(TIMING_CAVEAT));
+  const coveredBy = (domain: MonthDomain, month: string) =>
+    computed.some((analysis) => analysis.domain === domain && analysis.window.startMonth <= month && month <= analysis.window.endMonth);
+
+  const added = new Map<string, { readonly statement: ExtraStatement; readonly markers: Map<MonthDomain, MujinMonth["cells"][number]["markers"]> }>();
+  for (const analysis of extra) {
+    const domain = analysis.domain as MonthDomain;
+    if (!MONTH_DOMAINS.includes(domain)) continue;
+    for (const statement of analysis.months) {
+      if (known.has(statement.periodId)) continue;
+      const entry = added.get(statement.periodId) ?? { statement, markers: new Map() };
+      entry.markers.set(
+        domain,
+        statement.markers.map(({ tone, text, activity }) => ({ tone, text, activity })),
+      );
+      added.set(statement.periodId, entry);
+    }
+  }
+  const extraMonths: MujinMonth[] = [...added].map(([periodId, { statement, markers }]) => {
+    const month = (statement.startsOn ?? "").slice(0, 7);
+    return {
+      periodId,
+      label: statement.label,
+      startsOn: statement.startsOn,
+      endsOn: statement.endsOn,
+      startedBeforeReference: false,
+      cells: MONTH_DOMAINS.map((domain) => {
+        const found = markers.get(domain);
+        if (found) return { domain, tone: monthTone(found, true), markers: found };
+        return { domain, tone: coveredBy(domain, month) ? ("neutral" as const) : ("no-data" as const), markers: [] };
+      }),
+    };
+  });
+  const order = (month: MujinMonth) => month.startsOn ?? "9999";
+  const picks = (lists: MujinMonths["notable"], key: "notable" | "careful") =>
+    MONTH_DOMAINS.filter((domain) => lists.some((entry) => entry.domain === domain) || extra.some((analysis) => analysis.domain === domain)).map((domain) => ({
+      domain,
+      periodIds: uniqueList([
+        ...lists.filter((entry) => entry.domain === domain).flatMap((entry) => entry.periodIds),
+        ...extra.filter((analysis) => analysis.domain === domain).flatMap((analysis) => analysis[key].filter((id) => added.has(id))),
+      ]),
+    }));
+  const extraLabels = extra.map((analysis) => `${spanLabel(analysis)} ${domainLabelOf(analysis.domain)} 분야`);
+  return {
+    status: months.status === "available" || extraMonths.length ? "available" : months.status,
+    window: { ...months.window, label: `${months.window.label}. 질문하신 기간으로 따로 살펴본 ${uniqueList(extraLabels).join(", ")} (절기 기준 월)` },
+    months: [...months.months, ...extraMonths].sort((a, b) => order(a).localeCompare(order(b))),
+    notable: picks(months.notable, "notable"),
+    careful: picks(months.careful, "careful"),
+    limitations: uniqueList([...months.limitations, ...extra.flatMap((analysis) => analysis.limitations)]),
+  };
+}
+
 /**
  * 범위 안 질문에 답할 재료를 고른다 (순수 함수).
  * - 장: 질문 분야와 이어지는 장만, 질문마다 돌아가며 최대 FOLLOWUP_MAX_CHAPTERS개(목차 순서). 장마다 작성 재료와 소질문 상태, 최종문 일부.
  *   9·10장 재료는 고정된 기간 재료로 생성 단계와 같은 규칙(buildTimingSections)으로 다시 만든다.
  * - 특정 장과 이어지지 않는 넓은 질문: 장별 핵심 답(overview)과 마지막 정리의 최종문 일부.
  * - 기간 자료: 9·10장과 이어지는 질문이 있을 때만.
+ * - 고정된 12개월 밖을 물은 기간(extra, extraTimingRequests로 고른 것): 10장 재료와 기간 자료에 그 기간의 달을 더한다.
  */
 export function followupMaterial(input: {
   readonly plan: MujinPlan;
@@ -268,6 +498,8 @@ export function followupMaterial(input: {
   readonly items: readonly QuestionItem[];
   readonly finals: ReadonlyMap<string, ScrollSectionContent>;
   readonly timing: MujinTimingBundle | null;
+  /** 고정된 12개월 밖을 물은 기간의 기간 분석 (prepareScrollExtraTiming). timing이 있을 때만 쓴다. */
+  readonly extra?: readonly TimingAnalysis[];
 }): FollowupMaterial {
   const { plan, product, finals } = input;
   const order = product.scroll.sections.map((section) => section.id);
@@ -284,9 +516,17 @@ export function followupMaterial(input: {
   }));
   const wanted = pickChapters(questions, order);
   const timingWanted = wanted.some((id) => TIMING_CHAPTERS.has(id));
-  const timingSections = timingWanted && input.timing
-    ? buildTimingSections({ plan, bundle: input.timing, product, startRef: lastRefNumber(plan) + 1 }).sections
-    : [];
+  const bundle = timingWanted ? input.timing : null;
+  const built = bundle ? buildTimingSections({ plan, bundle, product, startRef: lastRefNumber(plan) + 1 }) : null;
+  const extra = bundle ? (input.extra ?? []) : [];
+  // 따로 살펴본 기간의 재료는 10장 재료 뒤에 붙인다 (ref 번호는 9·10장 재료 다음부터).
+  const extraMaterials =
+    bundle && built && extra.length
+      ? extraTimingMaterials({ extra, startRef: built.nextRef, fixedLabel: bundle.months.window.label, referenceDate: bundle.referenceDate })
+      : [];
+  const timingSections = (built?.sections ?? []).map((section) =>
+    section.sectionId === "ch10" && extraMaterials.length ? { ...section, materials: [...section.materials, ...extraMaterials] } : section,
+  );
   const planned = new Map<string, MujinSectionPlan>([...plan.sections, ...timingSections].map((section) => [section.sectionId, section] as const));
 
   const chapterOf = (sectionId: string): MujinFollowupChapter => {
@@ -313,7 +553,7 @@ export function followupMaterial(input: {
       questions,
       chapters: wanted.map(chapterOf),
       overview: [],
-      timing: timingWanted && input.timing ? { luck: input.timing.luck, months: input.timing.months } : null,
+      timing: bundle ? { luck: bundle.luck, months: withExtraMonths(bundle.months, extra) } : null,
       sectionIds: wanted,
     };
   }
@@ -585,7 +825,15 @@ export async function answerMujinFollowup(input: {
 function analysisRecord(
   analysis: QuestionAnalysis,
   llmCalls: number,
-  extra: { readonly personaId: string; readonly personaVersion: string; readonly bundle: string; readonly timingReferenceDate: string | null; readonly sectionIds: readonly string[] },
+  extra: {
+    readonly personaId: string;
+    readonly personaVersion: string;
+    readonly bundle: string;
+    readonly timingReferenceDate: string | null;
+    readonly sectionIds: readonly string[];
+    /** 고정된 12개월 밖이라 따로 살펴본 분야·기간 (예: career:2028-07..2028-12). 질문 문장은 넣지 않는다. */
+    readonly extraPeriods: readonly string[];
+  },
 ) {
   return {
     version: analysis.version,
@@ -692,6 +940,8 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
     let result: { status: FollowupStatus; answer: string; refs: readonly string[] };
     let timingReferenceDate: string | null = null;
     let sectionIds: readonly string[] = [];
+    /** 고정된 12개월 밖이라 따로 계산(또는 저장된 것을 사용)한 분야·기간. */
+    let extraPeriods: readonly string[] = [];
     const items = inScopeItems(analysis);
     if (!items.length) {
       // 반응만 보낸 메시지는 이 풀이에서 앞서 몇 번 보냈는지 센다 (무료 횟수를 넘으면 차감).
@@ -704,7 +954,14 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
         timingWanted && context.referenceDate
           ? await deps.prepareTiming({ readingId, birth: context.birth, referenceDate: context.referenceDate, gender: context.plan.gender })
           : null;
-      const material = followupMaterial({ plan: context.plan, product, items, finals: context.finals, timing });
+      // 사용자가 말한 기간이 고정된 12개월 밖이면 그 기간만 같은 기준일·같은 계산으로 구해 저장하고 다시 쓴다 (묘묘와 같은 방식).
+      const extraRequests = timing ? extraTimingRequests({ items, window: timing.months.window, product }) : [];
+      const extra =
+        timing && extraRequests.length
+          ? await deps.prepareExtraTiming({ readingId, birth: context.birth, referenceDate: timing.referenceDate, requests: extraRequests })
+          : [];
+      extraPeriods = extraRequests.map((request) => `${request.domain}:${request.period.startMonth}..${request.period.endMonth}`);
+      const material = followupMaterial({ plan: context.plan, product, items, finals: context.finals, timing, extra });
       timingReferenceDate = material.timing ? (timing?.referenceDate ?? context.referenceDate) : null;
       sectionIds = material.sectionIds;
 
@@ -794,6 +1051,7 @@ export async function askScrollFollowup(input: FollowupInput, overrides: Partial
           bundle: bundle.id,
           timingReferenceDate,
           sectionIds,
+          extraPeriods,
         }),
       },
     });
@@ -931,6 +1189,7 @@ function resolveDeps(overrides: Partial<ScrollFollowupDeps>): ScrollFollowupDeps
     callStructured: overrides.callStructured ?? callStructured,
     callStructuredStream: overrides.callStructuredStream ?? callStructuredStream,
     prepareTiming: overrides.prepareTiming ?? ((timing) => prepareScrollTiming({ admin: adminClient(), ...timing })),
+    prepareExtraTiming: overrides.prepareExtraTiming ?? ((timing) => prepareScrollExtraTiming({ admin: adminClient(), ...timing })),
     modelId: overrides.modelId ?? (() => resolveModelId()),
     now: overrides.now ?? (() => Date.now()),
     today: overrides.today ?? (() => seoulDate()),

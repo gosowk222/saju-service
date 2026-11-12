@@ -24,6 +24,13 @@ export const SCROLL_QUESTION_KEY = "mujin-question:initial";
 /** 9·10장 기간 재료 저장 키. 기준일마다 하나다 (첫 유료 생성 때 고정한 기준일만 쓴다). */
 export const scrollTimingKey = (referenceDate: string) => `mujin-timing:${referenceDate}`;
 
+/**
+ * 후속 질문이 고정된 12개월 밖의 기간을 물었을 때 그 기간만 따로 계산한 기간 분석의 저장 키 (prepareScrollExtraTiming).
+ * 분야·기간(절기 기준 월 이름)·고정 기준일마다 하나다. 예: mujin-timing-extra:career:2028-07..2028-12@2026-11-12 (cache_key 120자 제한 안).
+ */
+export const scrollExtraTimingKey = (domain: string, startMonth: string, endMonth: string, referenceDate: string) =>
+  `mujin-timing-extra:${domain}:${startMonth}..${endMonth}@${referenceDate}`;
+
 /** 생성 실행기가 읽는 풀이 기록 칸. 소유자 확인을 거친 행만 돌려준다. */
 export interface ScrollReadingRecord {
   readonly id: string;

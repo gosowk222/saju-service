@@ -9,11 +9,21 @@ import type { LlmCallLog, StreamedResult, StructuredRequest, StructuredResult, c
 import { MUJIN_BUNDLES, MUJIN_BUNDLE_VERSION, type MujinQuestionOutput } from "@/server/llm/mujin-prompts";
 import { searchPlaces } from "@/server/places/search";
 import { computeMujinTiming } from "@/server/engine/mujin";
+import { analyzeTiming, type TimingRequest } from "@/server/engine/timing";
 import { createScrollReading } from "@/server/scroll/create";
 import { SCROLL_QUESTION_VERSION, prepareScrollQuestionsWith, type ScrollClassifier } from "@/server/scroll/questions";
 import { runScrollTier } from "@/server/scroll/runner";
-import { SCROLL_QUESTION_KEY, createScrollStore, getReferenceDate, loadFinalSections, loadScrollReading, loadTimingBundle, scrollTimingKey } from "@/server/scroll/store";
-import { prepareScrollTimingWith } from "@/server/scroll/timing";
+import {
+  SCROLL_QUESTION_KEY,
+  createScrollStore,
+  getReferenceDate,
+  loadFinalSections,
+  loadScrollReading,
+  loadTimingBundle,
+  scrollExtraTimingKey,
+  scrollTimingKey,
+} from "@/server/scroll/store";
+import { prepareScrollExtraTimingWith, prepareScrollTimingWith } from "@/server/scroll/timing";
 import { createTestDb, type DbRole, type TestDb } from "../support/test-db";
 
 /**
@@ -326,6 +336,29 @@ describe("분석 저장과 호출 기록", () => {
     expect(await loadTimingBundle(admin(), readingId, "2026-11-13")).toBeNull();
     const [row] = await sql<{ kind: string; cache_key: string }>(`select kind, cache_key from public.reading_analyses where reading_id = $1`, [readingId]);
     expect(row).toEqual({ kind: "timing", cache_key: scrollTimingKey("2026-11-12") });
+  });
+
+  it("후속 질문이 물은 12개월 밖의 기간은 분야·기간·고정 기준일 키로 한 번 계산해 저장하고 다시 계산하지 않는다", async () => {
+    const user = await member();
+    const readingId = await newReading(user);
+    const store = createScrollStore(admin());
+    const loaded = (await store.loadReading(readingId, user))!;
+    const compute = vi.fn(analyzeTiming);
+    const requests: TimingRequest[] = [{ domain: "career", period: { kind: "explicit", startMonth: "2028-07", endMonth: "2028-12" } }];
+    const input = { store, compute, readingId, birth: loaded.reading.birth_input, referenceDate: "2026-11-12", requests };
+
+    const [first] = await prepareScrollExtraTimingWith(input);
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(first).toMatchObject({ domain: "career", referenceDate: "2026-11-12", window: { kind: "explicit", startMonth: "2028-07", endMonth: "2028-12" } });
+    const [second] = await prepareScrollExtraTimingWith(input);
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+    // 서버 함수(save_reading_analysis)가 받은 키·종류. 키는 cache_key 120자 제한 안이다.
+    const rows = await sql<{ kind: string; cache_key: string }>(`select kind, cache_key from public.reading_analyses where reading_id = $1`, [readingId]);
+    expect(rows).toEqual([{ kind: "timing", cache_key: scrollExtraTimingKey("career", "2028-07", "2028-12", "2026-11-12") }]);
+    // 같은 기간이라도 다른 분야는 따로 계산한다.
+    await prepareScrollExtraTimingWith({ ...input, requests: [{ domain: "wealth", period: requests[0]!.period }] });
+    expect(compute).toHaveBeenCalledTimes(2);
   });
 
   it("질문 정리는 한 번만 부르고 정리된 문장만 저장한다 (원문 없음). 다시 쓸 때는 호출하지 않는다", async () => {
