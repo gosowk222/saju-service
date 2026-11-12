@@ -43,6 +43,8 @@ export async function gatewayStats(request: APIRequestContext) {
     lastOpenaiBody: Record<string, unknown>;
     /** OpenAI 요청마다 스키마 이름, 지시에 든 캐릭터 문답 예시 ID, 입력에 예시가 섞였는지 (누적). */
     openaiExamples: { schema: string; ids: string[]; inInput: boolean }[];
+    /** 묘묘 2-pass 호출 수와 단위별 요청 수 (누적, pass1 = messenger_draft, pass2 = messenger_voice). */
+    messenger: { calls: { pass1: number; pass2: number }; units: { pass1: Record<string, number>; pass2: Record<string, number> }; lastDraftUnits: string[] };
     mujin: MujinGatewayStats;
   };
 }

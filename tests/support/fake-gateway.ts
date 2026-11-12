@@ -47,6 +47,11 @@ const control = {
   mujinVoiceDelayMs: 0,
   /** mujinVoiceDelayMs를 적용할 장. null이면 모든 장을 늦춘다. */
   mujinVoiceDelaySections: null as string[] | null,
+  /**
+   * 메신저 생성 작업이 처음 시작할 때(claim_generation) 고정할 버전을 바꾼다. 배포 전에 이전 1-pass 버전(reading-3.2.0)으로 시작한 작업이
+   * 새 배포 뒤에도 그 방식으로 이어지는지 확인할 때 쓴다. 쓰는 테스트가 끝나면 null로 되돌린다 (이미 고정된 작업에는 영향이 없다).
+   */
+  claimPromptOverride: null as { prompt: string; schema: string } | null,
 };
 const stats = {
   /** /auth/v1/authorize에 들어온 제공자. 앱이 카카오 외의 로그인을 시작하지 않았는지 확인한다. */
@@ -70,6 +75,15 @@ const stats = {
    * sections: 장별 요청 수. Pass 1은 장 묶음 호출 안의 장을 하나씩 센다.
    * last: 마지막 입력의 구조 요약 (장 ID, 질문 ref, 표·기간 자료 유무 등). 생성 문장은 담지 않는다.
    */
+  /**
+   * 묘묘 2-pass 호출 수 (누적값). calls: 스키마별 (pass1 = messenger_draft, pass2 = messenger_voice).
+   * units: 단위별 요청 수. Pass 1은 묶음 호출 안의 단위를 하나씩 센다. lastDraftUnits: 마지막 Pass 1 요청의 단위 ID.
+   */
+  messenger: {
+    calls: { pass1: 0, pass2: 0 },
+    units: { pass1: {} as Record<string, number>, pass2: {} as Record<string, number> },
+    lastDraftUnits: [] as string[],
+  },
   mujin: {
     calls: { question: 0, pass1: 0, pass2: 0 },
     failed: { question: 0 },
@@ -236,6 +250,74 @@ function fixtureNarrationV2(input: NarrationV2Input) {
       })),
     })),
     closing: "[테스트 응답] 궁금한 점은 편하게 물어봐 주세요.",
+  };
+}
+
+// ─── 묘묘 2-pass 테스트 응답 (messenger_draft, messenger_voice) ─────────────────────────────
+// 스키마 이름은 src/server/llm/messenger-prompts.ts의 messenger_draft(Pass 1), messenger_voice(Pass 2)다.
+// 최종 말풍선 문구는 1-pass 테스트 응답(fixtureNarrationV2)과 같게 만든다: 초안 문단에 그 문구를 쓰고 Pass 2가 그대로 옮긴다.
+// 그래서 메신저 화면을 보는 기존 브라우저 테스트가 생성 방식과 관계없이 같은 문구를 확인한다.
+
+type MessengerDraftInput = {
+  units: { unitId: string; kind: "focus" | "topic" }[];
+  facts: { ref: string }[];
+  questions: { ref: string; summary: string; timingId: string | null }[];
+  timing: { id: string; months: { ref: string }[] }[];
+  topics: { topicId: string; target: number; statements: { ref: string }[] }[];
+};
+
+type MessengerVoiceInput = {
+  address: { call: string; name: string };
+  unit: { unitId: string; kind: "focus" | "topic" };
+  draft: { coreAnswer: string; points: { kind: string; refs: string[]; text: string }[] };
+  frame: { opening: boolean; closing: boolean };
+};
+
+function fixtureMessengerDraft(input: MessengerDraftInput) {
+  const firstRef = input.topics.find((topic) => topic.statements.length)?.statements[0]?.ref ?? input.facts[0]!.ref;
+  return {
+    units: input.units.map((unit) => {
+      if (unit.kind === "focus") {
+        return {
+          unitId: unit.unitId,
+          coreAnswer: "[테스트 응답] 궁금한 점의 핵심 답이다.",
+          points: input.questions.flatMap((question) => {
+            const ref = input.timing.find((entry) => entry.id === question.timingId)?.months[0]?.ref ?? firstRef;
+            return [1, 2].map((index) => ({ kind: "explanation", refs: [question.ref, ref], text: `[테스트 응답] "${question.summary}"에 대한 ${index}번째 답이에요.` }));
+          }),
+          notes: ["[테스트 응답] 궁금한 점 요약"],
+        };
+      }
+      const topic = input.topics.find((entry) => entry.topicId === unit.unitId)!;
+      return {
+        unitId: unit.unitId,
+        coreAnswer: `[테스트 응답] ${topic.topicId} 주제의 핵심 답이다.`,
+        points: Array.from({ length: Math.max(topic.target, 3) }, (_, index) => ({
+          kind: "explanation",
+          refs: [topic.statements[index % Math.max(topic.statements.length, 1)]?.ref ?? input.facts[0]!.ref],
+          text:
+            index === 0
+              ? `[테스트 응답] ${topic.topicId} 주제의 첫 설명이에요. 강조 확인 문구는 굵게 보여야 해요.`
+              : `[테스트 응답] ${topic.topicId} 주제의 ${index + 1}번째 설명이에요. 긴 문장이 자연스럽게 줄바꿈되는지 확인하기 위한 문구도 함께 들어 있어요.`,
+        })),
+        notes: [`[테스트 응답] ${topic.topicId} 요약`],
+      };
+    }),
+  };
+}
+
+function fixtureMessengerVoice(input: MessengerVoiceInput) {
+  return {
+    opening: input.frame.opening ? `[테스트 응답] 안녕하세요, ${input.address.name} 님.` : "",
+    angle: "",
+    bubbles: input.draft.points.map((point, index) => ({
+      kind: point.kind,
+      refs: point.refs,
+      text: point.text,
+      // 굵게 보일 구절은 따로 받고 서버가 표시를 붙인다 (1-pass 테스트 응답과 같다).
+      highlight: input.unit.kind === "topic" && index === 0 ? "강조 확인 문구" : "",
+    })),
+    closing: input.frame.closing ? "[테스트 응답] 궁금한 점은 편하게 물어봐 주세요." : "",
   };
 }
 
@@ -528,6 +610,21 @@ function handleOpenai(body: { model: string; instructions?: string; input: strin
     if (mode === "followup-error" && input.mode === "followup") return send(res, 400, { error: { message: "fail" } });
     return send(res, 200, openaiResponse(JSON.stringify(fixtureQuestion(input as { text: string })), body.model));
   }
+  if (schema === "messenger_draft") {
+    const draftInput = input as unknown as MessengerDraftInput;
+    stats.messenger.calls.pass1 += 1;
+    stats.messenger.lastDraftUnits = draftInput.units.map((unit) => unit.unitId);
+    for (const unit of draftInput.units) stats.messenger.units.pass1[unit.unitId] = (stats.messenger.units.pass1[unit.unitId] ?? 0) + 1;
+    const text = JSON.stringify(fixtureMessengerDraft(draftInput));
+    if (body.stream) return void sendStream(res, text, body.model);
+    return send(res, 200, openaiResponse(text, body.model));
+  }
+  if (schema === "messenger_voice") {
+    const voiceInput = input as unknown as MessengerVoiceInput;
+    stats.messenger.calls.pass2 += 1;
+    stats.messenger.units.pass2[voiceInput.unit.unitId] = (stats.messenger.units.pass2[voiceInput.unit.unitId] ?? 0) + 1;
+    return send(res, 200, openaiResponse(JSON.stringify(fixtureMessengerVoice(voiceInput)), body.model));
+  }
   if (schema === "saju_narration_v2") {
     stats.narrationCalls += 1;
     stats.lastNarrationInput = input;
@@ -616,6 +713,10 @@ async function main() {
 
   async function handleRpc(fn: string, body: Record<string, unknown>, req: IncomingMessage, res: ServerResponse) {
     const { role, userId } = identify(req);
+    // 이전 1-pass 버전으로 시작한 작업을 흉내 낸다 (claimPromptOverride). claim_generation은 처음 시작할 때만 버전을 고정한다.
+    if (fn === "claim_generation" && control.claimPromptOverride) {
+      body = { ...body, p_prompt_version: control.claimPromptOverride.prompt, p_schema_version: control.claimPromptOverride.schema };
+    }
     const keys = Object.keys(body);
     const args = keys.map((key, index) => `${key} := $${index + 1}`).join(", ");
     const params = keys.map((key) => {
