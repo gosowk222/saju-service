@@ -31,12 +31,22 @@
 
 | 이용권 (`free_tickets.status`) | 생성 작업 (`generation_jobs.status`) | 화면 상태 | 동선 |
 | --- | --- | --- | --- |
-| `available` | 없음 | 사용 가능 | 무료 이용권으로 시작하기 |
+| `available` | 없음 | 사용 가능 | 무료 이용권으로 시작하기. 대상 상품이 둘 이상이면 탐색 화면(`/products`)에서 고르고, 하나면 그 상품 상세로 간다 |
 | `redeemed` | `queued`, `running` | 특정 풀이에 연결되어 생성 중 | 이어서 보기 |
-| `redeemed` | `failed` | 생성 실패, 재시도 가능 | 추가 차감 없이 다시 시도 |
+| `redeemed` | `failed` | 생성 실패, 재시도 가능 | 추가 차감 없이 다시 시도 (무진은 풀이 화면의 오류 칸 '다시 시도하기') |
 | `completed` | `completed` | 생성 완료 | 내 풀이 보기, 보관함 |
 
 이용권을 다 쓴 회원이 새 맛보기를 만들면 기존 풀이와 보관함으로 안내한다. 결제 모드라면 결제 버튼도 함께 보인다.
+
+홈·마이의 이용권 카드 문구 (`src/components/free-ticket-card.tsx`). 2026-11-12에 대상이 묘묘·무진 둘이 되면서 사용 가능 상태의 문구와 이동 주소를 바꿨다.
+
+| 상태 | 문구 | 이동 |
+| --- | --- | --- |
+| 사용 가능 (바꾸기 전, 대상 묘묘 하나) | "묘묘의 사주 참견을 무료로 받아 보세요" / "결제 없이 이용권 1장으로 메신저 풀이, 후속 질문, 보관함, PDF까지 받아요." | `/products/first-overview` |
+| 사용 가능 (지금, 대상 둘) | "무료 이용권으로 풀이를 받아 보세요" / "결제 없이 이용권 1장으로 풀이 하나를 받고 후속 질문, 보관함, PDF까지 이용해요. 받을 수 있는 풀이: 묘묘의 사주 참견, 무진의 종합 사주." | `/products` (대상이 하나로 돌아가면 그 상품 상세) |
+| 생성 중, 묘묘 | "화면을 닫아도 이어서 만들어요." (그대로) | 그 풀이 |
+| 생성 중, 무진 | "풀이 화면을 다시 열면 이어서 써요." 무진은 생성 요청 하나가 서버의 시간 예산(270초) 안에서만 쓰고 남은 장이 있으면 반납한다. 그 뒤에는 풀이 화면이 다시 요청해야 이어 쓰므로 화면을 닫아도 계속 만든다고 하지 않는다 | 그 풀이 |
+| 실패·완료 | 상품과 관계없이 같다 | 그 풀이, 보관함 |
 
 ## 지급
 
@@ -104,6 +114,7 @@ select public.grant_free_tickets_to_kakao_members('free-trial-2026-11');
 - 타임아웃만으로 이용권을 반환하지 않는다. 이전 요청이 아직 실행 중일 수 있다.
 - 홈·마이의 이용권 카드와 보관함에서 진행 중이거나 실패한 풀이로 돌아갈 수 있다.
 - 후속 질문 사용 횟수는 `question_usage`에 쌓이므로 재시도·재로그인으로 초기화되지 않는다.
+- 무진(족자 상품)은 장마다 최종문을 저장해 바로 보여 주고, 실패하면 마치지 못한 장만 다시 쓴다. 유료 단계 시작 상한은 `SCROLL_SETTINGS.paidMaxRuns`(20, 시간 예산마다 반납·이어받기를 해서 묘묘보다 크다), 장마다 초안(Pass 1)·문장(Pass 2) 시도 상한은 3이다 (`src/server/scroll/config.ts`). 단계가 실패하면 끝나지 않은 칸이 모두 오류로 보이고 그 칸의 '다시 시도하기'로 추가 차감 없이 다시 시도한다.
 
 ## 복구할 수 없는 실패의 반환 (서버 관리용)
 
@@ -130,6 +141,44 @@ select public.restore_free_ticket('<ticket_id>', '<사유: 예) 생성 시도 �
 - 닫힌 작업은 늦게 끝난 이전 요청이 완료로 바꾸지 못한다 (`complete_generation`이 `running`만 완료). 반환과 늦은 완료가 겹쳐도 둘 중 하나만 반영된다.
 - 닫힌 풀이에는 이용권도 결제도 다시 쓰지 않는다 (`reading_closed`). 맛보기 화면이 "새로 만들기"(같은 정보가 채워진 입력 확인)로 안내한다.
 - 사유와 당시 작업 상태는 `free_ticket_events`(`restored`)에 남는다.
+
+### 족자 상품(무진)의 반환 기준
+
+`restore_free_ticket`은 상품 형식을 모른다. 작업 완료(`generation_jobs.status = 'completed'`)나 이용권 완료만 "제공 완료"(`already_delivered`)로 본다 (묘묘 기준, 함수는 바꾸지 않는다). 그런데 무진은 유료 장(2~10장과 마지막 정리, 10칸)을 다 쓸 때마다 `reading_sections`에 저장해 바로 보여 준다. 한 장이 시도 상한을 넘어 작업이 재시도 불가 실패(`units_failed`)로 끝나도, 그 전에 다른 유료 장 대부분을 이미 읽었을 수 있다. 그래서 무진 풀이는 반환하기 전에 이미 보여 준 유료 장 수를 확인하고 아래처럼 판단한다.
+
+```sql
+-- 1) 이용권·작업·상품과 이미 보여 준 유료 장(유료 최종문) 수
+select t.id as ticket_id, t.status as ticket_status, t.reading_id, r.product_id,
+  j.status as job_status, j.attempts, j.error_code, j.error_retryable, j.lease_until,
+  (select count(*) from public.reading_sections s where s.reading_id = t.reading_id and s.tier = 'paid') as paid_finals
+from public.free_tickets t
+join public.readings r on r.id = t.reading_id
+left join public.generation_jobs j on j.reading_id = t.reading_id
+where t.id = '<ticket_id>';
+
+-- 2) 장별 진행 (초안 본문은 보지 않는다). 실패 장의 단계(draft = Pass 1, voice = Pass 2)와 시도 수
+select unit_id, tier, status, draft_attempts, voice_attempts, error_stage, error_code, error_retryable, updated_at
+from public.reading_units
+where reading_id = '<reading_id>'
+order by tier, unit_id;
+```
+
+| 확인 결과 | 판단 |
+| --- | --- |
+| `paid_finals` = 0 (유료 장을 하나도 보여 주지 않음)이고 다시 시도할 수 없음 | 묘묘와 같이 반환한다 |
+| `paid_finals`가 1 이상 (일부 장을 이미 보여 줌) | 먼저 실패 장 다시 시도를 안내한다. 작업이 `failed`이고 `error_retryable`이 거짓이 아니며 `attempts`가 20 미만이면 회원이 풀이 화면의 오류 칸에서 '다시 시도하기'로 마치지 못한 장만 추가 차감 없이 다시 쓴다. 다시 시도할 수 없을 때(장 시도 수 3회 소진, 시작 상한 20회, 설정 오류)의 반환은 운영 판단이다. 반환하면 RLS가 이미 본 유료 장을 다시 숨기지만 이용권은 사용 가능으로 돌아가 다른 풀이(묘묘 또는 새 무진)에 쓰인다. 반환한다면 사유에 보여 준 장 수를 적는다 (예: '유료 장 9/10 제공 뒤 8장 실패, 문의 #번호') |
+| `paid_finals` = 10 (유료 장을 모두 보여 줌) | 사실상 제공이 끝났다. 반환하지 않는다. 작업이 `completed`가 아니면 마무리 저장이 실패한 경우이므로 풀이 화면의 다시 시도로 완료 처리한다 |
+
+- 장 시도 수를 초기화하는 운영 함수는 없다. `reading_units`·`reading_sections`를 SQL로 직접 고치지 않는다 (쓰기는 서버 함수로만 한다).
+- 무료 단계(`reading_free_runs`)는 이용권과 관계없다. 반환은 유료 작업과 이용 권한만 닫는다.
+
+```sql
+-- 3) 반환 뒤 확인: 이용권 사용 가능, 작업 cancelled, 권한 회수, 기록
+select status, reading_id, restore_count from public.free_tickets where id = '<ticket_id>';
+select status, error_code from public.generation_jobs where reading_id = '<reading_id>';
+select count(*) as entitlements from public.entitlements where reading_id = '<reading_id>';
+select kind, detail, created_at from public.free_ticket_events where ticket_id = '<ticket_id>' order by id desc limit 3;
+```
 
 ## 결제 모드로 돌아가기
 
