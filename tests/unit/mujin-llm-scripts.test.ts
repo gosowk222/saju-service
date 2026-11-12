@@ -575,7 +575,8 @@ describe("Pass 2 장별 요청", () => {
 
 describe("운영 실행기(runScrollTier)와 같은 요청·같은 검사", () => {
   it.each(["side-job-money", "heavy-loss", "hour-unknown"])("%s: Pass 1 묶음 요청과 Pass 2 장 요청이 운영 실행기가 실제로 보내는 것과 글자까지 같다", async (id) => {
-    const evaluation = await evaluationOf(id);
+    // Pass 2 문답 예시는 운영처럼 풀이 ID를 순서 값으로 고른다. 같은 값을 주면 지시(예시 블록 포함)까지 글자가 같다.
+    const evaluation: MujinEvaluation = { ...(await evaluationOf(id)), exampleSeed: READING_ID };
     const production = await runProduction(evaluation);
     expect({ free: production.free, paid: production.paid, failures: production.store.failures }).toEqual({ free: "completed", paid: "completed", failures: [] });
 
@@ -839,16 +840,20 @@ describe("명령 (CLI): 모델을 부르지 않는 스크립트", () => {
     expect(unknown.stdout.trim()).toBe("알 수 없는 상품: other (--product=first-overview|mujin-overview)");
   }, 240_000);
 
-  it("--product를 주지 않으면 묘묘 내보내기가 그대로다 (파일 이름·지시·입력·형식·요청 본문)", () => {
+  it("--product를 주지 않으면 묘묘 내보내기가 그대로다 (파일 이름·지시·입력·형식·요청 본문, 예시 보고서)", () => {
     const dir = tempDir();
     const result = runScript("llm-export", ["--case=job-seeking", "--date=2026-11-12", `--out=${dir}`]);
     expect(result.status, result.stderr).toBe(0);
-    const stem = "2026-11-12_job-seeking_reading-3.1.0";
-    expect(readdirSync(dir).sort()).toEqual([`${stem}.input.json`, `${stem}.instructions.txt`, `${stem}.request.json`, `${stem}.schema.json`]);
+    const stem = "2026-11-12_job-seeking_reading-3.2.0";
+    expect(readdirSync(dir).sort()).toEqual([`${stem}.examples.md`, `${stem}.input.json`, `${stem}.instructions.txt`, `${stem}.request.json`, `${stem}.schema.json`]);
     const entry = EVALUATION_CASES.find((item) => item.id === "job-seeking")!;
     const { plan } = casePlan(entry, "2026-11-12");
     const persona = findPersona("myomyo", personaVersionFor(CURRENT_READING_PROMPT))!;
-    const { instructions, input } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona, previousIssues: [] });
+    // 내보내기는 사례 ID를 예시 순서 값으로 쓴다 (운영은 풀이 ID).
+    const { instructions, input, examples } = getReadingPrompt(CURRENT_READING_PROMPT)({ plan, persona, previousIssues: [], exampleSeed: "llm-export:job-seeking" });
+    const report = readFileSync(path.join(dir, `${stem}.examples.md`), "utf8");
+    for (const id of examples!.ids) expect(report).toContain(`| ${id} |`);
+    expect(report).toContain("--prompt=reading-3.1.0");
     const schema = getNarrationSchema(NARRATION_SCHEMA_VERSION);
     const read = (suffix: string) => readFileSync(path.join(dir, `${stem}${suffix}`), "utf8");
     expect(read(".instructions.txt")).toBe(instructions);
@@ -868,7 +873,29 @@ describe("명령 (CLI): 모델을 부르지 않는 스크립트", () => {
         2,
       ),
     );
-    expect(Object.keys(JSON.parse(result.stdout.trim()) as object)).toEqual(["case", "note", "prompt", "personaVersion", "referenceDate", "instructionsChars", "inputChars", "topics", "questions", "files"]);
+    expect(Object.keys(JSON.parse(result.stdout.trim()) as object)).toEqual([
+      "case",
+      "note",
+      "prompt",
+      "personaVersion",
+      "referenceDate",
+      "instructionsChars",
+      "inputChars",
+      "topics",
+      "questions",
+      "examples",
+      "files",
+    ]);
+    expect((JSON.parse(result.stdout.trim()) as { examples: string[] }).examples).toEqual(examples!.ids);
+
+    // 예시 없는 비교용 지시(reading-3.1.0)는 같은 입력이고, 지시는 예시 블록 앞까지 글자가 같다.
+    const baseline = runScript("llm-export", ["--case=job-seeking", "--date=2026-11-12", `--out=${dir}`, "--prompt=reading-3.1.0"]);
+    expect(baseline.status, baseline.stderr).toBe(0);
+    const before = "2026-11-12_job-seeking_reading-3.1.0";
+    expect(existsSync(path.join(dir, `${before}.examples.md`))).toBe(false);
+    const baseInstructions = readFileSync(path.join(dir, `${before}.instructions.txt`), "utf8");
+    expect(instructions.startsWith(`${baseInstructions}\n\n[캐릭터 문답 예시: 묘묘]`)).toBe(true);
+    expect(readFileSync(path.join(dir, `${before}.input.json`), "utf8")).toBe(read(".input.json"));
   }, 120_000);
 
   it("--product를 주지 않은 묘묘 읽기의 사용법 안내가 그대로다", () => {

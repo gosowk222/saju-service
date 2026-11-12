@@ -9,6 +9,8 @@
  *   3. 단계별 장 계획: 유료는 기간 재료(computeMujinTiming, 기준일 고정) → 9·10장(buildTimingSections) → 개인화(personalizeSections),
  *      무료는 개인화만. 무료 단계의 Pass 1 입력에는 무료 장에 이어진 질문만 넣는다.
  *   4. Pass 1 묶음 요청(buildDraftRequest). 받은 초안이 있으면 장별 Pass 2 요청(buildVoiceRequest)과 마지막 정리의 Pass 1 요청.
+ *      Pass 2 요청에는 운영과 같은 함수로 고른 무진 문답 예시가 지시 끝에 들어간다 (묶음 mujin-1.1.0부터). 장마다 넣은 예시 ID는 00-guide.md에 적는다.
+ *      예시 없는 비교용 요청은 --bundle=mujin-1.0.0으로 만든다 (기본 폴더 이름 끝에 묶음 ID가 붙는다. Pass 1 초안은 --draft로 같은 것을 읽힌다).
  *   5. 받은 결과는 운영 검사(checkDraftSection, checkVoiceSection)로 읽고, 장마다 초안과 최종문을 나란히 적는다.
  * 운영과 다른 점(질문 정리 고정, 기준일 고정, 스트림 대신 한 번에 받음, 앞 묶음 초안이 없을 때의 장면 요약, 다시 쓰기 요청 없음)은
  * 안내 파일(00-guide.md)과 docs/personas/mujin-evaluation.md 3절에 적는다. 검사 통과는 형식·근거 확인일 뿐 문체 품질 판정이 아니다.
@@ -39,6 +41,7 @@ import type { ScrollDraftBatch, ScrollSectionSpec } from "@/domain/products/type
 import { analyzeMujinBirth, computeMujinTiming } from "@/server/engine/mujin";
 import type { LlmCallRecorder } from "@/server/llm/call-log";
 import { LLM_SETTINGS, type LlmTaskSettings } from "@/server/llm/config";
+import { promptExampleConfig } from "@/server/llm/example-block";
 import {
   MUJIN_BUNDLES,
   MUJIN_BUNDLE_VERSION,
@@ -46,6 +49,7 @@ import {
   buildDraftRequest,
   buildMujinQuestionRequest,
   buildVoiceRequest,
+  findMujinBundle,
   type BuiltRequest,
   type MujinBundle,
   type MujinDraftOutput,
@@ -93,6 +97,11 @@ export interface MujinEvaluation {
   readonly entry: MujinEvaluationCase;
   readonly referenceDate: string;
   readonly bundle: MujinBundle;
+  /**
+   * Pass 2 문답 예시를 고르는 순서 값. 운영은 풀이 ID를 쓰고, 이 도구는 사례 ID로 만든다 (llm-export:<사례>).
+   * 같은 사례면 늘 같은 예시가 나온다. 운영과 글자까지 같은 요청을 만들려면 그 풀이 ID를 넣는다.
+   */
+  readonly exampleSeed: string;
   readonly persona: Persona;
   readonly base: ReturnType<typeof analyzeMujinBirth>;
   readonly timing: MujinTimingBundle;
@@ -201,9 +210,15 @@ function buildStage(tier: ScrollTier, plan: MujinPlan, timing: MujinTimingBundle
  * 사례 하나의 작성 계획을 운영과 같은 함수로 만든다 (엔진 계산만, 모델 호출 없음). 같은 사례·기준일이면 늘 같은 계획이 나온다.
  * 기준일은 9·10장 기간 재료와 질문 정리의 기준이다 (운영: 질문 정리는 무료 생성 날, 기간 재료는 첫 유료 생성 날).
  */
-export async function buildMujinEvaluation(entry: MujinEvaluationCase, referenceDate: string = MUJIN_DEFAULT_REFERENCE_DATE): Promise<MujinEvaluation> {
+export async function buildMujinEvaluation(
+  entry: MujinEvaluationCase,
+  referenceDate: string = MUJIN_DEFAULT_REFERENCE_DATE,
+  options: { readonly bundleId?: string; readonly exampleSeed?: string } = {},
+): Promise<MujinEvaluation> {
   if (!isReferenceDate(referenceDate)) throw new Error(`기준일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다: ${referenceDate}`);
-  const bundle = MUJIN_BUNDLES[MUJIN_BUNDLE_VERSION]!;
+  // 묶음을 주지 않으면 운영의 현재 묶음. 예시 없는 비교용 요청은 이전 묶음(mujin-1.0.0)을 준다 (--bundle).
+  const bundle = findMujinBundle(options.bundleId ?? MUJIN_BUNDLE_VERSION);
+  if (!bundle) throw new Error(`알 수 없는 묶음입니다: ${options.bundleId} (${Object.keys(MUJIN_BUNDLES).join("|")})`);
   const persona = findPersona(PRODUCT.personaId, bundle.personaVersion);
   if (!persona) throw new Error(`무진 설정을 찾지 못했습니다: ${PRODUCT.personaId} ${bundle.personaVersion}`);
   // 풀이 기록을 만들 때(src/server/scroll/create.ts)처럼 지금의 나를 같은 형식으로 다시 확인한다.
@@ -215,6 +230,7 @@ export async function buildMujinEvaluation(entry: MujinEvaluationCase, reference
     entry,
     referenceDate,
     bundle,
+    exampleSeed: options.exampleSeed ?? `llm-export:${entry.id}`,
     persona,
     base,
     timing,
@@ -316,6 +332,9 @@ function voiceRequestFor(evaluation: MujinEvaluation, section: MujinSectionPlan,
     draft,
     // 운영과 같이 지금의 나와 이 장의 사용자 사실을 넘긴다 (검사 기준과 같은 사실).
     userFacts: [...plan.nowFacts, ...section.materials.filter((material) => material.kind === "user-fact")],
+    // 운영 실행기와 같은 예시 선택 조건 (mujin-voice-1.1.0부터): 출생 시각과 순서 값.
+    hourKnown: plan.hourKnown,
+    exampleSeed: evaluation.exampleSeed,
   });
 }
 
@@ -743,8 +762,12 @@ function versionLines(evaluation: MujinEvaluation): string[] {
   const { bundle, base, timing } = evaluation;
   const draft = LLM_SETTINGS.tasks.mujinDraft;
   const voice = LLM_SETTINGS.tasks.mujinVoice;
+  const examples = promptExampleConfig(bundle.voicePrompt);
   return [
     `- 묶음 \`${bundle.id}\`: Pass 1 \`${bundle.draftPrompt}\` / \`${bundle.draftSchema}\`, Pass 2 \`${bundle.voicePrompt}\` / \`${bundle.voiceSchema}\`, 질문 정리 \`${bundle.questionPrompt}\`, 무진 설정 ${evaluation.persona.version}, 해석 지침 \`${bundle.guideVersion}\``,
+    examples
+      ? `- Pass 2 문답 예시: 카탈로그 \`${examples.catalogVersion}\`, 선택 정책 \`${examples.policyVersion}\`, 순서 값 \`${evaluation.exampleSeed}\` (장마다 넣은 ID는 아래 'Pass 2 문답 예시' 표). Pass 1에는 넣지 않는다`
+      : "- Pass 2 문답 예시: 없음 (이 묶음은 예시를 쓰지 않는 비교용이다)",
     `- 상품 \`${PRODUCT.id}\` ${PRODUCT.version}, 작성 계획 \`${base.plan.planVersion}\`, 개인화 \`${MUJIN_PERSONALIZE_VERSION}\`, 기간 계획 \`${MUJIN_TIMING_PLAN_VERSION}\`, 기간 재료 \`${timing.version}\` (기준일 ${timing.referenceDate})`,
     `- 운영과 같은 호출 설정: Pass 1 추론 ${draft.reasoningEffort}·출력 한도 ${draft.maxOutputTokens.toLocaleString("ko-KR")}, Pass 2 추론 ${voice.reasoningEffort}·출력 한도 ${voice.maxOutputTokens.toLocaleString("ko-KR")} (src/server/llm/config.ts)`,
   ];
@@ -752,9 +775,9 @@ function versionLines(evaluation: MujinEvaluation): string[] {
 
 // ─── 내보내기 (llm:export) ─────────────────────────────────────────────────
 
-/** 사례 폴더의 기본 위치. */
-export function defaultCaseDir(entry: MujinEvaluationCase, referenceDate: string): string {
-  return path.resolve(MUJIN_PROMPTS_ROOT, `${referenceDate}_${entry.id}`);
+/** 사례 폴더의 기본 위치. 현재 묶음이 아니면(예시 없는 비교용 mujin-1.0.0 등) 폴더 이름 끝에 묶음 ID를 붙여 결과가 섞이지 않게 한다. */
+export function defaultCaseDir(entry: MujinEvaluationCase, referenceDate: string, bundleId: string = MUJIN_BUNDLE_VERSION): string {
+  return path.resolve(MUJIN_PROMPTS_ROOT, `${referenceDate}_${entry.id}${bundleId === MUJIN_BUNDLE_VERSION ? "" : `_${bundleId}`}`);
 }
 
 function writeRequestFiles(dir: string, stem: string, request: Pick<BuiltRequest<unknown>, "instructions" | "input" | "schemaName" | "jsonSchema">, task: LlmTaskSettings): string[] {
@@ -848,9 +871,30 @@ export function writeMujinExport(evaluation: MujinEvaluation, outputs: LoadedOut
   return { dir, written, ready };
 }
 
+/**
+ * 장마다 Pass 2 지시에 넣은 문답 예시 (운영과 같은 함수로 고른 것). 초안이 있는 장만 요청이 있어 표에 나온다.
+ * 예시는 `p2-<장>.instructions.txt` 맨 끝의 [캐릭터 문답 예시: 무진 도사] ~ [캐릭터 문답 예시 끝] 블록에 있다.
+ */
+function exampleLines(evaluation: MujinEvaluation, outputs: MujinOutputs): string[] {
+  if (!promptExampleConfig(evaluation.bundle.voicePrompt)) return [];
+  const requests = pass2Requests(evaluation, outputs);
+  return [
+    "## Pass 2 문답 예시",
+    "",
+    "각 장의 `p2-<장>.instructions.txt` 맨 끝 `[캐릭터 문답 예시: 무진 도사]` 블록에 들어간다. 입력(`*.input.json`)에는 예시가 없다.",
+    "재작성 예시(mujin-rw-…)는 중립 초안 → 무진의 글 한 쌍이고, 나머지는 원문 문답이다. 같은 장은 재시도해도 같은 예시를 받는다.",
+    "",
+    ...(requests.length
+      ? ["| 장 | 넣은 예시 ID |", "| --- | --- |", ...requests.map((entry) => `| ${cell(sectionName(entry.sectionId))} | ${entry.request.examples?.ids.join(", ") ?? "없음"} |`)]
+      : ["아직 Pass 2 요청이 없다 (Pass 1 초안이 있어야 만든다)."]),
+    "",
+  ];
+}
+
 function commandLine(script: "llm:export" | "llm:render", evaluation: MujinEvaluation, dir: string): string {
   const parts = [`npm run ${script} '--' --product=${PRODUCT.id} --case=${evaluation.entry.id} --reference=${evaluation.referenceDate}`];
-  if (path.resolve(dir) !== defaultCaseDir(evaluation.entry, evaluation.referenceDate)) parts.push(`--dir="${dir}"`);
+  if (evaluation.bundle.id !== MUJIN_BUNDLE_VERSION) parts.push(`--bundle=${evaluation.bundle.id}`);
+  if (path.resolve(dir) !== defaultCaseDir(evaluation.entry, evaluation.referenceDate, evaluation.bundle.id)) parts.push(`--dir="${dir}"`);
   return parts.join(" ");
 }
 
@@ -874,6 +918,7 @@ function guideMarkdown(evaluation: MujinEvaluation, outputs: LoadedOutputs, dir:
     "",
     ...versionLines(evaluation),
     "",
+    ...exampleLines(evaluation, outputs),
     "## 진행 상황",
     "",
     "결과 파일은 사용자가 플레이그라운드 결과를 저장하는 이름이다. 이 이름이어야 다음 명령이 읽는다.",
@@ -1050,8 +1095,9 @@ export function renderMujinComparison(evaluation: MujinEvaluation, outputs: Load
 function usage(script: "llm:export" | "llm:render"): string {
   const extra = script === "llm:export" ? "[--draft=<Pass 1 결과 파일·폴더, 쉼표로 여러 개>]" : "[--draft=<경로>] [--voice=<Pass 2 결과 파일·폴더>] [--out=<비교 문서 .md>]";
   return [
-    `사용법: npm run ${script} '--' --product=${PRODUCT.id} --case=<${MUJIN_EVALUATION_CASES.map((entry) => entry.id).join("|")}> [--reference=YYYY-MM-DD (기본 ${MUJIN_DEFAULT_REFERENCE_DATE})] [--dir=<사례 폴더>] ${extra}`,
-    `사례 폴더 기본값: ${MUJIN_PROMPTS_ROOT}/<기준일>_<사례> (git에 올리지 않음)`,
+    `사용법: npm run ${script} '--' --product=${PRODUCT.id} --case=<${MUJIN_EVALUATION_CASES.map((entry) => entry.id).join("|")}> [--reference=YYYY-MM-DD (기본 ${MUJIN_DEFAULT_REFERENCE_DATE})] [--bundle=<${Object.keys(MUJIN_BUNDLES).join("|")}> (기본 ${MUJIN_BUNDLE_VERSION})] [--dir=<사례 폴더>] ${extra}`,
+    `사례 폴더 기본값: ${MUJIN_PROMPTS_ROOT}/<기준일>_<사례>[_<현재가 아닌 묶음>] (git에 올리지 않음)`,
+    "예시 없는 비교용 Pass 2 요청: --bundle=mujin-1.0.0 --draft=<현재 묶음 사례 폴더> (같은 Pass 1 초안으로 만든다)",
   ].join("\n");
 }
 
@@ -1073,9 +1119,14 @@ async function cliContext(script: "llm:export" | "llm:render", argv: readonly st
     console.log(`기준일은 YYYY-MM-DD 형식의 실제 날짜여야 합니다: ${referenceDate}`);
     return null;
   }
-  const evaluation = await buildMujinEvaluation(entry, referenceDate);
+  const bundleId = readOption("bundle", argv) ?? MUJIN_BUNDLE_VERSION;
+  if (!findMujinBundle(bundleId)) {
+    console.log(`알 수 없는 묶음입니다: ${bundleId} (--bundle=${Object.keys(MUJIN_BUNDLES).join("|")})`);
+    return null;
+  }
+  const evaluation = await buildMujinEvaluation(entry, referenceDate, { bundleId });
   const dirOption = readOption("dir", argv);
-  const dir = dirOption ? path.resolve(dirOption) : defaultCaseDir(entry, referenceDate);
+  const dir = dirOption ? path.resolve(dirOption) : defaultCaseDir(entry, referenceDate, bundleId);
   const outputs = loadCaseOutputs(evaluation, { dir, draft: readOption("draft", argv), voice: script === "llm:render" ? readOption("voice", argv) : undefined });
   return { evaluation, dir, outputs };
 }
