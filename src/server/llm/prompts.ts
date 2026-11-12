@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { addressFor, type Persona } from "@/domain/personas";
+import { seriousSignal, topicOfDomain, topicOfProductTopic, uniqueTopics, type ExampleRequest, type ExampleTopic } from "@/domain/personas/examples";
 import type { ProductDefinition } from "@/domain/products/types";
 import { READING_GUIDE } from "@/domain/reading/guide";
 import { ClassifierOutputSchema, GLOBAL_DOMAIN_GUIDE, INTENT_GUIDE, QUESTION_DOMAINS, QUESTION_INTENTS, REACTIONS, type ClassifierOutput, type Reaction } from "@/domain/reading/question";
@@ -16,16 +17,21 @@ import type {
   TimingPlanV2,
   UserContextStatement,
 } from "@/domain/reading/types";
+import { buildExampleBlock, usesExamples, type ExampleRecord } from "./example-block";
 
 /**
  * 프롬프트와 출력 형식은 버전별로 보관한다. 작업을 시작할 때 고정한 버전으로 재시도하므로,
  * 내용을 바꿀 때는 기존 항목을 고치지 않고 새 버전을 추가한다.
  *
+ * - reading-3.2.0 / narration-2.2.0: 현재 풀이. reading-3.1.0과 같은 지시·입력·출력 형식(캐릭터 묘묘 2.1.0, guide-1.0.0, 추론 설정 그대로)
+ *   끝에 묘묘 문답 예시 블록([캐릭터 문답 예시], example-block.ts)을 더했다. 예시는 카탈로그 myomyo-examples-1.0.0에서
+ *   선택 정책 example-select-1.0.0이 작성 재료(주제 비중, 질문 분야·의도, 사용자가 쓴 말)로 고른다. 예시 효과만 비교되게 그 밖은 바꾸지 않았다.
+ * - followup-3.2.0 / followup-output-2.2.0: 현재 후속 질문 답변. followup-3.1.0과 같은 지시 끝에 문답 예시 블록을 더했다.
  * - reading-1.0.0 / narration-1.0.0: 이전 계획(1.0.0)으로 만든 풀이를 이어서 생성할 때만 쓴다.
  * - reading-2.0.0 / narration-2.0.0: 계획 2.0.0의 첫 풀이 프롬프트 (이미 이 버전으로 시작한 작업에만).
  * - reading-2.1.0 / narration-2.1.0: 채팅 말투, 장면을 녹이는 방식, 직설적인 약점, 말풍선마다 굵게 보일 구절(highlight).
  * - reading-2.2.0 / narration-2.1.0: 가족·친구·지역 주제와 행운 표, 과거 짐작 말투, 건강·투자·미래의 완곡한 표현.
- * - reading-3.1.0 / narration-2.2.0: 현재 풀이 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0, 추론 설정 medium). 지시를 역할별로 나눴다:
+ * - reading-3.1.0 / narration-2.2.0: 3.2.0 이전에 이 버전으로 시작한 작업만 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0, 추론 설정 medium). 예시 없음. 지시를 역할별로 나눴다:
  *   [캐릭터](characterBlock, 누가 어떤 성격과 말투로) → [역할과 우선순위] → [명리 해석 지침](READING_GUIDE, 재료를 읽는 관점) → 출력 조건.
  *   계산값과 판단은 입력 재료가, 말투는 캐릭터가, 형식은 출력 조건이 정한다. 말투 견본, 말버릇 목록과 횟수, '묘묘다운 순간' 의무를 뺐다.
  *   입력은 2.9.0과 같고, 같은 행동 문장은 처음 나온 해석에만 둔다 (materialInputV2). 3.0.0은 되돌린 작업에서 쓴 번호라 쓰지 않는다.
@@ -47,7 +53,7 @@ import type {
  *   주제가 완성될 때마다 화면에 먼저 보여 주는 생성에서 쓴다.
  * - reading-2.3.0 / narration-2.1.0: 상품 3.1.0. 명리 설명 재료(lore)를 짧게 소개하기,
  *   약점·강점을 선언하지 않고 알아맞히듯 말하기, 어울리는 직업과 업종. 입력 형식은 2.2.0과 같고 lore만 더한다.
- * - followup-3.1.0 / followup-output-2.2.0: 현재 후속 질문 답변 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0). reading-3.1.0과 같은 구성.
+ * - followup-3.1.0 / followup-output-2.2.0: 비교용 (캐릭터 묘묘 2.1.0, 명리 해석 지침 guide-1.0.0). reading-3.1.0과 같은 구성, 예시 없음.
  * - followup-2.9.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.4.0). 2.8.0과 같고, 예시·시범 대신 말투 견본.
  * - followup-2.8.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.3.0). 답마다 '묘묘다운 순간', 설명 문단은 두세 문장까지.
  * - followup-2.7.0 / followup-output-2.2.0: 기록용 (캐릭터 묘묘 1.2.0). 2.6.0에 재료를 옮겨 적지 않기와 시범,
@@ -1297,6 +1303,11 @@ export interface ReadingPromptV2Args {
   readonly persona: Persona;
   readonly previousIssues: readonly string[];
   readonly alreadySent?: AlreadySent | null;
+  /**
+   * 문답 예시를 고를 때 비슷한 후보 사이의 순서를 정하는 값 (reading-3.2.0부터). 생성 경로는 풀이 ID를 넣어
+   * 재시도·이어 쓰기에서 같은 예시를 받는다. 없으면 작성 재료의 특징으로 만든다.
+   */
+  readonly exampleSeed?: string;
 }
 
 /** withSource: userContext에 출처(from)를 붙인다 (reading-2.6.0부터). 이전 버전의 입력은 그대로 둔다. */
@@ -1507,9 +1518,41 @@ function instructions3_1_0(persona: Persona, task: "reading" | "followup", rules
   return [characterBlock(persona), priorityBlock(task), READING_GUIDE, rules].join("\n\n");
 }
 
+/** 질문의 분야(없으면 주제)를 예시 주제로. */
+const questionTopic = (question: Pick<FocusQuestion, "domain" | "topicId">): ExampleTopic | null =>
+  topicOfDomain(question.domain) ?? (question.topicId ? topicOfProductTopic(question.topicId) : null);
+
+/**
+ * 최초 풀이(reading-3.2.0)의 예시 선택 조건. 작업에 저장된 작성 재료에서만 만든다 (재시도해도 같다).
+ * 주제: 궁금한 점의 분야 → 비중이 큰 주제(focus·lead) → 기간 질문이면 기간. 진지함: 사용자가 쓴 말(질문 요약, 궁금한 점에서 정리한 사실)만 본다.
+ */
+export function readingExampleRequest(args: ReadingPromptV2Args): Omit<ExampleRequest, "route"> {
+  const { plan } = args;
+  const lead = plan.topics.filter((topic) => topic.weight === "focus" || topic.weight === "lead").map((topic) => topicOfProductTopic(topic.topicId));
+  const userTexts = [...plan.questions.map((question) => question.summary), ...plan.userContext.filter((item) => item.source !== "situation").map((item) => item.text)];
+  return {
+    topics: uniqueTopics([...plan.questions.map(questionTopic), ...lead, ...(plan.timing.length ? (["timing"] as const) : [])]),
+    long: true,
+    serious: seriousSignal(userTexts),
+    reaction: "none",
+    intents: [...new Set(plan.questions.map((question) => question.intent))],
+    limited: plan.questions.some((question) => question.answerability === "limited"),
+    hourUnknown: !plan.base.hourKnown,
+    hasLastTurn: false,
+    seed: args.exampleSeed ?? `reading:${plan.base.situation?.id ?? "none"}:${plan.topics.map((topic) => `${topic.topicId}=${topic.weight}`).join(",")}:${userTexts.join("|")}`,
+  };
+}
+
 type AnyReadingArgs = ReadingPromptArgs | ReadingPromptV2Args;
 
-const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instructions: string; input: string }>> = {
+/** 풀이 프롬프트 결과. examples는 예시를 쓰는 버전(3.2.0부터)에서만 있고 생성 기록에 남는다. */
+export interface ReadingPrompt {
+  readonly instructions: string;
+  readonly input: string;
+  readonly examples?: ExampleRecord;
+}
+
+const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => ReadingPrompt>> = {
   "reading-1.0.0": (args) => ({
     instructions: `${READING_RULES_1_0_0}\n\n${personaBlock(args.persona)}`,
     input: readingInput1(args as ReadingPromptArgs),
@@ -1596,6 +1639,16 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
       input: readingInput4(v2),
     };
   },
+  // 3.1.0과 같은 지시·입력·출력 형식 끝에 묘묘 문답 예시 블록을 더한다. 재시도·이어 쓰기도 같은 조건으로 같은 예시를 고른다.
+  "reading-3.2.0": (args) => {
+    const v2 = args as ReadingPromptV2Args;
+    const examples = buildExampleBlock("reading-3.2.0", v2.persona, readingExampleRequest(v2));
+    return {
+      instructions: [instructions3_1_0(v2.persona, "reading", READING_RULES_3_1_0), examples.text].join("\n\n"),
+      input: readingInput4(v2),
+      examples: examples.record,
+    };
+  },
 };
 
 /**
@@ -1605,9 +1658,9 @@ const READING_PROMPTS: Readonly<Record<string, (args: AnyReadingArgs) => { instr
  */
 export const PROMPTS_FOR_PLAN: Readonly<Record<string, { readonly prompt: string; readonly schema: string }>> = {
   "1.0.0": { prompt: "reading-1.0.0", schema: "narration-1.0.0" },
-  "2.0.0": { prompt: "reading-3.1.0", schema: "narration-2.2.0" },
+  "2.0.0": { prompt: "reading-3.2.0", schema: "narration-2.2.0" },
 };
-export const CURRENT_READING_PROMPT = "reading-3.1.0";
+export const CURRENT_READING_PROMPT = "reading-3.2.0";
 
 /** 주제가 완성될 때마다 먼저 보여 주고, 검사에 걸리면 남은 부분만 이어 쓰는 프롬프트. 이전 버전으로 시작한 작업은 한 번에 받는다. */
 const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set([
@@ -1618,6 +1671,7 @@ const PROGRESSIVE_PROMPTS: ReadonlySet<string> = new Set([
   "reading-2.8.0",
   "reading-2.9.0",
   "reading-3.1.0",
+  "reading-3.2.0",
 ]);
 export const isProgressivePrompt = (version: string) => PROGRESSIVE_PROMPTS.has(version);
 /** 현재 프롬프트와 함께 쓰는 출력 형식 (PROMPTS_FOR_PLAN의 계획 2.0.0 값과 같다). */
@@ -1648,6 +1702,9 @@ const PERSONA_VERSION_FOR_PROMPT: Readonly<Record<string, string>> = {
   "followup-2.9.0": "1.4.0",
   "reading-3.1.0": "2.1.0",
   "followup-3.1.0": "2.1.0",
+  // 3.2.0은 캐릭터 설정을 바꾸지 않고 문답 예시만 더했다.
+  "reading-3.2.0": "2.1.0",
+  "followup-3.2.0": "2.1.0",
 };
 export const personaVersionFor = (promptVersion: string): string => PERSONA_VERSION_FOR_PROMPT[promptVersion] ?? "1.0.0";
 
@@ -1845,7 +1902,7 @@ export function buildQuestionPrompt(args: {
 
 // ─── followup-2.0.0 / 2.1.0 ─────────────────────────────────
 
-export const CURRENT_FOLLOWUP_PROMPT = "followup-3.1.0";
+export const CURRENT_FOLLOWUP_PROMPT = "followup-3.2.0";
 export const FOLLOWUP_SCHEMA_VERSION = "followup-output-2.2.0";
 
 const FOLLOWUP_RULES_2_0_0 = `
@@ -2344,7 +2401,12 @@ const FOLLOWUP_RULES: Readonly<Record<string, string>> = {
   "followup-2.8.0": FOLLOWUP_RULES_2_8_0,
   "followup-2.9.0": FOLLOWUP_RULES_2_9_0,
   "followup-3.1.0": FOLLOWUP_RULES_3_1_0,
+  // 3.1.0과 같은 규칙. 지시 끝에 문답 예시 블록을 더한다 (buildFollowupPrompt).
+  "followup-3.2.0": FOLLOWUP_RULES_3_1_0,
 };
+
+/** buildFollowupPrompt로 만들 수 있는 버전. 3.1.0은 예시 없는 비교용으로 남긴다 (llm:export). 그 이전 규칙은 기록용이다. */
+const BUILDABLE_FOLLOWUP_PROMPTS: ReadonlySet<string> = new Set(["followup-3.1.0", "followup-3.2.0"]);
 
 const FOLLOWUP_V2_JSON_SCHEMA = {
   type: "object",
@@ -2410,16 +2472,44 @@ export interface FollowupPromptArgs {
   readonly reaction?: Reaction;
   /** 이미 화면에 보낸 문단 (followup-2.5.0의 이어 쓰기). */
   readonly alreadySent?: readonly { readonly questionRef: string; readonly paragraphs: readonly string[] }[] | null;
+  /** 문답 예시를 고를 때 순서를 정하는 값 (followup-3.2.0부터). 생성 경로는 후속 질문 ID를 넣는다. 없으면 질문으로 만든다. */
+  readonly exampleSeed?: string;
+  /** 만들 버전. 없으면 현재 버전 (CURRENT_FOLLOWUP_PROMPT). 비교용 내보내기만 followup-3.1.0을 준다. */
+  readonly promptVersion?: string;
 }
 
 /**
- * 후속 답변은 요청 하나 안에서 끝나므로 항상 현재 버전(CURRENT_FOLLOWUP_PROMPT)으로 만든다. 2.5.0 이전 규칙은 기록용이다.
- * persona는 이 버전에 맞는 캐릭터 설정이어야 한다 (followup.ts가 personaVersionFor로 고른다). 재시도도 이 함수로 만든다.
+ * 후속 답변(followup-3.2.0)의 예시 선택 조건. 이번 메시지의 질문 정리와 반응만 쓴다.
+ * 진지함은 이번 메시지에서 사용자가 쓴 말(질문 요약, from이 message인 사실)로만 본다 (처음 궁금한 점·직전 대화의 말로 바꾸지 않는다).
+ */
+export function followupExampleRequest(args: FollowupPromptArgs): Omit<ExampleRequest, "route"> {
+  const current = [...args.questions.map((question) => question.summary), ...args.userContext.filter((item) => item.source === "message").map((item) => item.text)];
+  return {
+    topics: uniqueTopics([...args.questions.map(questionTopic), ...(args.timing.length ? (["timing"] as const) : [])]),
+    long: false,
+    serious: seriousSignal(current),
+    reaction: args.reaction ?? "none",
+    intents: [...new Set(args.questions.map((question) => question.intent))],
+    limited: args.questions.some((question) => question.answerability === "limited"),
+    hourUnknown: !args.hourKnown,
+    hasLastTurn: args.lastTurn !== null,
+    seed: args.exampleSeed ?? `followup:${args.reaction ?? "none"}:${args.questions.map((question) => `${question.domain}/${question.intent}/${question.summary}`).join("|")}`,
+  };
+}
+
+/**
+ * 후속 답변은 요청 하나 안에서 끝나므로 현재 버전(CURRENT_FOLLOWUP_PROMPT)으로 만든다. 2.5.0 이전 규칙은 기록용이다.
+ * persona는 이 버전에 맞는 캐릭터 설정이어야 한다 (followup.ts가 personaVersionFor로 고른다). 재시도도 이 함수로 만들고,
+ * 예시는 같은 조건으로 다시 고르므로 재시도에서도 같다. examples는 예시를 쓰는 버전에서만 있고 생성 기록에 남는다.
  */
 export function buildFollowupPrompt(args: FollowupPromptArgs) {
+  const version = args.promptVersion ?? CURRENT_FOLLOWUP_PROMPT;
+  if (!BUILDABLE_FOLLOWUP_PROMPTS.has(version)) throw new Error(`prompt_version_unavailable: ${version}`);
   const material = materialInputV2([args.statements]);
+  const examples = usesExamples(version) ? buildExampleBlock(version, args.persona, followupExampleRequest(args)) : null;
   return {
-    instructions: instructions3_1_0(args.persona, "followup", FOLLOWUP_RULES[CURRENT_FOLLOWUP_PROMPT]!),
+    instructions: [instructions3_1_0(args.persona, "followup", FOLLOWUP_RULES[version]!), ...(examples ? [examples.text] : [])].join("\n\n"),
+    examples: examples?.record ?? null,
     input: JSON.stringify({
       nickname: args.nickname,
       address: addressFor(args.persona, args.nickname),

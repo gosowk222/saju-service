@@ -73,6 +73,8 @@ export async function answerAnalyzedFollowup(input: {
   readonly publish?: (answer: string) => Promise<void>;
   /** 이 후속 질문 하나의 사용량. 질문 분석과 답변 호출이 함께 쌓인다. */
   readonly meter?: UsageMeter;
+  /** 문답 예시를 고르는 순서 값 (후속 질문 ID). 같은 질문의 재작성에서 같은 예시를 받는다. */
+  readonly exampleSeed?: string;
 }): Promise<{ readonly status: FollowupStatus; readonly answer: string; readonly refs: readonly string[]; readonly meta: GenerationMeta }> {
   const { plan, product, analysis } = input;
   const items = inScopeItems(analysis);
@@ -116,6 +118,7 @@ export async function answerAnalyzedFollowup(input: {
     delivered,
     lastTurn: input.lastTurn,
     reaction: reactionOf(analysis),
+    exampleSeed: input.exampleSeed,
     chart: input.chart,
     modelId: input.modelId,
     deadlineAt: input.deadlineAt,

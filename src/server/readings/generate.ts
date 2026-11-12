@@ -223,11 +223,13 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
         sent: sentPartsFrom(rows.map((row) => ({ topicId: row.topic_id, text: row.text })), focusSectionId),
         commit,
         meter,
+        // 문답 예시(reading-3.2.0부터)는 풀이 ID와 저장된 작성 재료로 고른다. 재시도·이어 쓰기도 같은 예시를 받는다.
+        exampleSeed: readingId,
       });
       messages = [{ ...progressive.closing, seq: nextSeq }];
       meta = progressive.meta;
     } else {
-      const whole = await narrateReading({ narration, chart, persona, config, deadlineAt, meter });
+      const whole = await narrateReading({ narration, chart, persona, config, deadlineAt, meter, exampleSeed: readingId });
       messages = toStoredMessages(whole.output, product?.focusSection.id);
       meta = whole.meta;
     }
@@ -253,12 +255,17 @@ export async function runGeneration(userId: string, readingId: string, retry: bo
           schemaVersion: config.schemaVersion,
           personaVersion: persona.version,
           planPersonaVersion: plan.personaVersion,
+          // 지시에 넣은 문답 예시 (reading-3.2.0부터). 예시 문장과 사용자 원문은 넣지 않는다.
+          exampleCatalog: meta.examples?.catalogVersion ?? null,
+          examplePolicy: meta.examples?.policyVersion ?? null,
+          exampleIds: meta.examples?.ids ?? [],
         },
       },
     });
     console.info("[generation] done", {
       readingId,
       prompt: config.promptVersion,
+      examples: meta.examples?.ids ?? [],
       calls: llmCalls,
       durationMs,
       inputTokens: usage.inputTokens,
