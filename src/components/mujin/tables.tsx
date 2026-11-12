@@ -19,7 +19,9 @@ import {
   monthFlags,
   POSITION_LABEL,
   POSITION_ORDER,
-  sharedStageBasis,
+  stageAt,
+  stageBasesOf,
+  stagePillarLabel,
   STAGE_BASIS_LABEL,
 } from "./scroll-model";
 
@@ -209,10 +211,12 @@ function ElementsTable({ elements, hourKnown }: { elements: MujinTables["element
   );
 }
 
-/** 원국 12운성. 원국 자리의 단계만 보여 주고, 대운·올해 같은 기간의 단계는 섞지 않는다. */
+/**
+ * 원국 12운성. 원국 자리의 단계만 보여 주고, 대운·올해 같은 기간의 단계는 섞지 않는다.
+ * 엔진은 일간 기준과 자좌(그 기둥의 천간 기준) 두 가지를 주므로 기준마다 한 줄씩 보여 준다.
+ */
 function StagesTable({ stages }: { stages: readonly NatalStageCell[] }) {
-  const ordered = byPosition(stages);
-  const shared = sharedStageBasis(stages);
+  const bases = stageBasesOf(stages);
   return (
     <div className="flex flex-col gap-3">
       <TableScroller label="원국 12운성">
@@ -235,40 +239,30 @@ function StagesTable({ stages }: { stages: readonly NatalStageCell[] }) {
               <th scope="row" className={TH_ROW}>
                 기둥
               </th>
-              {ordered.map((cell, index) => (
-                <td key={POSITION_ORDER[index]} className={TD}>
-                  {cell ? `${cell.stem}${cell.branch}` : "모름"}
+              {POSITION_ORDER.map((position) => (
+                <td key={position} className={TD}>
+                  {stagePillarLabel(stages, position)}
                 </td>
               ))}
             </tr>
-            <tr>
-              <th scope="row" className={TH_ROW}>
-                12운성
-              </th>
-              {ordered.map((cell, index) => (
-                <td key={POSITION_ORDER[index]} className={TD_STRONG}>
-                  {cell?.stage ?? "–"}
-                </td>
-              ))}
-            </tr>
-            {shared ? null : (
-              <tr>
+            {bases.map((basis) => (
+              <tr key={basis}>
                 <th scope="row" className={TH_ROW}>
-                  기준
+                  {STAGE_BASIS_LABEL[basis]}
                 </th>
-                {ordered.map((cell, index) => (
-                  <td key={POSITION_ORDER[index]} className={TD_SMALL}>
-                    {cell ? STAGE_BASIS_LABEL[cell.basis] : "–"}
+                {POSITION_ORDER.map((position) => (
+                  <td key={position} className={TD_STRONG}>
+                    {stageAt(stages, position, basis)?.stage ?? "–"}
                   </td>
                 ))}
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </TableScroller>
       <Notes
         items={[
-          shared ? `${STAGE_BASIS_LABEL[shared]}으로 본 원국 자리의 단계예요.` : "칸마다 어느 천간을 기준으로 봤는지 함께 적었어요.",
+          "일간 기준은 일간이 각 자리의 지지에서 놓이는 단계, 그 기둥의 천간 기준은 각 기둥의 천간이 자기 지지에서 놓이는 단계예요.",
           "대운이나 올해처럼 기간에 따라 달라지는 단계와는 다른 표예요.",
         ]}
       />

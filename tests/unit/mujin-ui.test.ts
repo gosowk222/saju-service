@@ -51,6 +51,9 @@ import {
   sectionLabel,
   sharedStageBasis,
   shouldPoll,
+  stageAt,
+  stageBasesOf,
+  stagePillarLabel,
   type DriverContext,
   type FollowupSnapshot,
 } from "@/components/mujin/scroll-model";
@@ -473,6 +476,21 @@ describe("표 도우미", () => {
     expect(byPosition(cells).map((cell) => cell?.position ?? null)).toEqual([null, "day", "month", "year"]);
     expect(sharedStageBasis(cells)).toBe("day-master");
     expect(sharedStageBasis([...cells, { ...cells[0]!, position: "hour", basis: "self" }])).toBeNull();
+  });
+
+  it("12운성 표의 기둥은 자좌 칸(그 기둥의 천간)으로 쓰고, 일간 기준 칸의 '일간+지지'를 기둥처럼 보이지 않는다", () => {
+    // 가상 원국: 일간 갑, 연주 병자. 일간 기준 연지 칸의 천간은 일간(갑)이다.
+    const stages = [
+      { position: "year" as const, label: "연주", basis: "day-master" as const, stem: "갑", branch: "자", stage: "목욕" },
+      { position: "year" as const, label: "연주", basis: "self" as const, stem: "병", branch: "자", stage: "태" },
+      { position: "month" as const, label: "월주", basis: "day-master" as const, stem: "갑", branch: "진", stage: "쇠" },
+    ];
+    expect(stagePillarLabel(stages, "year")).toBe("병자");
+    expect(stagePillarLabel(stages, "month")).toBe("진(지지)");
+    expect(stagePillarLabel(stages, "hour")).toBe("모름");
+    expect(stageBasesOf(stages)).toEqual(["day-master", "self"]);
+    expect(stageAt(stages, "year", "self")?.stage).toBe("태");
+    expect(stageAt(stages, "year", "day-master")?.stage).toBe("목욕");
   });
 
   it("12개월 표의 주목·주의 표시는 분야와 달이 함께 맞을 때만이고, 표지 설명에 점수·확률이 없다", () => {

@@ -15,9 +15,12 @@ import {
   POSITION_LABEL,
   POSITION_ORDER,
   sectionEyebrow,
+  stageAt,
+  stageBasesOf,
+  stagePillarLabel,
   STAGE_BASIS_LABEL,
 } from "@/components/mujin/scroll-model";
-import type { MujinLuck, MujinMonths, MujinTables, NatalStageCell, ScrollBlockType, ScrollSectionView, ScrollStateView } from "@/domain/mujin/types";
+import type { MujinLuck, MujinMonths, MujinTables, ScrollBlockType, ScrollSectionView, ScrollStateView } from "@/domain/mujin/types";
 import type { ScrollTable } from "@/domain/products/types";
 import { ELEMENT_HANJA } from "@/domain/reading/chart";
 import { splitEmphasis } from "@/domain/reading/emphasis";
@@ -387,13 +390,7 @@ function drawElements(doc: PDFKit.PDFDocument, input: ScrollPdfInput, width: num
 /** 원국 12운성. 일간 기준과 그 기둥의 천간 기준을 따로 적고, 기간(대운·올해)의 단계는 섞지 않는다. */
 function drawStages(doc: PDFKit.PDFDocument, input: ScrollPdfInput, width: number): void {
   const stages = input.tables.stages;
-  const bases = (["day-master", "self"] as const).filter((basis) => stages.some((cell) => cell.basis === basis));
-  const at = (position: NatalStageCell["position"], basis?: NatalStageCell["basis"]) =>
-    stages.find((cell) => cell.position === position && (basis === undefined || cell.basis === basis)) ?? null;
-  const pillar = (position: NatalStageCell["position"]) => {
-    const cell = at(position);
-    return cell ? `${cell.stem}${cell.branch}` : "모름";
-  };
+  const bases = stageBasesOf(stages);
   drawTable(
     doc,
     {
@@ -401,8 +398,9 @@ function drawStages(doc: PDFKit.PDFDocument, input: ScrollPdfInput, width: numbe
       widths: POSITION_WIDTHS,
       rowHeader: true,
       rows: [
-        ["기둥", ...POSITION_ORDER.map(pillar)],
-        ...bases.map((basis) => [`12운성\n(${STAGE_BASIS_LABEL[basis]})`, ...POSITION_ORDER.map((position) => at(position, basis)?.stage ?? "–")]),
+        // 기둥은 자좌 칸(그 기둥의 천간)으로 쓴다. 일간 기준 칸의 천간은 일간이라 기둥이 아니다.
+        ["기둥", ...POSITION_ORDER.map((position) => stagePillarLabel(stages, position))],
+        ...bases.map((basis) => [`12운성\n(${STAGE_BASIS_LABEL[basis]})`, ...POSITION_ORDER.map((position) => stageAt(stages, position, basis)?.stage ?? "–")]),
       ],
     },
     width,

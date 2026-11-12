@@ -339,6 +339,27 @@ export const STAGE_BASIS_LABEL: Readonly<Record<NatalStageCell["basis"], string>
   self: "그 기둥의 천간 기준",
 };
 
+/** 표에 나온 12운성 기준. 일간 기준을 먼저, 자좌(그 기둥의 천간 기준)를 다음에 둔다. */
+export function stageBasesOf(cells: readonly NatalStageCell[]): NatalStageCell["basis"][] {
+  return (["day-master", "self"] as const).filter((basis) => cells.some((cell) => cell.basis === basis));
+}
+
+/** 한 자리·한 기준의 12운성 칸. */
+export function stageAt(cells: readonly NatalStageCell[], position: NatalStageCell["position"], basis: NatalStageCell["basis"]): NatalStageCell | null {
+  return cells.find((cell) => cell.position === position && cell.basis === basis) ?? null;
+}
+
+/**
+ * 12운성 표의 '기둥' 칸. 자좌 칸의 천간이 그 기둥의 천간이므로 자좌 칸으로 기둥을 쓴다.
+ * 일간 기준 칸의 천간은 일간이라 기둥이 아니다 (예: 일간 갑이면 연지 자 칸은 '갑자'가 아니다). 자좌 칸이 없으면 지지만 쓴다.
+ */
+export function stagePillarLabel(cells: readonly NatalStageCell[], position: NatalStageCell["position"]): string {
+  const self = stageAt(cells, position, "self");
+  if (self) return `${self.stem}${self.branch}`;
+  const dayMaster = stageAt(cells, position, "day-master");
+  return dayMaster ? `${dayMaster.branch}(지지)` : "모름";
+}
+
 /** 모든 칸의 12운성 기준이 같으면 그 기준을, 섞여 있으면 null을 준다 (칸마다 표시). */
 export function sharedStageBasis(cells: readonly NatalStageCell[]): NatalStageCell["basis"] | null {
   const first = cells[0]?.basis;

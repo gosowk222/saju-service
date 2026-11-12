@@ -486,7 +486,8 @@ describe("Pass 1 입력", () => {
     expect(parse(buildDraftRequest(draftInput([ch1]))).tables).toBeNull();
     const { tables } = parse(buildDraftRequest(draftInput(basics)));
     expect(tables.elements).toEqual(plan.tables.elements);
-    expect(tables.stages).toEqual([{ position: "일주", basis: "일간 기준", ganzhi: "기사", stage: "제왕" }]);
+    // 일간 기준 칸의 천간은 일간이다. 기둥(간지)처럼 붙여 넘기지 않고 기준 천간과 지지를 따로 넘긴다.
+    expect(tables.stages).toEqual([{ position: "일주", basis: "일간 기준", basisStem: "기", branch: "사", stage: "제왕" }]);
     expect(tables.tenGods.families).toEqual({ 비겁: 30, 식상: 40, 재성: 5, 관성: 10, 인성: 15 });
   });
 

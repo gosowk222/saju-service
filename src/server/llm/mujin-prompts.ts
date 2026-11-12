@@ -408,7 +408,8 @@ function tablesInput(tables: MujinTables) {
   const families = tables.tenGods.families;
   return {
     elements: { counts: tables.elements.counts, percents: tables.elements.percents },
-    stages: tables.stages.map((cell) => ({ position: cell.label, basis: STAGE_BASIS_LABEL[cell.basis], ganzhi: `${cell.stem}${cell.branch}`, stage: cell.stage })),
+    // 일간 기준 칸의 천간은 일간이고 그 자리의 기둥이 아니다. 기둥처럼 붙여 쓰지 않도록 기준 천간과 지지를 따로 넘긴다.
+    stages: tables.stages.map((cell) => ({ position: cell.label, basis: STAGE_BASIS_LABEL[cell.basis], basisStem: cell.stem, branch: cell.branch, stage: cell.stage })),
     tenGods: {
       cells: tables.tenGods.cells.map((cell) => ({ position: cell.label, stem: cell.stem, branch: cell.branch, hidden: cell.hidden })),
       families: families ? Object.fromEntries(Object.entries(families).map(([family, value]) => [FAMILY_LABEL[family as keyof typeof FAMILY_LABEL] ?? family, value])) : null,
