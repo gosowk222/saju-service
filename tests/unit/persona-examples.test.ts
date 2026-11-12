@@ -405,8 +405,8 @@ describe("3) 조립", () => {
     for (const version of ["reading-3.1.0", "followup-3.1.0", "mujin-voice-1.0.0", "mujin-followup-1.0.0", "mujin-draft-1.0.0", "mujin-question-1.0.0", "question-1.3.0"]) {
       expect(usesExamples(version), version).toBe(false);
     }
-    expect(promptExampleConfig("reading-3.2.0")).toEqual({ personaId: "myomyo", catalogVersion: "myomyo-examples-1.0.0", policyVersion: EXAMPLE_POLICY_VERSION, route: "reading" });
-    expect(promptExampleConfig("mujin-voice-1.1.0")).toEqual({ personaId: "mujin", catalogVersion: "mujin-examples-1.0.0", policyVersion: EXAMPLE_POLICY_VERSION, route: "voice" });
+    expect(promptExampleConfig("reading-3.2.0")).toEqual({ personaId: "myomyo", catalogVersion: "myomyo-examples-1.0.0", policyVersion: EXAMPLE_POLICY_VERSION, route: "reading", guideVersion: "example-guide-1.0.0" });
+    expect(promptExampleConfig("mujin-voice-1.1.0")).toEqual({ personaId: "mujin", catalogVersion: "mujin-examples-1.0.0", policyVersion: EXAMPLE_POLICY_VERSION, route: "voice", guideVersion: "example-guide-1.0.0" });
     expect(CURRENT_READING_PROMPT).toBe("reading-3.2.0");
     expect(CURRENT_FOLLOWUP_PROMPT).toBe("followup-3.2.0");
     expect(MUJIN_BUNDLE_VERSION).toBe("mujin-1.1.0");
