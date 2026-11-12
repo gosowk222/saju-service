@@ -99,7 +99,7 @@ test("요청 모델은 OPENAI_MODEL 설정을 따른다", async ({ page, request
   expect(body).not.toHaveProperty("temperature");
 });
 
-test("최초 풀이·후속 답변 요청의 지시에는 묘묘 문답 예시가, 입력에는 작성 재료만 들어간다 (가짜 OpenAI가 받은 HTTP 본문)", async ({ page, request }) => {
+test("묘묘 2-pass: Pass 2·후속 답변 지시에는 새 묘묘 문답 예시가, Pass 1·질문 정리에는 예시가 없고, 입력에는 작성 재료만 들어간다 (가짜 OpenAI가 받은 HTTP 본문)", async ({ page, request }) => {
   const before = (await gatewayStats(request)).openaiExamples.length;
   await login(page, request);
   await createPreview(page);
@@ -110,13 +110,22 @@ test("최초 풀이·후속 답변 요청의 지시에는 묘묘 문답 예시�
   await expect(page.getByText(/강점을 일할 때는 어떻게 써\?"에 대한 답변/)).toBeVisible();
 
   const calls = (await gatewayStats(request)).openaiExamples.slice(before);
-  const written = calls.filter((call) => call.schema === "saju_narration_v2" || call.schema === "saju_followup_v2");
-  expect(written.map((call) => call.schema)).toEqual(expect.arrayContaining(["saju_narration_v2", "saju_followup_v2"]));
+  // 새 풀이는 2-pass다. 1-pass 최초 풀이 호출은 없다.
+  expect(calls.some((call) => call.schema === "saju_narration_v2")).toBe(false);
+  const written = calls.filter((call) => call.schema === "messenger_voice" || call.schema === "saju_followup_v2");
+  expect(written.map((call) => call.schema)).toEqual(expect.arrayContaining(["messenger_voice", "saju_followup_v2"]));
   for (const call of written) {
     expect(call.ids.length).toBeGreaterThanOrEqual(1);
-    expect(call.ids.every((id) => id.startsWith("myomyo-"))).toBe(true);
+    // 이번 묘묘 카탈로그(myomyo-examples-2.0.0)의 예시만 들어간다. 이전 카탈로그(myomyo-a/b/c)와 무진 예시는 섞이지 않는다.
+    expect(call.ids.every((id) => id.startsWith("myomyo-v2-")), call.ids.join(",")).toBe(true);
     expect(call.inInput).toBe(false);
   }
+  // Pass 2는 단위마다 재작성 예시(중립 초안 → 묘묘 답변) 하나를 받는다.
+  for (const call of written.filter((entry) => entry.schema === "messenger_voice")) expect(call.ids.some((id) => id.startsWith("myomyo-v2-rw-"))).toBe(true);
+  // Pass 1(중립 초안)에는 예시를 넣지 않는다.
+  const drafts = calls.filter((call) => call.schema === "messenger_draft");
+  expect(drafts.length).toBeGreaterThan(0);
+  expect(drafts.every((call) => call.ids.length === 0)).toBe(true);
   // 질문 정리 요청에는 예시를 넣지 않는다.
   const classify = calls.filter((call) => call.schema === "saju_question_analysis");
   expect(classify.length).toBeGreaterThan(0);

@@ -5,6 +5,7 @@
  */
 import { MUJIN_EXAMPLES_1_0_0 } from "./mujin";
 import { MYOMYO_EXAMPLES_1_0_0 } from "./myomyo";
+import { MYOMYO_EXAMPLES_2_0_0 } from "./myomyo-2";
 import { EXAMPLE_POLICY_VERSION, selectExamples, type ExampleRequest, type ExampleSelection } from "./select";
 import type { ExampleCatalog, RewriteExample, RewriteView } from "./types";
 
@@ -23,10 +24,15 @@ export {
   type ExampleSelection,
 } from "./select";
 export { MYOMYO_EXAMPLE_CATALOG_VERSION } from "./myomyo";
+export { MYOMYO_EXAMPLE_CATALOG_2_VERSION } from "./myomyo-2";
 export { MUJIN_EXAMPLE_CATALOG_VERSION } from "./mujin";
 export { echoLines, exampleEchoes, type ExampleEcho } from "./echo";
 
-const CATALOGS: readonly ExampleCatalog[] = [MYOMYO_EXAMPLES_1_0_0, MUJIN_EXAMPLES_1_0_0];
+/**
+ * 등록된 카탈로그. 새 캐릭터는 카탈로그 파일을 만들어 여기에 더한다 (docs/personas/adding-a-character.md).
+ * myomyo-examples-1.0.0은 그 버전에 고정된 작업(reading-3.2.0·followup-3.2.0)과 비교용으로만 남는다. 새 묘묘 생성은 2.0.0을 쓴다.
+ */
+const CATALOGS: readonly ExampleCatalog[] = [MYOMYO_EXAMPLES_1_0_0, MYOMYO_EXAMPLES_2_0_0, MUJIN_EXAMPLES_1_0_0];
 
 const POLICIES: Readonly<Record<string, (catalog: ExampleCatalog, request: ExampleRequest) => ExampleSelection>> = {
   [EXAMPLE_POLICY_VERSION]: selectExamples,

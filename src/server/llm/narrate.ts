@@ -24,7 +24,7 @@ import type {
   ReadingPlan,
   StoredMessage,
 } from "@/domain/reading/types";
-import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type StreamedResult } from "./client";
+import { callStructured, callStructuredStream, isRetryableTransport, LlmError, type LlmCallLog, type StreamedResult } from "./client";
 import { LLM_SETTINGS } from "./config";
 import type { ExampleRecord } from "./example-block";
 import { buildFollowupPrompt, buildQuestionPrompt, getNarrationSchema, getReadingPrompt, type FollowupPromptArgs } from "./prompts";
@@ -365,6 +365,8 @@ export async function classifyQuestion(input: {
   readonly modelId: string;
   readonly deadlineAt?: number;
   readonly meter?: UsageMeter;
+  /** 호출 단위 기록 (llm_calls). 묘묘 2-pass 최초 풀이가 질문 정리 호출을 단계 classify로 남길 때 넘긴다. */
+  readonly onCall?: (log: LlmCallLog) => void;
 }): Promise<{ readonly analysis: QuestionAnalysis; readonly meta: GenerationMeta }> {
   const startedAt = Date.now();
   const meter = new UsageMeter(input.meter);
@@ -382,6 +384,7 @@ export async function classifyQuestion(input: {
     timeoutMs: task.timeoutMs,
     deadlineAt: input.deadlineAt,
     meter,
+    onCall: input.onCall,
   });
   return {
     analysis: buildQuestionAnalysis(input.product, input.referenceDate, result.parsed),

@@ -155,8 +155,18 @@ test("결제 후 생성이 실패하면 같은 주문으로 재시도한다", as
   expect(attempts.map((row) => row.outcome)).toEqual(["failed", "completed"]);
   expect(attempts[0]!.error_code).toBeTruthy();
   const done = attempts[1]!;
-  // 현재 최초 풀이 버전(reading-3.2.0, 묘묘 문답 예시 포함). 캐릭터 설정은 2.1.0 그대로다.
-  expect(done).toMatchObject({ prompt_version: "reading-3.2.0", persona_version: "2.1.0", usage_complete: true });
+  // 새 풀이는 묘묘 2-pass 묶음(myomyo-2pass-1.0.0)으로 시작한다. 캐릭터 설정은 2.1.0 그대로다.
+  expect(done).toMatchObject({ prompt_version: "myomyo-2pass-1.0.0", persona_version: "2.1.0", usage_complete: true });
+  // 2-pass는 호출마다 시도 번호·묶음과 함께 llm_calls에도 남는다 (실패한 시도의 오류 응답 포함). 성공한 시도는 시도 기록과 호출 수가 같다.
+  const calls = await gatewaySql<{ attempt: number; n: number; policies: string[] }>(
+    request,
+    "select attempt, count(*)::int as n, array_agg(distinct policy_version) as policies from public.llm_calls where reading_id = $1 and followup_id is null group by attempt order by attempt",
+    [readingId],
+  );
+  expect(calls.map((row) => row.attempt)).toEqual([1, 2]);
+  expect(calls.every((row) => row.policies.length === 1 && row.policies[0] === "myomyo-2pass-1.0.0")).toBe(true);
+  const [completedAttempt] = await gatewaySql<{ llm_calls: number }>(request, "select llm_calls from public.generation_attempts where reading_id = $1 and attempt = 2", [readingId]);
+  expect(calls[1]!.n).toBe(completedAttempt!.llm_calls);
   expect(Number(done.total_tokens)).toBe(Number(done.input_tokens) + Number(done.output_tokens));
   expect(Number(done.input_tokens)).toBeGreaterThan(0);
   const [sum] = await gatewaySql<{ recorded_attempts: number; attempts: number; total_tokens: string; usage_complete: boolean }>(

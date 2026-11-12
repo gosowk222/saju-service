@@ -211,6 +211,10 @@ const ROW_KEYS = [
   "cachedInputTokens",
   "reasoningTokens",
   "usageReceived",
+  // 20261114120000_generation_usage_by_product.sql부터: 시도 번호, 캐릭터, 생성 묶음.
+  "attempt",
+  "personaId",
+  "policyVersion",
 ];
 
 const callLog = (extra: Partial<LlmCallLog> = {}): LlmCallLog => ({
@@ -906,14 +910,14 @@ describe("호출 기록 저장기 (createCallRecorder)", () => {
 
 describe("무진 작업 설정", () => {
   it("Pass 1·2는 최초 풀이(reading)와 같은 추론 설정을 쓰고, 기존 작업 설정은 그대로다", () => {
-    expect(LLM_SETTINGS.tasks.mujinDraft).toEqual({ maxOutputTokens: 16_000, reasoningEffort: "medium", timeoutMs: 170_000 });
-    expect(LLM_SETTINGS.tasks.mujinVoice).toEqual({ maxOutputTokens: 8_000, reasoningEffort: "medium", timeoutMs: 90_000 });
+    expect(LLM_SETTINGS.tasks.draft).toEqual({ maxOutputTokens: 16_000, reasoningEffort: "medium", timeoutMs: 170_000 });
+    expect(LLM_SETTINGS.tasks.voice).toEqual({ maxOutputTokens: 8_000, reasoningEffort: "medium", timeoutMs: 90_000 });
     // reading 값이 바뀌면 여기서 알 수 있다. 무진 값도 바꿀지는 사용자 확인을 받는다.
-    expect(LLM_SETTINGS.tasks.mujinDraft.reasoningEffort).toBe(LLM_SETTINGS.tasks.reading.reasoningEffort);
-    expect(LLM_SETTINGS.tasks.mujinVoice.reasoningEffort).toBe(LLM_SETTINGS.tasks.reading.reasoningEffort);
+    expect(LLM_SETTINGS.tasks.draft.reasoningEffort).toBe(LLM_SETTINGS.tasks.reading.reasoningEffort);
+    expect(LLM_SETTINGS.tasks.voice.reasoningEffort).toBe(LLM_SETTINGS.tasks.reading.reasoningEffort);
     expect(LLM_SETTINGS.tasks.reading).toEqual({ maxOutputTokens: 24_000, reasoningEffort: "medium", timeoutMs: 200_000 });
     expect(LLM_SETTINGS.tasks.classify).toEqual({ maxOutputTokens: 2_000, reasoningEffort: "low", timeoutMs: 30_000 });
     expect(LLM_SETTINGS.tasks.followup).toEqual({ maxOutputTokens: 6_000, reasoningEffort: "low", timeoutMs: 90_000 });
-    expect(Object.keys(LLM_SETTINGS.tasks).sort()).toEqual(["classify", "followup", "mujinDraft", "mujinVoice", "reading"]);
+    expect(Object.keys(LLM_SETTINGS.tasks).sort()).toEqual(["classify", "draft", "followup", "reading", "voice"]);
   });
 });

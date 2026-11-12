@@ -359,3 +359,57 @@ npm run llm:render '--' --product=mujin-overview --case=heavy-loss    # 저장�
 확인할 항목은 명세 07 4절의 무진 품질 평가 항목 9개다 (`docs/personas/mujin-evaluation.md` 1절, 초안과 최종문의 보존 항목은 3절). 검사 통과는 형식·근거·숫자 확인일 뿐 문체 품질 판정이 아니다.
 
 운영과 다른 점: 질문 정리는 고정 가상 값, 기준일은 하나로 고정, Pass 1은 스트림 대신 한 번에 받음, 앞 묶음 결과를 저장하지 않고 실행하면 장면 요약(usedScenes)이 비어 있음, 검사에 걸린 장의 다시 쓰기 요청은 만들지 않음 (비교를 위해 그 초안의 Pass 2 요청은 만든다). 자세한 순서는 `docs/personas/mujin-evaluation.md` 3절 '모델 없이 파일 만들기'.
+
+## 묘묘 2-pass와 상품 통합 생성 사용량 (migration `20261114120000_generation_usage_by_product.sql`)
+
+2026-11-13부터 새 묘묘 최초 풀이는 2-pass(생성 묶음 `myomyo-2pass-1.0.0`)로 만든다. Pass 1 중립 초안(`messenger-draft-1.0.0`, 묶음 2·3·3·2단위, 캐릭터·예시 없음)과 Pass 2 묘묘 말풍선(`messenger-voice-1.0.0`, 단위마다 한 번, 동시 2개, 예시 `myomyo-examples-2.0.0`에서 재작성 예시 1 + 문답 1)으로 나뉜다. 질문 정리가 있으면 그 호출도 한 번이다. 그래서 질문이 있는 풀이의 호출 수는 보통 질문 정리 1 + Pass 1 4 + Pass 2 10 = 15회이고, 검사에 걸린 단위의 재요청, 전송 재시도, 시간 예산이 끝나 반납한 뒤 이어 쓴 요청이 더해진다. "2-pass"는 역할 구분이지 호출이 정확히 2번이라는 뜻이 아니다. 모델·추론 설정은 바꾸지 않았다 (Pass 1은 작업에 고정된 추론 설정, Pass 2는 `tasks.voice`, 둘 다 medium).
+
+- 실행 방식은 작업이 처음 시작할 때 고정한 `generation_jobs.prompt_version`으로만 정한다. 생성 묶음 ID면 2-pass, `reading-x.y.z`면 이전 1-pass로 끝까지 쓴다 (배포 전에 시작한 작업). 모르는 버전은 `prompt_version_unavailable`(재시도 불가)로 정리한다.
+- 2-pass 작업의 시작 상한은 묶음의 `maxAttempts`(12)다. 요청 하나의 시간 예산(270초)이 끝나면 남은 단위를 반납(`release_generation`)하고 화면이 곧바로 다시 요청한다. 이때 시도 기록의 결과는 `released`다. 구매 권한은 한 번만 쓰이고 반납·이어받기로 차감되지 않는다.
+- 호출마다 `llm_calls`에 한 줄: `step` classify·pass1·pass2, `tier` paid(구매 뒤에만 만든다), `unit_id`(Pass 1은 묶음 b1~b4, Pass 2는 단위 focus·주제 ID), `attempt`(시도 번호), `persona_id`, `policy_version`(묶음 ID). 시도마다 `generation_attempts`에도 합계가 남는다 (이전과 같은 시도 기록).
+- 관리자 집계 `admin_generation_usage(p_limit, p_product)`는 같은 사용량을 한 번만 센다. 최초 풀이 시도는 같은 시도 번호의 호출 기록 수가 시도의 호출 수와 같으면 호출 기록(단계별)을, 아니면 시도 합계를 쓴다 (이전 1-pass는 '기존 단일 생성 (시도 합계)'로 보인다). 후속 질문은 호출 기록 수가 `followups.usage.calls`와 같으면 호출 기록을, 아니면 `followups.usage`를 쓴다 (묘묘 후속 질문은 `followups.usage`만 있다). 받지 못한 값은 null이고 0으로 채우지 않는다.
+
+```sql
+-- 1) 상품을 함께 보는 관리자 집계 (최근 활동 순 20개, 모든 상품). 두 번째 인자에 상품 ID를 주면 그 상품만.
+select public.admin_generation_usage(20, null) as usage;
+
+-- 2) 2-pass 풀이 하나의 단계·단위별 호출 (시도 번호와 묶음 포함)
+select attempt, step, unit_id, outcome, input_tokens, cached_input_tokens, output_tokens, policy_version, persona_id, prompt_version
+from public.llm_calls
+where reading_id = '<풀이 ID>' and followup_id is null
+order by attempt, started_at;
+
+-- 3) 시도 기록과 호출 기록의 호출 수 비교 (같으면 관리자 집계가 호출 기록을, 다르면 시도 합계를 쓴다)
+select a.attempt, a.outcome, a.llm_calls as attempt_calls,
+       (select count(*) from public.llm_calls c where c.reading_id = a.reading_id and c.attempt = a.attempt and c.followup_id is null) as logged_calls
+from public.generation_attempts a
+where a.reading_id = '<풀이 ID>'
+order by a.attempt;
+
+-- 4) 생성 방식별 평균 토큰 (묘묘 최초 풀이, 완료한 시도). 2-pass는 묶음 ID, 이전 1-pass는 reading-x.y.z로 나뉜다.
+select prompt_version, count(*) as attempts, avg(llm_calls) as avg_calls, avg(input_tokens) as avg_input,
+       avg(cached_input_tokens) as avg_cached, avg(output_tokens) as avg_output, avg(duration_ms) as avg_duration_ms
+from public.generation_attempts
+where outcome = 'completed'
+group by prompt_version
+order by prompt_version;
+
+-- 5) 2-pass 단위마다 넣은 문답 예시 (최종 단위 기록, 예시 문장 없음)
+select section_id as unit_id, meta -> 'examples' -> 'ids' as example_ids, meta ->> 'personaVersion' as persona_version
+from public.reading_sections
+where reading_id = '<풀이 ID>' and meta ->> 'bundle' is not null
+order by created_at;
+```
+
+### 묘묘 2-pass 예시 비교 (`llm:export`·`llm:render --task=two-pass`, 모델 호출 없음)
+
+같은 중립 초안을 "예시 없이" 묘묘로 다시 쓴 것과 "이번 예시로" 다시 쓴 것을 비교한다. 운영 기본값(예시 사용)은 바꾸지 않는다. 예시 없는 요청은 비교 파일로만 만든다.
+
+```powershell
+npm run llm:export '--' --case=job-seeking --task=two-pass --date=2026-11-12   # Pass 1 묶음 요청 (pass1-b1 ...)
+# 플레이그라운드에서 pass1-b* 요청을 실행해 결과를 <사례 폴더>/pass1-results/에 저장한 뒤 다시 실행하면
+# 단위마다 pass2-<단위>.with-examples.* 와 pass2-<단위>.no-examples.* 가 생긴다 (같은 초안, 같은 입력, 예시 블록만 다름).
+npm run llm:render '--' --case=job-seeking --task=two-pass --date=2026-11-12   # pass2-results/<단위>.<변형>.json을 읽어 comparison.md
+```
+
+`comparison.md`는 단위마다 두 결과의 말풍선 수와 글자 수(초안 대비), 응답의 토큰, 운영 검사(`checkMessengerVoice`: 초안에 없던 근거·숫자·장면, 날짜·비율, 범위 밖 질문) 문제, 예시 답변과 16글자 이상 겹치는 조각을 나란히 적는다. 성격이 본문에서 드러나는지, 설명이나 조건이 줄었는지, 새 사용자 사실·판단이 생겼는지는 사람이 읽고 판단한다 (`docs/READING_QUALITY.md` 25절). 첫 말풍선까지 시간은 첫 단위의 Pass 1 스트림 + Pass 2 시간이고, 전체 시간은 운영 로그 `[generation] two-pass`의 `durationMs`나 위 SQL 4의 `avg_duration_ms`로 본다.

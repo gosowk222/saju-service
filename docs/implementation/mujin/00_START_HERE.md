@@ -66,7 +66,7 @@
 | 질문 분류 | `classifyQuestion`, `buildQuestionAnalysis` | `src/server/scroll/questions.ts` + 지시 mujin-question-1.0.0(사실 종류 5개), 한 번 저장 후 재사용 |
 | 개인화 | 단일 상황 비중 | `src/domain/mujin/personalize.ts`(질문 → 장 연결, 비중, 사용자 사실·질문 재료) |
 | 페르소나 | `MYOMYO` 2.1.0 | `MUJIN` 1.0.0(존댓말), `lines.intake` |
-| 생성 | `runGeneration` (풀이 전체 1회 호출) | `src/server/scroll/runner.ts`의 `runScrollTier`(Pass 1 스트림 + Pass 2 대기열). 묘묘 경로 그대로 |
+| 생성 | `runGeneration` (2026-11-13부터 새 풀이는 묘묘 2-pass, 이전 작업은 1회 호출) | `src/server/scroll/runner.ts`의 `runScrollTier`(Pass 1 스트림 + Pass 2 대기열). 실행 순서·대기열·재시도는 묘묘 2-pass와 같은 공통 실행기 `src/server/generation/two-pass.ts`(`TwoPassRun`)를 쓴다 |
 | 스트림 추출 | `completedParts` | `completedArrayItems` 추가(기존 함수 불변) |
 | 검사 | `check.ts` | 핵심 검사 export, `src/domain/mujin/check.ts`(장 초안·최종문 검사) |
 | 저장 | `generation_jobs`, `reading_messages` | 유료 단계는 `generation_jobs` 재사용, 새 표 `reading_units`·`reading_sections`·`reading_free_runs`(migration 20261113120000, 20261113130000) |

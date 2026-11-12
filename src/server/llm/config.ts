@@ -8,7 +8,7 @@ import "server-only";
 /** 개발 기본 모델. OPENAI_MODEL이 비어 있는 개발·테스트 환경에서만 쓴다. */
 const DEVELOPMENT_DEFAULT_MODEL = "gpt-5.6-luna";
 
-export type LlmTask = "classify" | "reading" | "followup" | "mujinDraft" | "mujinVoice";
+export type LlmTask = "classify" | "reading" | "followup" | "draft" | "voice";
 
 export interface LlmTaskSettings {
   /** 추론 토큰을 포함한 출력 상한. 한국어 본문과 JSON 구조를 함께 담을 수 있게 잡는다. */
@@ -34,15 +34,15 @@ export const LLM_SETTINGS = {
     /** 후속 질문 답변. 소질문 여러 개를 나눠 답한다. */
     followup: { maxOutputTokens: 6_000, reasoningEffort: "low", timeoutMs: 90_000 },
     /**
-     * 무진의 종합 사주 Pass 1. 장 묶음(장 1~3개) 하나의 평문 초안을 스트림으로 받는다 (상품 설정 scroll.draftBatches).
-     * 추론 설정은 최초 풀이(reading)와 같은 값이다. 이 작업에서 추론 강도를 새로 정하지 않았으므로 바꾸려면 사용자 확인을 받는다.
+     * 2-pass의 Pass 1 (캐릭터 없는 중립 초안). 무진 족자는 장 묶음(장 1~3개), 묘묘는 주제 묶음(주제 2~3개) 하나를 스트림으로 받는다.
+     * (2026-11-13 이름만 mujinDraft → draft로 바꿨다. 값은 같다.) 추론 설정은 최초 풀이(reading)와 같은 값이다. 바꾸려면 사용자 확인을 받는다.
      */
-    mujinDraft: { maxOutputTokens: 16_000, reasoningEffort: "medium", timeoutMs: 170_000 },
+    draft: { maxOutputTokens: 16_000, reasoningEffort: "medium", timeoutMs: 170_000 },
     /**
-     * 무진의 종합 사주 Pass 2. 초안 한 장을 무진 도사가 설명하는 글로 다시 쓴다 (장 하나에 한 번).
-     * 추론 설정은 reading과 같은 값이다. 바꾸려면 사용자 확인을 받는다.
+     * 2-pass의 Pass 2 (캐릭터 문장). 초안 한 단위(무진 장 하나, 묘묘 주제 하나)를 캐릭터가 설명하는 글로 다시 쓴다.
+     * (2026-11-13 이름만 mujinVoice → voice로 바꿨다. 값은 같다.) 추론 설정은 reading과 같은 값이다. 바꾸려면 사용자 확인을 받는다.
      */
-    mujinVoice: { maxOutputTokens: 8_000, reasoningEffort: "medium", timeoutMs: 90_000 },
+    voice: { maxOutputTokens: 8_000, reasoningEffort: "medium", timeoutMs: 90_000 },
   } satisfies Record<LlmTask, LlmTaskSettings>,
   /** 네트워크·일시 오류의 재시도 횟수 (처음 호출 제외). 남은 시간이 부족하면 재시도하지 않는다. */
   transportRetries: 2,

@@ -82,3 +82,67 @@ export function parseOriginals(raw: string, label: string, speaker: string): Par
     return { number: head[1]!, title: head[2]!.trim(), premise, question: question.taken.join("\n"), answer };
   });
 }
+
+/**
+ * 구분선 형식의 원문을 읽는다 (묘묘 기준 문답 2.0.0, myomyo-originals-2.ts). 원문을 고치지 않고 칸만 나눈다.
+ *
+ *   ────────────────
+ *   예시 04. 신중한 연애 성향을 풀이하는 경우
+ *   ────────────────
+ *
+ *   입력 전제:            (있을 때만, 줄마다 "- ")
+ *   - 한 줄에 하나씩
+ *
+ *   사용자:
+ *   질문
+ *
+ *   묘묘:
+ *   답변 (문단은 빈 줄로 나뉜다)
+ *
+ * 입력 전제 줄의 앞머리 "- "만 떼어 낸다. 형식이 맞지 않으면 예외를 던진다.
+ */
+export function parseDividedOriginals(raw: string, speaker: string): ParsedOriginal[] {
+  const text = raw.replace(/\r\n/g, "\n");
+  const header = /^─+\n예시 (\d{2})\. (.+)\n─+$/gm;
+  const heads = [...text.matchAll(header)];
+  if (!heads.length) throw new Error("원문 머리말(예시 NN.)을 찾지 못했습니다.");
+  return heads.map((head, position) => {
+    const label = `예시 ${head[1]}`;
+    const start = head.index! + head[0].length;
+    const end = position + 1 < heads.length ? heads[position + 1]!.index! : text.length;
+    const lines = text.slice(start, end).split("\n");
+    let index = 0;
+    const skipBlank = () => {
+      while (index < lines.length && lines[index]!.trim() === "") index += 1;
+    };
+    const expect = (name: string) => {
+      skipBlank();
+      if (lines[index]?.trim() !== `${name}:`) throw new Error(`[${label}] '${name}:' 줄이 없습니다.`);
+      index += 1;
+    };
+
+    skipBlank();
+    let premise: string[] = [];
+    if (lines[index]?.trim() === "입력 전제:") {
+      const read = linesUntilBlank(lines, index + 1);
+      premise = read.taken.map((line) => {
+        if (!line.startsWith("- ")) throw new Error(`[${label}] 입력 전제 줄이 '- '로 시작하지 않습니다.`);
+        return line.slice(2).trim();
+      });
+      index = read.next;
+    }
+    expect("사용자");
+    const question = linesUntilBlank(lines, index);
+    index = question.next;
+    expect(speaker);
+    const answer = lines
+      .slice(index)
+      .join("\n")
+      .trim()
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .join("\n\n");
+    if (!question.taken.length || !answer) throw new Error(`[${label}] 질문이나 답변이 비어 있습니다.`);
+    return { number: head[1]!, title: head[2]!.trim(), premise, question: question.taken.join("\n"), answer };
+  });
+}

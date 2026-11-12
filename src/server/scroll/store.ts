@@ -3,7 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PublicBirthInput } from "sajuengine";
 import type { MujinPlan, MujinTimingBundle, ScrollDraftContent, ScrollSectionContent, ScrollTier } from "@/domain/mujin/types";
 import type { ChartView } from "@/domain/reading/types";
-import { supabaseCallWriter, type LlmCallRow } from "@/server/llm/call-log";
+import type { UnitFailure, UnitRecord as GenericUnitRecord, UnitStatus, UnitStore, UnitWrite as GenericUnitWrite } from "@/server/generation/two-pass";
+import { createUnitStore } from "@/server/generation/unit-store";
+import type { LlmCallRow } from "@/server/llm/call-log";
 import { SCROLL_SETTINGS } from "./config";
 
 /**
@@ -51,21 +53,10 @@ export interface FinalSection {
   readonly content: ScrollSectionContent;
 }
 
-export type UnitStatus = "pending" | "drafted" | "done" | "failed";
+export type { UnitStatus };
 
-/** reading_units 한 행 (서버 전용). draft는 Pass 1 초안이며 브라우저로 보내지 않는다. */
-export interface UnitRecord {
-  readonly unitId: string;
-  readonly tier: ScrollTier;
-  readonly status: UnitStatus;
-  readonly draft: ScrollDraftContent | null;
-  readonly draftAttempts: number;
-  readonly voiceAttempts: number;
-  readonly errorStage: "draft" | "voice" | null;
-  readonly errorCode: string | null;
-  readonly errorRetryable: boolean | null;
-  readonly updatedAt: string | null;
-}
+/** reading_units 한 행 (서버 전용, 공통 정의는 two-pass.ts). draft는 Pass 1 초안이며 브라우저로 보내지 않는다. */
+export type UnitRecord = GenericUnitRecord<ScrollDraftContent>;
 
 /** 점유한 실행의 고정 설정 (claim이 처음 시작할 때 고정한 값). */
 export interface ClaimedRun {
@@ -92,20 +83,9 @@ export interface ClaimRequest {
   readonly maxAttempts: number;
 }
 
-/** 장 단위 저장의 공통 인자. tier는 상품 정의(ScrollSectionSpec.tier)에서 정한 값이어야 한다 (DB는 서버가 보낸 tier를 믿는다). */
-export interface UnitWrite {
-  readonly readingId: string;
-  readonly tier: ScrollTier;
-  /** 지금 점유한 실행의 시도 번호 (claim 결과의 attempts). */
-  readonly attempt: number;
-  readonly unitId: string;
-}
-
-export interface UnitFailure {
-  readonly saved: boolean;
-  readonly draftAttempts: number;
-  readonly voiceAttempts: number;
-}
+/** 장 단위 저장의 공통 인자 (공통 정의는 two-pass.ts). tier는 상품 정의(ScrollSectionSpec.tier)에서 정한 값이어야 한다. */
+export type UnitWrite = GenericUnitWrite;
+export type { UnitFailure };
 
 export interface AnalysisStore {
   loadAnalysis<T>(readingId: string, cacheKey: string): Promise<T | null>;
@@ -124,7 +104,7 @@ export function isFinalFreeFailure(run: { readonly status: string; readonly atte
 }
 
 /** 생성 실행기(runner.ts)가 쓰는 저장소. 테스트는 같은 모양의 가짜를 넣어 DB 없이 순서와 저장을 확인한다. */
-export interface ScrollStore extends AnalysisStore {
+export interface ScrollStore extends AnalysisStore, UnitStore<ScrollDraftContent, ScrollSectionContent> {
   loadReading(readingId: string, userId: string): Promise<{ readonly reading: ScrollReadingRecord; readonly plan: MujinPlan } | null>;
   hasEntitlement(readingId: string, userId: string): Promise<boolean>;
   /**
@@ -263,22 +243,10 @@ function toClaim(raw: RawClaim, row: RawRun | null | undefined, code: string): C
   throw new Error(code);
 }
 
-interface RawUnit {
-  readonly unit_id: string;
-  readonly tier: ScrollTier;
-  readonly status: UnitStatus;
-  readonly draft: ScrollDraftContent | null;
-  readonly draft_attempts: number;
-  readonly voice_attempts: number;
-  readonly error_stage: "draft" | "voice" | null;
-  readonly error_code: string | null;
-  readonly error_retryable: boolean | null;
-  readonly updated_at: string | null;
-}
-
 /** 실제 DB 함수로 저장하는 실행기 저장소. */
 export function createScrollStore(admin: Db): ScrollStore {
-  const writeCall = supabaseCallWriter(admin);
+  // 장 단위 저장(save_unit_draft, save_unit_final, fail_unit, record_llm_call)은 묘묘 2-pass와 같은 공통 저장소를 쓴다.
+  const units = createUnitStore<ScrollDraftContent, ScrollSectionContent>(admin, "scroll_units_load_failed");
   return {
     loadReading: (readingId, userId) => loadScrollReading(admin, readingId, userId),
 
@@ -363,63 +331,15 @@ export function createScrollStore(admin: Db): ScrollStore {
       return { saved: true, payload: (data as typeof payload | null) ?? payload };
     },
 
-    async loadUnits(readingId) {
-      const rows = rowsOrNull(
-        await admin
-          .from("reading_units")
-          .select("unit_id, tier, status, draft, draft_attempts, voice_attempts, error_stage, error_code, error_retryable, updated_at")
-          .eq("reading_id", readingId),
-        "scroll_units_load_failed",
-      ) as RawUnit[] | null;
-      return (rows ?? []).map((row) => ({
-        unitId: row.unit_id,
-        tier: row.tier,
-        status: row.status,
-        draft: row.draft ?? null,
-        draftAttempts: row.draft_attempts,
-        voiceAttempts: row.voice_attempts,
-        errorStage: row.error_stage,
-        errorCode: row.error_code,
-        errorRetryable: row.error_retryable,
-        updatedAt: row.updated_at,
-      }));
-    },
+    loadUnits: (readingId) => units.loadUnits(readingId),
 
     loadFinals: (readingId) => loadFinalSections(admin, readingId),
 
-    saveDraft: (unit) =>
-      rpc<boolean>(
-        admin,
-        "save_unit_draft",
-        { p_reading_id: unit.readingId, p_tier: unit.tier, p_attempt: unit.attempt, p_unit_id: unit.unitId, p_draft: unit.draft, p_meta: unit.meta },
-        "unit_draft_save_failed",
-      ).then((saved) => saved === true),
+    saveDraft: (unit) => units.saveDraft(unit),
 
-    saveFinal: (unit) =>
-      rpc<boolean>(
-        admin,
-        "save_unit_final",
-        { p_reading_id: unit.readingId, p_tier: unit.tier, p_attempt: unit.attempt, p_unit_id: unit.unitId, p_content: unit.content, p_meta: unit.meta },
-        "unit_final_save_failed",
-      ).then((saved) => saved === true),
+    saveFinal: (unit) => units.saveFinal(unit),
 
-    async failUnit(unit) {
-      const result = await rpc<{ saved?: boolean; draftAttempts?: number; voiceAttempts?: number } | null>(
-        admin,
-        "fail_unit",
-        {
-          p_reading_id: unit.readingId,
-          p_tier: unit.tier,
-          p_attempt: unit.attempt,
-          p_unit_id: unit.unitId,
-          p_stage: unit.stage,
-          p_code: unit.code,
-          p_retryable: unit.retryable,
-        },
-        "unit_fail_save_failed",
-      );
-      return { saved: result?.saved === true, draftAttempts: result?.draftAttempts ?? 0, voiceAttempts: result?.voiceAttempts ?? 0 };
-    },
+    failUnit: (unit) => units.failUnit(unit),
 
     releaseRun: (tier, readingId, attempt) =>
       rpc<boolean>(admin, tier === "free" ? "release_free_run" : "release_generation", { p_reading_id: readingId, p_attempt: attempt }, "run_release_failed").then(
@@ -443,6 +363,6 @@ export function createScrollStore(admin: Db): ScrollStore {
           )
       ).then((failed) => failed === true),
 
-    writeCall,
+    writeCall: (row) => units.writeCall(row),
   };
 }

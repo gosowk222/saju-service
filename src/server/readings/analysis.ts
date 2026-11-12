@@ -18,6 +18,7 @@ import {
 import type { NarrationPlanV2, ReadingPlanV2, TimingAnalysis } from "@/domain/reading/types";
 import type { TimingDomain } from "@/domain/rules/timing";
 import { TIMING_ANALYSIS_VERSION, analyzeTiming } from "@/server/engine/timing";
+import type { LlmCallLog } from "@/server/llm/client";
 import { classifyQuestion } from "@/server/llm/narrate";
 import type { UsageMeter } from "@/server/llm/usage";
 
@@ -133,6 +134,8 @@ export async function prepareNarration(input: {
   readonly deadlineAt: number;
   /** 생성 시도의 사용량. 저장된 질문 분석을 다시 쓰면 아무것도 기록하지 않는다. */
   readonly meter?: UsageMeter;
+  /** 질문 정리 호출의 호출 단위 기록 (묘묘 2-pass만 넘긴다. 이전 1-pass는 시도 합계만 남긴다). */
+  readonly onCall?: (log: LlmCallLog) => void;
 }): Promise<PreparedNarration> {
   const { admin, readingId, base, product, birth, concern, modelId, deadlineAt } = input;
   let llmCalls = 0;
@@ -141,7 +144,7 @@ export async function prepareNarration(input: {
   if (!analysis) {
     const referenceDate = seoulDate();
     if (concern.trim()) {
-      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: concern, lastTurn: null, modelId, deadlineAt, meter: input.meter });
+      const classified = await classifyQuestion({ product, referenceDate, mode: "initial", text: concern, lastTurn: null, modelId, deadlineAt, meter: input.meter, onCall: input.onCall });
       llmCalls += classified.meta.llmCalls;
       analysis = classified.analysis;
     } else {

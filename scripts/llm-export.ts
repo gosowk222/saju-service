@@ -15,6 +15,10 @@
  * 같은 입력에서 버전만 바꿔 실행하고, 결과는 npm run llm:render로 읽는다. 스크립트의 실제 호출은 막혀 있으므로
  * (src/server/llm/config.ts의 liveCallBlockReason) 실제 실행은 사용자가 플레이그라운드에서 직접 한다.
  *
+ * 묘묘 2-pass(myomyo-2pass-1.0.0)의 예시 사용·미사용 비교는 --task=two-pass를 준다 (scripts/myomyo-two-pass.ts).
+ *   npm run llm:export '--' --case=job-seeking --task=two-pass [--draft=<Pass 1 결과>]
+ *   Pass 1 묶음 요청을 쓰고, 사례 폴더의 Pass 1 결과가 있으면 단위마다 같은 초안의 Pass 2 요청을 예시 사용·미사용 두 벌 쓴다.
+ *
  * 무진의 종합 사주는 --product=mujin-overview를 준다 (scripts/mujin-llm.ts, docs/personas/mujin-evaluation.md 3절).
  *   npm run llm:export '--' --product=mujin-overview --case=side-job-money [--reference=2026-11-12] [--bundle=mujin-1.0.0] [--dir=<사례 폴더>] [--draft=<Pass 1 결과>]
  *   Pass 1 묶음별 요청을 쓰고, 사례 폴더에 저장한 Pass 1 결과(또는 --draft)가 있으면 장별 Pass 2 요청과 마지막 정리 요청을 쓴다.
@@ -269,8 +273,13 @@ function exportMyomyo() {
   const referenceDate = readArg("date") ?? seoulDate();
   const task = readArg("task") ?? "reading";
   if (task === "followup") return exportMyomyoFollowup(entry, referenceDate);
+  if (task === "two-pass") {
+    // 2-pass 비교 모듈은 이 작업을 고를 때만 불러온다.
+    void import("./myomyo-two-pass").then((module) => module.exportMyomyoTwoPass(entry, referenceDate));
+    return;
+  }
   if (task !== "reading") {
-    console.log(`알 수 없는 작업: ${task} (--task=reading|followup)`);
+    console.log(`알 수 없는 작업: ${task} (--task=reading|followup|two-pass)`);
     return;
   }
   exportMyomyoReading(entry, referenceDate);

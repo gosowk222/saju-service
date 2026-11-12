@@ -4,6 +4,7 @@ import { findProduct, isScrollProduct } from "@/domain/products";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
 import { checkoutMode, FREE_TRIAL, grantsOpen, type CheckoutMode } from "@/server/checkout/mode";
+import { attemptLimitFor } from "@/server/generation/bundles";
 import { getReading, USER_RETRY_LIMIT, type JobRow } from "@/server/readings/store";
 import { SCROLL_SETTINGS } from "@/server/scroll/config";
 
@@ -171,13 +172,18 @@ export async function loadFreeTicket(supabase: SupabaseClient, userId: string): 
 
   const readingIds = used.map((ticket) => ticket.reading_id);
   const [{ data }, { data: readingRows }] = await Promise.all([
-    supabase.from("generation_jobs").select("reading_id, status, attempts").in("reading_id", readingIds),
+    supabase.from("generation_jobs").select("reading_id, status, attempts, prompt_version").in("reading_id", readingIds),
     supabase.from("readings").select("id, product_id").in("id", readingIds),
   ]);
-  const jobs = new Map(((data ?? []) as Pick<JobRow, "reading_id" | "status" | "attempts">[]).map((job) => [job.reading_id, job]));
+  const jobs = new Map(((data ?? []) as Pick<JobRow, "reading_id" | "status" | "attempts" | "prompt_version">[]).map((job) => [job.reading_id, job]));
   const products = new Map(((readingRows ?? []) as { id: string; product_id: string }[]).map((row) => [row.id, row.product_id]));
-  // 족자 상품(무진)의 유료 작업은 시간 예산마다 반납·이어받기를 해서 시작 횟수가 묘묘보다 많다. 그 상품의 상한으로 다시 시도 여부를 본다.
-  const retryLimitOf = (readingId: string) => (isScrollProduct(findProduct(products.get(readingId) ?? "")) ? SCROLL_SETTINGS.paidMaxRuns : USER_RETRY_LIMIT);
+  // 2-pass 작업(무진 족자, 묘묘 2-pass)은 시간 예산마다 반납·이어받기를 해서 시작 횟수가 이전 1-pass보다 많다.
+  // 작업에 고정된 버전의 상한으로 다시 시도 여부를 보고, 버전이 없으면(시작 전) 상품 형식으로 본다.
+  const retryLimitOf = (readingId: string) => {
+    const pinned = jobs.get(readingId)?.prompt_version;
+    if (pinned) return attemptLimitFor(pinned);
+    return isScrollProduct(findProduct(products.get(readingId) ?? "")) ? SCROLL_SETTINGS.paidMaxRuns : USER_RETRY_LIMIT;
+  };
 
   const uses: TicketUse[] = used.map((ticket) => {
     const job = jobs.get(ticket.reading_id);

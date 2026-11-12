@@ -761,8 +761,8 @@ function questionLines(evaluation: MujinEvaluation): string[] {
 
 function versionLines(evaluation: MujinEvaluation): string[] {
   const { bundle, base, timing } = evaluation;
-  const draft = LLM_SETTINGS.tasks.mujinDraft;
-  const voice = LLM_SETTINGS.tasks.mujinVoice;
+  const draft = LLM_SETTINGS.tasks.draft;
+  const voice = LLM_SETTINGS.tasks.voice;
   const examples = promptExampleConfig(bundle.voicePrompt);
   return [
     `- 묶음 \`${bundle.id}\`: Pass 1 \`${bundle.draftPrompt}\` / \`${bundle.draftSchema}\`, Pass 2 \`${bundle.voicePrompt}\` / \`${bundle.voiceSchema}\`, 질문 정리 \`${bundle.questionPrompt}\`, 무진 설정 ${evaluation.persona.version}, 해석 지침 \`${bundle.guideVersion}\``,
@@ -840,7 +840,7 @@ export function writeMujinExport(evaluation: MujinEvaluation, outputs: LoadedOut
     } else if (!entry) {
       state = `기다림: 유료 장 초안이 모두 있어야 만든다 (없는 장: ${closing.missing.join(", ")})`;
     } else {
-      written.push(...writeRequestFiles(dir, stem, entry.request, LLM_SETTINGS.tasks.mujinDraft));
+      written.push(...writeRequestFiles(dir, stem, entry.request, LLM_SETTINGS.tasks.draft));
       ready.push(stem);
       const { given, missing } = entry.scenes;
       state =
@@ -858,7 +858,7 @@ export function writeMujinExport(evaluation: MujinEvaluation, outputs: LoadedOut
   for (const request of pass2Requests(evaluation, outputs)) {
     if (outputs.finals.has(request.sectionId)) continue;
     const stem = `p2-${request.sectionId}`;
-    written.push(...writeRequestFiles(dir, stem, request.request, LLM_SETTINGS.tasks.mujinVoice));
+    written.push(...writeRequestFiles(dir, stem, request.request, LLM_SETTINGS.tasks.voice));
     ready.push(stem);
   }
   for (const spec of WRITTEN) {

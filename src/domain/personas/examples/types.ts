@@ -11,8 +11,8 @@
 
 /**
  * 예시를 쓸 수 있는 생성 경로.
- * reading: 묘묘 최초 풀이(캐릭터가 직접 쓰는 1-pass), followup: 후속 질문의 캐릭터 답변(묘묘·무진),
- * voice: 무진 Pass 2(중립 초안을 무진의 설명으로 다시 쓰기). 무진 Pass 1(중립 초안), 질문 정리, 사주 계산에는 예시를 넣지 않는다.
+ * reading: 묘묘 최초 풀이(캐릭터가 직접 쓰는 1-pass, reading-3.2.0에 고정된 작업만), followup: 후속 질문의 캐릭터 답변(묘묘·무진),
+ * voice: Pass 2(중립 초안을 캐릭터의 설명으로 다시 쓰기, 무진 족자 장과 묘묘 2-pass 주제). Pass 1(중립 초안), 질문 정리, 사주 계산에는 예시를 넣지 않는다.
  */
 export type ExampleRoute = "reading" | "followup" | "voice";
 

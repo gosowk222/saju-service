@@ -35,8 +35,8 @@ describe("무진 도사 등록", () => {
   it("현재 설정은 mujin 1.0.0 '무진 도사'이고, 무진 상품이 이 캐릭터를 쓴다", () => {
     expect(findPersona("mujin")).toBe(MUJIN);
     expect(findPersona("mujin", "1.0.0")).toBe(MUJIN);
-    // 따로 남긴 이전 설정이 없으면 현재 설정을 준다. 묘묘의 버전 번호로 찾아도 묘묘 설정이 섞이지 않는다.
-    expect(findPersona("mujin", "2.1.0")).toBe(MUJIN);
+    // 모르는 버전은 현재 설정으로 바꾸지 않는다 (2026-11-13). 묘묘의 버전 번호로 찾아도 묘묘 설정이 섞이지 않는다.
+    expect(findPersona("mujin", "2.1.0")).toBeUndefined();
     expect([MUJIN.id, MUJIN.version, MUJIN.name, MUJIN.speech, MUJIN.avatarGlyph]).toEqual(["mujin", "1.0.0", "무진 도사", "polite", "무"]);
     expect(MUJIN_OVERVIEW.personaId).toBe(MUJIN.id);
     expect(withSubject(MUJIN.name)).toBe("무진 도사가");
