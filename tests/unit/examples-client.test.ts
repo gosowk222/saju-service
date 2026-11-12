@@ -54,6 +54,9 @@ const { FIRST_OVERVIEW } = await import("@/domain/products/first-overview");
 const { buildFollowupPrompt, getNarrationSchema, getReadingPrompt, NARRATION_SCHEMA_VERSION } = await import("@/server/llm/prompts");
 const { buildVoiceRequest, requestFields, MUJIN_BUNDLES, MUJIN_BUNDLE_VERSION } = await import("@/server/llm/mujin-prompts");
 const { casePlan, EVALUATION_CASES } = await import("../../scripts/llm-cases");
+const { buildMessengerDraftRequest, buildMessengerVoiceRequest } = await import("@/server/llm/messenger-prompts");
+const { MESSENGER_BUNDLES } = await import("@/server/generation/bundles");
+const { messengerUnits } = await import("@/domain/reading/two-pass");
 
 const BLOCK = "[캐릭터 문답 예시:";
 
@@ -144,5 +147,45 @@ describe("모델 클라이언트가 보내는 요청 인자", () => {
     for (const id of built.examples!.ids) expect(sent.instructions).toContain(`id="${id}"`);
     expect(sent.input).toBe(built.input);
     expect(sent.input).not.toContain("mujin-");
+  });
+
+  it("묘묘 2-pass: Pass 2 요청 본문의 지시에 새 묘묘 예시(재작성 예시 포함)가 남고, Pass 1 요청에는 예시도 캐릭터도 없다", async () => {
+    const bundle = MESSENGER_BUNDLES["myomyo-2pass-1.0.0"]!;
+    const { plan } = casePlan(EVALUATION_CASES.find((entry) => entry.id === "job-seeking")!, "2026-11-12");
+    const units = messengerUnits(plan);
+    const draftRequest = buildMessengerDraftRequest({ prompt: bundle.draftPrompt, schema: bundle.draftSchema }, { plan, units: units.slice(0, 2), usedNotes: [] });
+    sdk.reply = JSON.stringify({ units: [] });
+    await callStructuredStream({ ...draftRequest, model: "fake-model", maxOutputTokens: 500, reasoningEffort: "medium", onDelta: async () => "continue" });
+    const voice = buildMessengerVoiceRequest(
+      { prompt: bundle.voicePrompt, schema: bundle.voiceSchema },
+      {
+        plan,
+        persona: MYOMYO,
+        unit: units[1]!,
+        unitIndex: 1,
+        draft: { unitId: units[1]!.unitId, coreAnswer: "핵심", points: [{ kind: "explanation", refs: [], text: "초안 문단" }], notes: [] },
+        earlierUnits: [],
+        frame: { opening: false, closing: false },
+        examples: bundle.examples,
+        exampleSeed: "66666666-6666-4666-8666-666666666666",
+        label: bundle.id,
+      },
+    );
+    sdk.reply = JSON.stringify({ opening: "", angle: "", bubbles: [], closing: "" });
+    await callStructured({ ...voice.request, model: "fake-model", maxOutputTokens: 500, reasoningEffort: "medium" });
+
+    const [draftBody, voiceBody] = sdk.calls.map((body) => JSON.parse(JSON.stringify(body)) as { instructions: string; input: string; text: { format: { name: string } } });
+    expect(draftBody!.text.format.name).toBe("messenger_draft");
+    expect(draftBody!.instructions).not.toContain(BLOCK);
+    expect(draftBody!.instructions).not.toContain("[캐릭터");
+    expect(voiceBody!.text.format.name).toBe("messenger_voice");
+    expect(voiceBody!.instructions).toContain(`${BLOCK} 묘묘]`);
+    expect(voiceBody!.instructions).toContain("[의미 보존]");
+    expect(voice.examples!.ids.length).toBe(2);
+    for (const id of voice.examples!.ids) expect(voiceBody!.instructions).toContain(`id="${id}"`);
+    expect(voice.examples!.ids.some((id) => id.startsWith("myomyo-v2-rw-"))).toBe(true);
+    expect(voiceBody!.input).toBe(voice.request.input);
+    expect(voiceBody!.input).not.toContain(BLOCK);
+    expect(Object.keys(sdk.calls[1]!)).not.toContain("examples");
   });
 });
