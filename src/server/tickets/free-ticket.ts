@@ -1,10 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { findProduct } from "@/domain/products";
+import { findProduct, isScrollProduct } from "@/domain/products";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { ApiError } from "@/server/api";
 import { checkoutMode, FREE_TRIAL, grantsOpen, type CheckoutMode } from "@/server/checkout/mode";
 import { getReading, USER_RETRY_LIMIT, type JobRow } from "@/server/readings/store";
+import { SCROLL_SETTINGS } from "@/server/scroll/config";
 
 /**
  * 무료 이용권.
@@ -168,16 +169,20 @@ export async function loadFreeTicket(supabase: SupabaseClient, userId: string): 
     .sort((a, b) => (b.redeemed_at ?? "").localeCompare(a.redeemed_at ?? ""));
   if (used.length === 0) return { state: "ready", available, current: null };
 
-  const { data } = await supabase
-    .from("generation_jobs")
-    .select("reading_id, status, attempts")
-    .in("reading_id", used.map((ticket) => ticket.reading_id));
+  const readingIds = used.map((ticket) => ticket.reading_id);
+  const [{ data }, { data: readingRows }] = await Promise.all([
+    supabase.from("generation_jobs").select("reading_id, status, attempts").in("reading_id", readingIds),
+    supabase.from("readings").select("id, product_id").in("id", readingIds),
+  ]);
   const jobs = new Map(((data ?? []) as Pick<JobRow, "reading_id" | "status" | "attempts">[]).map((job) => [job.reading_id, job]));
+  const products = new Map(((readingRows ?? []) as { id: string; product_id: string }[]).map((row) => [row.id, row.product_id]));
+  // 족자 상품(무진)의 유료 작업은 시간 예산마다 반납·이어받기를 해서 시작 횟수가 묘묘보다 많다. 그 상품의 상한으로 다시 시도 여부를 본다.
+  const retryLimitOf = (readingId: string) => (isScrollProduct(findProduct(products.get(readingId) ?? "")) ? SCROLL_SETTINGS.paidMaxRuns : USER_RETRY_LIMIT);
 
   const uses: TicketUse[] = used.map((ticket) => {
     const job = jobs.get(ticket.reading_id);
     if (ticket.status === "completed" || job?.status === "completed") return { state: "completed", readingId: ticket.reading_id };
-    if (job?.status === "failed") return { state: "failed", readingId: ticket.reading_id, canRetry: job.attempts < USER_RETRY_LIMIT };
+    if (job?.status === "failed") return { state: "failed", readingId: ticket.reading_id, canRetry: job.attempts < retryLimitOf(ticket.reading_id) };
     // 대기·생성 중, 또는 점유 시간이 지나 다시 시작을 기다리는 작업. 풀이 화면에 들어가면 이어서 만든다.
     return { state: "generating", readingId: ticket.reading_id };
   });
